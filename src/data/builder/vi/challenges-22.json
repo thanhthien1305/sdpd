@@ -1,0 +1,76 @@
+{
+  "id": "builder-22",
+  "number": 22,
+  "title": "Làm Giàu Dữ Liệu Báo Cáo Bất Đồng Bộ",
+  "subtitle": "Việc làm giàu dữ liệu lúc gửi báo cáo khiến quá trình thụ lý hồ sơ quá chậm chạp",
+  "objective": "Chuyển quy trình bổ sung thông tin (lịch sử tội phạm, định vị, biển số) sang xử lý hậu kỳ ngầm.",
+  "constraints": [
+    "Cảnh sát gửi báo cáo nhận được xác nhận ngay lập tức trong vòng 200ms",
+    "Các dịch vụ làm giàu dữ liệu bên ngoài chậm không được làm treo ứng dụng",
+    "Dữ liệu sau khi làm giàu được tự động cập nhật vào hồ sơ chính"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Tiếp Nhận Nhanh Bằng API Gọn Nhẹ",
+      "description": "Load Balancer và API tiếp nhận báo cáo thô và xác nhận tức thì.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Hàng Đợi Phân Phối Tác Vụ Làm Giàu",
+      "description": "Queue chuyển dữ liệu báo cáo tới các dịch vụ tra cứu mở rộng.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Worker Cập Nhật Dữ Liệu Hoàn Chỉnh",
+      "description": "Worker tổng hợp dữ liệu bổ sung và ghi đè phiên bản hoàn chỉnh vào DB.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

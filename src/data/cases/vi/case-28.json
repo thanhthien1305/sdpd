@@ -1,0 +1,223 @@
+{
+  "id": "case-28",
+  "number": 28,
+  "title": "Bộ Ngắt Mạch (The Circuit Breaker)",
+  "subtitle": "Một quân cờ domino ngã đổ kéo sập toàn bộ trung tâm chỉ huy",
+  "brief": {
+    "narrative": "Hệ thống điều hành trung tâm kết nối với Dịch vụ Tra Cứu Biển Số Xe của Cục Đăng Kiểm Quốc Gia. Tối nay, trung tâm dữ liệu của Cục Đăng Kiểm bị sét đánh làm đứt đường truyền, khiến mọi lệnh gọi tra cứu biển số đều bị treo cứng 30 giây rồi mới timeout. Ứng dụng trung tâm chỉ huy không hề có Bộ Ngắt Mạch (Circuit Breaker): nó vẫn ngây thơ đẩy hàng ngàn sĩ quan đang tuần tra vào hàng chờ kết nối với Cục Đăng Kiểm. Trong vòng 2 phút, toàn bộ 1.000 luồng xử lý (threads) của hệ thống chỉ huy đều bị kẹt cứng trong trạng thái chờ Cục Đăng Kiểm trả lời! Hệ thống không còn luồng nào để xử lý các cuộc gọi báo án giết người hay cướp có vũ trang! Cả sở cảnh sát bị tê liệt vì một đối tác bên ngoài! Thám tử, hãy lắp ngay Cầu Dao Điện!",
+    "symptoms": [
+      "Dịch vụ phụ thuộc bên thứ ba (Third-party Dependency) bị sập và phản hồi chậm chạp",
+      "Hệ thống nội bộ không ngắt kết nối mà tiếp tục gửi yêu cầu vào dịch vụ hỏng",
+      "Toàn bộ tài nguyên luồng (Thread Pool) bị tiêu hao sạch sẽ chỉ để đứng chờ đối tác",
+      "Các tính năng cốt lõi hoàn toàn không liên quan đến bên thứ ba cũng bị tê liệt theo"
+    ],
+    "objective": "Bảo vệ hệ thống trước sự cố của các dịch vụ phụ thuộc bằng cách áp dụng Mẫu Thiết Kế Bộ Ngắt Mạch (Circuit Breaker Pattern) với khả năng Thất Bại Nhanh (Fail Fast) và Dữ Liệu Dự Phòng (Fallback)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "call-routing",
+        "type": "client",
+        "label": "Call Routing Service",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Call Routing Service",
+          "logs": [
+            "[09:00:15] INFO: Incoming 911 call — routing to Dispatch Service",
+            "[09:00:45] ERROR: Dispatch Service timeout after 30s",
+            "[09:01:16] ERROR: Dispatch Service timeout after 30s — call #2 lost",
+            "[09:01:50] ERROR: All outbound connections to Dispatch blocked",
+            "[09:02:00] ERROR: 14 calls in queue — no dispatch capacity available"
+          ],
+          "data": {
+            "Status": "FAILING",
+            "Pending Calls": "14 (all blocked)",
+            "Timeout to Dispatch": "30s",
+            "Calls Dropped": "9 in last 3 minutes",
+            "Circuit Breaker": "NOT IMPLEMENTED"
+          },
+          "status": "Cannot route calls because Dispatch Service is unresponsive. No fallback behavior configured."
+        }
+      },
+      {
+        "id": "dispatch-service",
+        "type": "server",
+        "label": "Dispatch Service",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Service",
+          "logs": [
+            "[09:00:01] INFO: Processing 911 call — validating address via Address Validation Service",
+            "[09:00:31] ERROR: Address Validation timeout after 30s",
+            "[09:00:31] INFO: Retrying address validation...",
+            "[09:01:01] ERROR: Address Validation timeout — retry failed",
+            "[09:01:05] WARN: Thread pool exhausted — 50/50 threads blocked on Address Validation",
+            "[09:01:05] ERROR: Cannot accept new requests — all threads occupied"
+          ],
+          "data": {
+            "Thread Pool": "50/50 (all blocked)",
+            "Blocked On": "Address Validation Service",
+            "Timeout Setting": "30s per request",
+            "Circuit Breaker": "NOT IMPLEMENTED",
+            "Fallback": "NONE — address validation required for all dispatches"
+          },
+          "status": "All threads blocked waiting for Address Validation responses that will never arrive."
+        }
+      },
+      {
+        "id": "address-validation",
+        "type": "server",
+        "label": "Address Validation",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Address Validation Service",
+          "logs": [
+            "[08:59:00] INFO: Shutting down for scheduled maintenance",
+            "[08:59:01] INFO: Service stopped — maintenance window: 09:00 - 09:30",
+            "[09:00:01] INFO: Incoming connection refused — service offline"
+          ],
+          "data": {
+            "Status": "OFFLINE (planned maintenance)",
+            "Maintenance Window": "09:00 - 09:30",
+            "Notification Sent": "Yes — email sent to ops team 24h ago",
+            "Expected Downtime": "30 minutes"
+          },
+          "status": "Intentionally offline for scheduled maintenance. Not accepting connections."
+        }
+      },
+      {
+        "id": "officer-assignment",
+        "type": "server",
+        "label": "Officer Assignment",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 320
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Assignment Service",
+          "logs": [
+            "[09:01:10] INFO: Waiting for dispatch instructions...",
+            "[09:01:40] WARN: No dispatches received in 90s — unusual",
+            "[09:02:00] ERROR: Dispatch Service connection timed out",
+            "[09:02:05] ERROR: Cannot assign officers — no dispatch data available"
+          ],
+          "data": {
+            "Status": "STARVED",
+            "Dispatches Received": "0 (last 3 min)",
+            "Officers Available": "34 (idle, waiting for assignments)",
+            "Depends On": "Dispatch Service"
+          },
+          "status": "No officers being dispatched because Dispatch Service is frozen. Officers sitting idle during active emergency calls."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-routing-dispatch",
+        "source": "call-routing",
+        "target": "dispatch-service",
+        "label": "blocked (30s timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-dispatch-address",
+        "source": "dispatch-service",
+        "target": "address-validation",
+        "label": "connection refused",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-dispatch-officer",
+        "source": "dispatch-service",
+        "target": "officer-assignment",
+        "label": "no dispatches",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ khiến toàn bộ hệ thống tiếp nhận khẩn cấp 911 bị sập dây chuyền là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Đội bảo trì đã tắt dịch vụ Xác Thực Địa Chỉ mà không thông báo trước cho các bộ phận",
+          "correct": false,
+          "feedback": "Việc bảo trì đã được lên lịch. Trong hệ thống phân tán, các dịch vụ phụ trợ có thể sập bất kỳ lúc nào; kiến trúc hệ thống phải được thiết kế để chịu được việc một dịch vụ ngừng hoạt động."
+        },
+        {
+          "id": "rc-3",
+          "text": "Thời gian chờ 30 giây cấu hình cho cuộc gọi Xác Thực Địa Chỉ là quá dài",
+          "correct": false,
+          "feedback": "Timeout ngắn hơn giúp giải phóng luồng nhanh hơn, nhưng nếu không có Circuit Breaker thì với hàng nghìn cuộc gọi đến, thread pool vẫn sẽ bị lấp đầy hoàn toàn."
+        },
+        {
+          "id": "rc-4",
+          "text": "Dịch vụ Điều Phối có thread pool quá nhỏ không đủ xử lý giờ cao điểm",
+          "correct": false,
+          "feedback": "Dù có cấp 1.000 luồng thì khi tất cả các luồng đều bị giữ chân 30 giây trên một dịch vụ đã chết, toàn bộ 1.000 luồng đó cũng sẽ nhanh chóng bị cạn kiệt."
+        },
+        {
+          "id": "rc-2",
+          "text": "Dịch vụ Điều Phối Thiếu Bộ Ngắt Mạch (No Circuit Breaker) — nó tiếp tục khóa cứng toàn bộ luồng xử lý để chờ đợi một dịch vụ đã chết, gây ra Sự Cố Sập Lan Truyền Dây Chuyền (Cascading Failure)",
+          "correct": true,
+          "feedback": "Chính xác! Khi dịch vụ Xác thực địa chỉ bị tắt để bảo trì, Dịch vụ Điều phối không hề biết và vẫn kiên nhẫn gọi sang với timeout 30 giây cho mỗi yêu cầu. Toàn bộ các luồng của nó bị khóa cứng trong vô vọng. Hậu quả là Dịch vụ Điều phối trở nên bất động, kéo theo Dịch vụ Định tuyến cuộc gọi và Dịch vụ Phân công tuần tra cũng sập theo như hiệu ứng domino!"
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương pháp tốt nhất để ngăn chặn sự cố sụp đổ lan truyền dây chuyền giữa các vi dịch vụ là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Loại bỏ hoàn toàn sự phụ thuộc vào dịch vụ Xác Thực Địa Chỉ bằng cách nhúng thẳng dữ liệu địa chỉ vào cơ sở dữ liệu của Dịch vụ Điều Phối",
+          "correct": false,
+          "feedback": "Nhúng toàn bộ dữ liệu vi phạm nguyên tắc phân rã vi dịch vụ và không giải quyết được vấn đề nếu một dịch vụ phụ thuộc khác gặp sự cố."
+        },
+        {
+          "id": "fix-2",
+          "text": "Triển khai dịch vụ Xác Thực Địa Chỉ ở chế độ sẵn sàng cao tuyệt đối không bao giờ được phép tắt",
+          "correct": false,
+          "feedback": "Không có hệ thống nào cam kết không bao giờ lỗi 100%. Phần mềm vẫn có thể bị sập do bug, cạn tài nguyên hoặc sự cố mạng. Hệ thống luôn phải có cơ chế phòng vệ chủ động."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai Bộ Ngắt Mạch (Circuit Breaker) — tự động ngắt kết nối (Open) khi phát hiện lỗi liên tiếp, lập tức trả về phản hồi dự phòng (Fallback) hoặc báo lỗi nhanh mà không khóa luồng",
+          "correct": true,
+          "feedback": "Chính xác! Circuit Breaker theo dõi tỷ lệ lỗi của dịch vụ phụ thuộc. Khi thấy lỗi liên tiếp (ví dụ 5 lần trong 10 giây), nó lập tức \"ngắt mạch\" (chuyển sang trạng thái Open). Tất cả các yêu cầu tiếp theo sẽ không gọi sang dịch vụ đã chết nữa mà lập tức chuyển sang chế độ dự phòng (fallback) — ví dụ tiếp tục điều động xe dựa trên địa chỉ thô chưa qua xác thực. Các luồng được giải phóng ngay lập tức, bảo vệ toàn bộ phần còn lại của hệ sinh thái 911 sống sót an toàn!"
+        },
+        {
+          "id": "fix-4",
+          "text": "Bổ sung hàng đợi tin nhắn giữa tất cả các dịch vụ để giao tiếp bất đồng bộ",
+          "correct": false,
+          "feedback": "Tổng đài 911 tiếp nhận cuộc gọi khẩn cấp yêu cầu phản hồi điều động xe tức thời trong vài giây, không thể chuyển sang xử lý lô qua hàng đợi."
+        }
+      ]
+    }
+  },
+  "conceptId": "circuit-breakers",
+  "badge": {
+    "name": "Vệ Binh Cầu Dao Ngắt Mạch",
+    "icon": "⚡"
+  }
+}

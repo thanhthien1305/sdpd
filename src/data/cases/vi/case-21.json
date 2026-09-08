@@ -1,0 +1,263 @@
+{
+  "id": "case-21",
+  "number": 21,
+  "title": "Xáo Trộn Thứ Tự (The Out of Order)",
+  "subtitle": "Báo cáo tội phạm đến lộn xộn khi các consumer xử lý song song làm đảo lộn trình tự",
+  "brief": {
+    "narrative": "Một vụ bắt cóc con tin nghẹt thở vừa diễn ra. Điều phối viên nhận được thông báo trên màn hình: 'CON TIN ĐÃ ĐƯỢC GIẢI THOÁT AN TOÀN' lúc 16:02. Mười giây sau (16:02:10), hệ thống lại nhảy lên cảnh báo: 'KẺ BẮT CÓC VỪA ĐỘT NHẬP VÀ KHỐNG CHẾ CON TIN'! Điều phối viên tưởng vụ bắt cóc mới xảy ra nên điều động toàn bộ xe bọc thép tới hiện trường phá cửa xông vào, suýt bắn nhầm gia đình nạn nhân vừa được cứu! Hóa ra hàng đợi thông điệp sử dụng nhiều consumer chạy song song mà không phân vùng theo khóa: thông điệp thứ hai xử lý nhanh hơn nên về đích trước thông điệp thứ nhất! Thám tử, hãy lập lại trật tự thời gian!",
+    "symptoms": [
+      "Các sự kiện liên quan đến cùng một vụ án bị cập nhật ngược trình tự thời gian thực",
+      "Hàng đợi thông điệp sử dụng một topic chung duy nhất với nhiều worker tiêu thụ song song",
+      "Các worker có tốc độ xử lý khác nhau dẫn đến việc sự kiện sinh ra sau lại hoàn tất trước",
+      "Hệ thống không phân vùng thông điệp theo mã định danh vụ án (Incident ID)"
+    ],
+    "objective": "Bảo đảm Thứ Tự Thông Điệp Nghiêm Ngặt (Message Ordering) cho từng vụ án bằng cách áp dụng Phân Vùng Theo Khóa (Key-based Partitioning trong Kafka)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "report-ingestion",
+        "type": "client",
+        "label": "Report Ingestion API",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Report Ingestion API",
+          "logs": [
+            "[09:00:01] INFO: Report #501 (Case-77, timestamp 22:00) enqueued",
+            "[09:00:01] INFO: Report #502 (Case-77, timestamp 22:15) enqueued",
+            "[09:00:02] INFO: Report #503 (Case-77, timestamp 23:30) enqueued",
+            "[09:00:02] INFO: Report #504 (Case-77, timestamp 02:00) enqueued",
+            "[09:00:02] INFO: All reports enqueued in chronological order"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Reports Enqueued Today": "1,204",
+            "Ordering at Enqueue": "Chronological (correct)"
+          },
+          "status": "Reports are being enqueued in the correct chronological order."
+        }
+      },
+      {
+        "id": "message-queue",
+        "type": "server",
+        "label": "Report Processing Queue",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Report Processing Queue",
+          "logs": [
+            "[09:00:01] INFO: Report #501 delivered to Consumer-A",
+            "[09:00:01] INFO: Report #502 delivered to Consumer-B",
+            "[09:00:02] INFO: Report #503 delivered to Consumer-C",
+            "[09:00:02] INFO: Report #504 delivered to Consumer-A",
+            "[09:00:03] INFO: Consumer-B ACK report #502 (processed in 45ms)",
+            "[09:00:03] INFO: Consumer-C ACK report #503 (processed in 30ms)",
+            "[09:00:04] INFO: Consumer-A ACK report #501 (processed in 210ms)",
+            "[09:00:04] INFO: Consumer-A ACK report #504 (processed in 50ms)"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Consumer Count": "3",
+            "Delivery Mode": "Round-robin",
+            "Partition Key": "None configured",
+            "Ordering Guarantee": "Per-consumer only"
+          },
+          "status": "Queue distributes messages round-robin across 3 consumers. No partition key configured for case-based routing."
+        }
+      },
+      {
+        "id": "consumer-a",
+        "type": "server",
+        "label": "Consumer A",
+        "status": "healthy",
+        "position": {
+          "x": 550,
+          "y": 30
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Consumer Worker A",
+          "logs": [
+            "[09:00:01] INFO: Processing report #501 (Case-77, ts 22:00)",
+            "[09:00:04] INFO: Report #501 written to DA system — took 210ms",
+            "[09:00:04] INFO: Processing report #504 (Case-77, ts 02:00)",
+            "[09:00:04] INFO: Report #504 written to DA system — took 50ms"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Avg Processing Time": "130ms",
+            "Reports Processed": "412"
+          },
+          "status": "Processing normally but report #501 took longer, causing #504 to be written after #502 and #503."
+        }
+      },
+      {
+        "id": "consumer-b",
+        "type": "server",
+        "label": "Consumer B",
+        "status": "healthy",
+        "position": {
+          "x": 550,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Consumer Worker B",
+          "logs": [
+            "[09:00:01] INFO: Processing report #502 (Case-77, ts 22:15)",
+            "[09:00:03] INFO: Report #502 written to DA system — took 45ms"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Avg Processing Time": "48ms",
+            "Reports Processed": "398"
+          },
+          "status": "Fast consumer — finished report #502 before Consumer A finished #501."
+        }
+      },
+      {
+        "id": "da-system",
+        "type": "database",
+        "label": "DA Case File DB",
+        "status": "degraded",
+        "position": {
+          "x": 550,
+          "y": 340
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "DA Case File Database",
+          "logs": [
+            "[09:00:03] INFO: Report #502 (ts 22:15) inserted at position 1",
+            "[09:00:03] INFO: Report #503 (ts 23:30) inserted at position 2",
+            "[09:00:04] INFO: Report #501 (ts 22:00) inserted at position 3",
+            "[09:00:04] INFO: Report #504 (ts 02:00) inserted at position 4"
+          ],
+          "data": {
+            "Status": "DATA INTEGRITY ISSUE",
+            "Case-77 Report Order": "#502, #503, #501, #504",
+            "Expected Order": "#501, #502, #503, #504",
+            "Total Cases Affected": "187"
+          },
+          "status": "Reports are stored in arrival order, not chronological order. 187 cases have jumbled timelines."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ingest-queue",
+        "source": "report-ingestion",
+        "target": "message-queue",
+        "label": "enqueue reports",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-queue-a",
+        "source": "message-queue",
+        "target": "consumer-a",
+        "label": "round-robin",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-queue-b",
+        "source": "message-queue",
+        "target": "consumer-b",
+        "label": "round-robin",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-a-da",
+        "source": "consumer-a",
+        "target": "da-system",
+        "label": "write reports",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-b-da",
+        "source": "consumer-b",
+        "target": "da-system",
+        "label": "write reports",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao các báo cáo phá án của cùng một vụ việc lại đến cơ quan công tố theo thứ tự thời gian lộn xộn?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Hàng đợi tin nhắn có lỗi phần mềm khiến nó phân phối thông điệp ra khỏi thứ tự FIFO",
+          "correct": false,
+          "feedback": "Hàng đợi vẫn đẩy tin theo thứ tự FIFO tới từng Consumer. Vấn đề là có nhiều Consumer xử lý song song với tốc độ khác nhau."
+        },
+        {
+          "id": "rc-1",
+          "text": "API tiếp nhận báo cáo đã nạp các bản ghi vào hàng đợi sai thứ tự thời gian",
+          "correct": false,
+          "feedback": "Nhật ký API cho thấy các báo cáo được đẩy vào hàng đợi hoàn toàn chuẩn xác theo trình tự thời gian xảy ra."
+        },
+        {
+          "id": "rc-2",
+          "text": "Nhiều Consumer xử lý song song với tốc độ không đồng đều — Consumer xử lý thông điệp sau xong nhanh hơn Consumer đang xử lý thông điệp trước, phá vỡ thứ tự ban đầu",
+          "correct": true,
+          "feedback": "Chính xác! Hàng đợi sử dụng cơ chế Round-Robin để chia đều các thông điệp cho 3 Consumer chạy song song mà không có khóa phân vùng. Thông điệp \"Bắt giữ\" (bước 1) rơi vào Consumer chậm, trong khi thông điệp \"Khởi tố\" (bước 2) rơi vào Consumer nhanh. Consumer nhanh hoàn thành và ghi vào cơ sở dữ liệu trước, khiến viện công tố thấy nghi phạm bị khởi tố trước khi bị bắt giữ!"
+        },
+        {
+          "id": "rc-3",
+          "text": "Cơ sở dữ liệu của Viện công tố tự ý sắp xếp lại bản ghi theo thứ tự ngẫu nhiên",
+          "correct": false,
+          "feedback": "Cơ sở dữ liệu chỉ ghi nhận và hiển thị theo đúng thứ tự mà các Consumer ghi dữ liệu vào."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để đảm bảo thứ tự thời gian của các báo cáo thuộc cùng một vụ án là gì?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Sử dụng Khóa Phân Vùng (Partition Keys theo Case ID) — đảm bảo tất cả thông điệp của cùng một vụ án luôn được định tuyến tới cùng một Consumer để xử lý tuần tự",
+          "correct": true,
+          "feedback": "Chính xác! Bằng cách gán Partition Key là Case ID (như trong Kafka hoặc AWS Kinesis), tất cả các sự kiện thuộc cùng Vụ án 77 chắc chắn sẽ vào cùng một phân vùng (partition) và được tiêu thụ tuần tự bởi duy nhất một Consumer theo đúng thứ tự FIFO. Trong khi đó, các vụ án khác vẫn được xử lý song song trên các phân vùng khác. Hệ thống vừa bảo toàn thứ tự, vừa giữ được thông lượng cao!"
+        },
+        {
+          "id": "fix-1",
+          "text": "Giảm số lượng Consumer xuống đúng 1 Consumer duy nhất để xử lý tuần tự từng thông điệp một",
+          "correct": false,
+          "feedback": "Dùng 1 Consumer giải quyết được thứ tự nhưng triệt tiêu hoàn toàn khả năng xử lý song song, biến Consumer thành nút thắt cổ chai cho toàn thành phố."
+        },
+        {
+          "id": "fix-3",
+          "text": "Đính kèm nhãn thời gian vào báo cáo và chạy câu lệnh sắp xếp lại trong cơ sở dữ liệu sau khi chèn",
+          "correct": false,
+          "feedback": "Sắp xếp hậu kỳ rất mong manh vì bạn không thể biết khi nào toàn bộ các thông điệp của một vụ án đã đến đủ để tiến hành sắp xếp."
+        },
+        {
+          "id": "fix-4",
+          "text": "Chuẩn hóa phần cứng của tất cả các máy chủ Consumer để chúng chạy với tốc độ giống hệt nhau từng mili-giây",
+          "correct": false,
+          "feedback": "Thời gian xử lý phụ thuộc vào độ phức tạp của dữ liệu, độ trễ mạng và dừng dọn rác (GC pause). Không phần cứng nào đảm bảo tốc độ giống nhau 100%."
+        }
+      ]
+    }
+  },
+  "conceptId": "message-ordering",
+  "badge": {
+    "name": "Bậc Thầy Trình Tự Phân Tán",
+    "icon": "📋"
+  }
+}

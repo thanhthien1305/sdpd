@@ -1,0 +1,230 @@
+{
+  "id": "case-06",
+  "number": 6,
+  "title": "Mệnh Lệnh Xung Đột (The Conflicting Orders)",
+  "subtitle": "Hai máy chủ leader, hai chỉ thị trái ngược, một sĩ quan vô cùng bối rối",
+  "brief": {
+    "narrative": "Sở cảnh sát sử dụng mô hình Multi-Leader (Đa Leader) đặt tại Đồn Bắc và Đồn Nam để tăng tốc độ ghi dữ liệu. Sĩ quan Ramirez tại Đồn Bắc phát hiện nghi phạm Rodriguez ở khu chợ và cập nhật trạng thái hồ sơ thành 'ĐANG THEO DÕI NGẦM - KHÔNG ĐƯỢC ĐỘNG VÀO'. Cùng lúc đó tại Đồn Nam, Đội trưởng Miller nhận được tin báo nóng và cập nhật trạng thái của Rodriguez thành 'BẮT GIỮ KHẨN CẤP NGAY LẬP TỨC'. Khi hai máy chủ Leader đồng bộ với nhau qua mạng, hệ thống áp dụng cơ chế Last-Write-Wins ngây thơ dựa trên đồng hồ vật lý bị lệch 40ms. Kết quả: lệnh theo dõi ngầm bị xóa sổ, và đặc nhiệm ập vào bắt giữ làm hỏng toàn bộ chuyên án ma túy 6 tháng trời!",
+    "symptoms": [
+      "Hai máy chủ Leader đồng thời tiếp nhận hai thao tác cập nhật trái ngược trên cùng một bản ghi",
+      "Cơ chế giải quyết xung đột sử dụng Last-Write-Wins (LWW) dựa trên nhãn thời gian phần cứng bị lệch",
+      "Lệnh điều tra quan trọng bị ghi đè và mất dấu hoàn toàn mà không có cảnh báo nào cho điều tra viên",
+      "Không có lịch sử phiên bản (Version Vector) để phát hiện sự sửa đổi đồng thời"
+    ],
+    "objective": "Chỉ ra rủi ro chí mạng của chiến lược Last-Write-Wins trong mô hình Multi-Leader và đề xuất cơ chế phát hiện xung đột dựa trên Version Vector hoặc CRDT."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "db-downtown",
+        "type": "database",
+        "label": "Downtown DB (Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Downtown Database (Leader)",
+          "logs": [
+            "[19:42:10] INFO: WRITE — Case #2290 assigned to Officer Park by Det. Reyes",
+            "[19:42:10] INFO: Write accepted locally, queued for replication to Harbor",
+            "[19:42:55] INFO: Received replication event from Harbor: Case #2290 assigned to Officer Chen",
+            "[19:42:55] ERROR: WRITE CONFLICT — Case #2290 has two different assignees",
+            "[19:42:55] WARN: Conflict resolution policy: LAST-WRITE-WINS (by timestamp)",
+            "[19:42:56] INFO: Harbor write timestamp 19:42:12 > Downtown write timestamp 19:42:10 — Harbor write wins",
+            "[19:42:56] WARN: Officer Park's assignment silently dropped"
+          ],
+          "data": {
+            "Role": "LEADER (multi-leader setup)",
+            "Case #2290 Assignee (local)": "Officer Park (OVERWRITTEN)",
+            "Case #2290 Assignee (after conflict resolution)": "Officer Chen",
+            "Conflict Resolution": "Last-Write-Wins (timestamp)",
+            "Replication Lag to Harbor": "45 seconds",
+            "Conflicts Today": "7"
+          },
+          "status": "Write conflict detected. LWW resolution silently dropped the Downtown assignment."
+        }
+      },
+      {
+        "id": "db-harbor",
+        "type": "database",
+        "label": "Harbor DB (Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 550,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Harbor Database (Leader)",
+          "logs": [
+            "[19:42:12] INFO: WRITE — Case #2290 assigned to Officer Chen by Sgt. Okonkwo",
+            "[19:42:12] INFO: Write accepted locally, queued for replication to Downtown",
+            "[19:42:57] INFO: Received replication event from Downtown: Case #2290 assigned to Officer Park",
+            "[19:42:57] ERROR: WRITE CONFLICT — Case #2290 has two different assignees",
+            "[19:42:57] WARN: Conflict resolution policy: LAST-WRITE-WINS (by timestamp)",
+            "[19:42:58] INFO: Harbor write timestamp 19:42:12 > Downtown write timestamp 19:42:10 — Harbor write wins"
+          ],
+          "data": {
+            "Role": "LEADER (multi-leader setup)",
+            "Case #2290 Assignee": "Officer Chen",
+            "Conflict Resolution": "Last-Write-Wins (timestamp)",
+            "Replication Lag to Downtown": "45 seconds",
+            "Conflicts Today": "7"
+          },
+          "status": "Write conflict resolved via LWW. Harbor write preserved, Downtown write discarded."
+        }
+      },
+      {
+        "id": "precinct-downtown",
+        "type": "client",
+        "label": "Downtown Precinct",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Downtown Precinct Terminal",
+          "logs": [
+            "[19:42:10] INFO: Det. Reyes assigned Case #2290 to Officer Park — confirmed",
+            "[19:42:15] INFO: Officer Park dispatched to crime scene",
+            "[19:43:00] WARN: Case #2290 assignee changed to Officer Chen (conflict resolution)",
+            "[19:43:00] ERROR: Officer Park already en route — no notification sent"
+          ],
+          "data": {
+            "Case #2290 Displayed Assignee": "Officer Chen (changed from Park)",
+            "Officer Park Status": "En route to crime scene (unaware of reassignment)",
+            "Det. Reyes Notified": "NO — silent overwrite"
+          },
+          "status": "Det. Reyes's assignment was silently overwritten by conflict resolution. No alert was raised."
+        }
+      },
+      {
+        "id": "precinct-harbor",
+        "type": "client",
+        "label": "Harbor Precinct",
+        "status": "healthy",
+        "position": {
+          "x": 550,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Harbor Precinct Terminal",
+          "logs": [
+            "[19:42:12] INFO: Sgt. Okonkwo assigned Case #2290 to Officer Chen — confirmed",
+            "[19:42:18] INFO: Officer Chen dispatched to crime scene"
+          ],
+          "data": {
+            "Case #2290 Displayed Assignee": "Officer Chen",
+            "Officer Chen Status": "En route to crime scene"
+          },
+          "status": "Harbor's assignment was preserved by LWW conflict resolution."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-dt-harbor-repl",
+        "source": "db-downtown",
+        "target": "db-harbor",
+        "label": "async replication",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-harbor-dt-repl",
+        "source": "db-harbor",
+        "target": "db-downtown",
+        "label": "async replication",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-dt-precinct",
+        "source": "db-downtown",
+        "target": "precinct-downtown",
+        "label": "reads/writes",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-harbor-precinct",
+        "source": "db-harbor",
+        "target": "precinct-harbor",
+        "label": "reads/writes",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ dẫn đến việc phân công điều tra vụ án bị xung đột mâu thuẫn là gì?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Thanh tra Reyes và Trung sĩ Okonkwo lẽ ra phải gọi điện thoại trao đổi trước khi phân công vụ án để tránh xung đột ghi cơ sở dữ liệu",
+          "correct": false,
+          "feedback": "Quy trình phối hợp bằng miệng giữa con người không phải là giải pháp kỹ thuật tin cậy ở quy mô lớn. Hệ thống phân tán phải có trách nhiệm phát hiện và xử lý xung đột ghi đồng thời."
+        },
+        {
+          "id": "rc-1",
+          "text": "Độ trễ nhân bản 45 giây giữa hai máy chủ Leader là quá lớn và cần được giảm thiểu để tránh xung đột",
+          "correct": false,
+          "feedback": "Giảm độ trễ nhân bản giúp giảm tần suất xảy ra xung đột, nhưng trong mô hình Multi-Leader, bất kỳ độ trễ nào lớn hơn 0 đều có thể phát sinh xung đột nếu hai thao tác ghi diễn ra trong cùng khoảng thời gian đó."
+        },
+        {
+          "id": "rc-4",
+          "text": "Chiến lược giải quyết xung đột Last-Write-Wins (LWW) có lỗi phần mềm trong logic so sánh nhãn thời gian",
+          "correct": false,
+          "feedback": "Thuật toán LWW hoạt động hoàn toàn đúng theo thiết kế của nó: nó chọn bản ghi có nhãn thời gian lớn hơn. Vấn đề là bản thân chiến lược LWW là một chiến lược gây mất mát dữ liệu (lossy) âm thầm mà không hề thông báo cho người dùng."
+        },
+        {
+          "id": "rc-2",
+          "text": "Mô hình nhân bản Multi-Leader cho phép cả hai cơ sở dữ liệu độc lập chấp nhận thao tác ghi, khiến các lệnh ghi đồng thời vào cùng một bản ghi tạo ra xung đột cần phải được xử lý sau",
+          "correct": true,
+          "feedback": "Chính xác! Trong kiến trúc Multi-Leader, mỗi Leader nhận lệnh ghi độc lập và gửi bản sao bất đồng bộ sang các Leader khác. Khi hai đồn cùng sửa một vụ án trước khi dữ liệu kịp đồng bộ, xung đột ghi (write conflict) tất yếu xảy ra. Chiến lược Last-Write-Wins đã âm thầm xóa mất phân công của Thanh tra Reyes mà không ai hay biết — một hậu quả cực kỳ nguy hiểm cho dữ liệu pháp lý."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương pháp tốt nhất để xử lý xung đột ghi trong hệ thống Multi-Leader này là gì?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Triển khai cơ chế giải quyết xung đột ở tầng ứng dụng (Application-level Conflict Resolution) — phát hiện xung đột và hiển thị cho người có thẩm quyền phê duyệt thủ công hoặc dùng CRDT",
+          "correct": true,
+          "feedback": "Chính xác! Đối với dữ liệu nghiệp vụ quan trọng như phân công phá án, giải pháp đúng đắn là phát hiện xung đột và giữ lại cả hai phiên bản, sau đó thông báo cho người giám sát xem xét và quyết định thay vì âm thầm loại bỏ một bên. Đây là nguyên lý hoạt động của các cấu trúc dữ liệu CRDT hoặc hàm hợp nhất (merge function) tùy chỉnh."
+        },
+        {
+          "id": "fix-4",
+          "text": "Bổ sung cơ chế khóa phân tán toàn cầu (Distributed Global Lock) để mỗi thời điểm chỉ duy nhất một đồn được phép sửa hồ sơ vụ án",
+          "correct": false,
+          "feedback": "Khóa phân tán qua mạng giữa các trung tâm dữ liệu sẽ phá hỏng hoàn toàn lợi ích của Multi-Leader (vốn nhằm tăng tốc độ ghi cục bộ và tính sẵn sàng khi đứt mạng)."
+        },
+        {
+          "id": "fix-1",
+          "text": "Chuyển toàn bộ hệ thống về mô hình Single-Leader duy nhất cho việc phân công vụ án",
+          "correct": false,
+          "feedback": "Chuyển về Single-Leader loại bỏ xung đột nhưng làm mất đi tính sẵn sàng cao mà Multi-Leader mang lại. Nếu đường truyền mạng tới Leader chính gặp sự cố, các đồn khác sẽ không thể giao nhiệm vụ phá án."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tiếp tục dùng Last-Write-Wins nhưng đồng bộ đồng hồ máy chủ qua NTP chính xác hơn",
+          "correct": false,
+          "feedback": "Đồng hồ chính xác hơn chỉ giúp việc chọn bản ghi có nhãn thời gian sau chuẩn hơn, nhưng bản chất của LWW vẫn là âm thầm vứt bỏ một thao tác ghi của sĩ quan mà không có thông báo."
+        }
+      ]
+    }
+  },
+  "conceptId": "multi-leader-replication",
+  "badge": {
+    "name": "Bậc Thầy Giải Quyết Xung Đột",
+    "icon": "⚔️"
+  }
+}

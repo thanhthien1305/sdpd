@@ -1,0 +1,252 @@
+{
+  "id": "case-19",
+  "number": 19,
+  "title": "Bắt Giữ Trùng Lặp (The Double Arrest)",
+  "subtitle": "Cơ chế truyền tin trùng lặp khiến một lệnh truy nã bị thực thi hai lần",
+  "brief": {
+    "narrative": "Hệ thống quản lý tư pháp tích hợp cơ chế 'Giao hàng ít nhất một lần' (At-least-once delivery) qua hàng đợi thông điệp Kafka. Khi tòa án phát lệnh bắt giữ nghi phạm John Doe, thông điệp được gửi tới dịch vụ điều phối. Do mạng bị chập chờn nhẹ đúng lúc xác nhận (Ack timeout), hệ thống tự động gửi lại thông điệp lần thứ hai. Dịch vụ tiếp nhận không có cơ chế kiểm tra trùng lặp: nó nhận cả hai thông điệp và điều động hai đội đặc nhiệm khác nhau từ hai đồn độc lập cùng xông vào nhà Doe! Hai đội đặc nhiệm suýt nổ súng vào nhau vì tưởng nhầm đối phương là đồng bọn của tội phạm! Cảnh trưởng Partition tái mặt. Thám tử, hãy dạy cho hệ thống bài học về Tính Idempotent (Idempotency)!",
+    "symptoms": [
+      "Cùng một lệnh bắt giữ với nội dung y hệt nhau bị gửi và thực thi hai lần",
+      "Hàng đợi thông điệp hoạt động theo cơ chế At-Least-Once (có thể trùng lặp khi mạng chập chờn)",
+      "Dịch vụ xử lý bên nhận (Consumer) không kiểm tra xem mã định danh lệnh bắt đã được xử lý hay chưa",
+      "Hai lực lượng đặc nhiệm cùng bị điều động đến cùng một mục tiêu trong cùng một giờ"
+    ],
+    "objective": "Thiết kế bộ xử lý thông điệp có Tính Idempotent (Idempotent Consumer) bằng cách sử dụng Khóa Idempotency (Idempotency Key) và bảng ghi nhận trùng lặp (Deduplication Table)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "warrant-system",
+        "type": "server",
+        "label": "Warrant Issuing System",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Warrant Issuing System",
+          "logs": [
+            "[16:00:00] INFO: Warrant #W-8834 issued for James Kowalski",
+            "[16:00:01] INFO: Message published to dispatch queue (message-id: msg-7721)"
+          ],
+          "data": {
+            "Warrant": "#W-8834",
+            "Suspect": "James Kowalski",
+            "Messages Published": "1 (single publish)",
+            "Status": "HEALTHY"
+          },
+          "status": "Published exactly one message. The duplication happened downstream."
+        }
+      },
+      {
+        "id": "message-queue",
+        "type": "server",
+        "label": "Dispatch Queue",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Hàng Đợi Kafka (At-Least-Once)",
+          "logs": [
+            "[16:00:01] INFO: Message msg-7721 received and queued",
+            "[16:00:02] INFO: Message msg-7721 delivered to consumer (attempt 1)",
+            "[16:00:32] WARN: No ACK received within 30s timeout — assuming consumer failed",
+            "[16:00:33] INFO: Message msg-7721 re-delivered to consumer (attempt 2)",
+            "[16:00:35] INFO: ACK received for msg-7721 (from attempt 1, delayed)"
+          ],
+          "data": {
+            "Delivery Guarantee": "At-least-once",
+            "Message ID": "msg-7721",
+            "Deliveries": "2 (original + re-delivery)",
+            "ACK Timeout": "30 seconds",
+            "Status": "WORKING AS DESIGNED (at-least-once)"
+          },
+          "status": "TRÙNG LẶP — Gửi 2 thông điệp giống hệt nhau do timeout gói tin xác nhận (Ack)."
+        }
+      },
+      {
+        "id": "warrant-processor",
+        "type": "server",
+        "label": "Warrant Processor",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Warrant Processor Service",
+          "logs": [
+            "[16:00:02] INFO: Processing warrant #W-8834 (message attempt 1)",
+            "[16:00:05] INFO: Arrest record created — booking #BK-1190",
+            "[16:00:06] INFO: Unit dispatched to execute warrant #W-8834",
+            "[16:00:33] INFO: Processing warrant #W-8834 (message attempt 2 — DUPLICATE)",
+            "[16:00:35] INFO: Arrest record created — booking #BK-1191 (DUPLICATE)",
+            "[16:00:36] INFO: Second unit dispatched for same warrant #W-8834"
+          ],
+          "data": {
+            "Idempotency Check": "NONE",
+            "Processed Message IDs": "Not tracked",
+            "Duplicate Detection": "Not implemented",
+            "Bookings Created": "2 (should be 1)",
+            "Units Dispatched": "2 (should be 1)"
+          },
+          "status": "Processed both deliveries as new — no duplicate detection."
+        }
+      },
+      {
+        "id": "booking-db",
+        "type": "database",
+        "label": "Booking Database",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Booking Database",
+          "logs": [
+            "[16:00:05] INFO: INSERT booking #BK-1190 (warrant #W-8834)",
+            "[16:00:35] INFO: INSERT booking #BK-1191 (warrant #W-8834) — DUPLICATE"
+          ],
+          "data": {
+            "Booking #BK-1190": "Warrant #W-8834 — James Kowalski",
+            "Booking #BK-1191": "Warrant #W-8834 — James Kowalski (DUPLICATE)",
+            "Unique Constraint on Warrant": "NOT CONFIGURED",
+            "Total Duplicate Records": "1 pair"
+          },
+          "status": "Two booking records for the same warrant. No uniqueness constraint."
+        }
+      },
+      {
+        "id": "officers",
+        "type": "client",
+        "label": "Patrol Officers",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Officers",
+          "logs": [
+            "[16:05:00] INFO: Officer Martinez arrested J. Kowalski at 4th & Main",
+            "[16:10:00] INFO: Officer Chen arrested J. Kowalski at 7th & Oak (DUPLICATE)"
+          ],
+          "data": {
+            "Arrests for #W-8834": "2 (should be 1)",
+            "Officers Dispatched": "2 (should be 1)",
+            "Wrongful Detention Complaint": "Filed"
+          },
+          "status": "Two officers independently arrested the same person on the same warrant."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-warrant-queue",
+        "source": "warrant-system",
+        "target": "message-queue",
+        "label": "publish (1x)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-queue-processor",
+        "source": "message-queue",
+        "target": "warrant-processor",
+        "label": "delivered 2x",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-processor-db",
+        "source": "warrant-processor",
+        "target": "booking-db",
+        "label": "duplicate writes",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-processor-officers",
+        "source": "warrant-processor",
+        "target": "officers",
+        "label": "duplicate dispatch",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ dẫn đến việc hai đội cảnh sát cùng ập tới bắt giữ một nghi phạm hai lần là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Hàng đợi tin nhắn bị lỗi phần mềm khiến nó tự động nhân bản thông điệp thành hai bản sao",
+          "correct": false,
+          "feedback": "Hàng đợi hoạt động theo đúng ngữ nghĩa \"Phân phối ít nhất một lần\" (At-least-once delivery). Khi Consumer 1 xử lý quá lâu và hết hạn thời gian chờ xác nhận (ACK timeout), hàng đợi buộc phải phát lại tin nhắn đó cho Consumer 2."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hai đồn cảnh sát cạnh tranh thành tích phá án và cố tình tranh nhau lệnh bắt",
+          "correct": false,
+          "feedback": "Cả hai đội đều hành động hoàn toàn độc lập dựa trên chỉ thị chính thức từ phần mềm điều động."
+        },
+        {
+          "id": "rc-4",
+          "text": "Thẩm phán đã vô tình ký hai lệnh bắt giữ giống hệt nhau cho cùng một nghi phạm",
+          "correct": false,
+          "feedback": "Chỉ có duy nhất một lệnh bắt giữ được ban hành và đưa vào hệ thống."
+        },
+        {
+          "id": "rc-2",
+          "text": "Dịch vụ xử lý lệnh bắt Thiếu Tính Lũy Thừa (Non-Idempotent Consumer) trong mô hình Phân Phối Ít Nhất Một Lần (At-Least-Once Delivery) — tin nhắn được gửi lại nhưng hệ thống không kiểm tra xem lệnh đã được xử lý chưa",
+          "correct": true,
+          "feedback": "Chính xác! Trong mạng phân tán, cơ chế At-least-once delivery luôn có thể gửi lại thông điệp (do mạng chập chờn hoặc timeout xử lý). Consumer xử lý lệnh bắt đã không kiểm tra tính lũy thừa (Idempotency) mà mù quáng điều động xe cho mỗi lần nhận được thông điệp. Kết quả là cả hai đội tuần tra đều được phái đi bắt cùng một người."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn ngừa việc xử lý trùng lặp thông điệp trong hệ thống hàng đợi là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Bổ sung tầng lọc trùng lặp bên trong máy chủ hàng đợi để tự động loại bỏ các tin nhắn trùng lặp",
+          "correct": false,
+          "feedback": "Khử trùng tại hàng đợi chỉ lọc được các thông điệp giống hệt nhau trên đường truyền, không bảo vệ được logic nghiệp vụ ở tầng ứng dụng khi có sự cố xử lý dở dang."
+        },
+        {
+          "id": "fix-1",
+          "text": "Nâng cấp toàn bộ hạ tầng hàng đợi sang hỗ trợ ngữ nghĩa Phân Phối Đúng Một Lần (Exactly-Once Delivery)",
+          "correct": false,
+          "feedback": "Exactly-once thuần túy qua mạng phân tán là điều cực kỳ tốn kém và bất khả thi nếu các hệ thống phụ trợ không hỗ trợ giao dịch 2 pha phân tán."
+        },
+        {
+          "id": "fix-2",
+          "text": "Xây dựng Consumer có Tính Lũy Thừa (Idempotent Consumer) — theo dõi mã định danh thông điệp / mã lệnh bắt (Idempotency Key) và bỏ qua nếu đã được xử lý",
+          "correct": true,
+          "feedback": "Chính xác! Một Consumer lũy thừa sẽ lưu trạng thái các mã lệnh bắt đã xử lý vào bảng cơ sở dữ liệu có ràng buộc UNIQUE. Khi nhận được một thông điệp (dù là lần đầu hay lần thứ 10), nó kiểm tra xem mã lệnh đó đã được xử lý chưa. Nếu đã xử lý, nó lập tức bỏ qua và gửi xác nhận ACK. Dù tin nhắn có bị gửi lại bao nhiêu lần, hành động thực tế cũng chỉ diễn ra đúng một lần duy nhất!"
+        },
+        {
+          "id": "fix-3",
+          "text": "Tăng thời gian chờ ACK timeout của hàng đợi từ 30 giây lên 5 phút",
+          "correct": false,
+          "feedback": "Tăng timeout chỉ làm giảm xác suất gửi lại, nhưng nếu Consumer thực sự bị sập, tin nhắn sẽ bị giam giữ tới 5 phút mới được gửi lại cho máy khác."
+        }
+      ]
+    }
+  },
+  "conceptId": "idempotency",
+  "badge": {
+    "name": "Bậc Thầy Idempotency",
+    "icon": "🔍"
+  }
+}

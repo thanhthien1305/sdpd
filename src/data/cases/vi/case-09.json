@@ -1,0 +1,262 @@
+{
+  "id": "case-09",
+  "number": 9,
+  "title": "Cánh Cổng Quá Tải (The Overwhelmed Gateway)",
+  "subtitle": "Tình huống khẩn cấp toàn thành phố khiến cánh cổng duy nhất sụp đổ",
+  "brief": {
+    "narrative": "Vào đêm giao thừa, một vụ mất điện diện rộng kèm bạo loạn bùng phát tại khu trung tâm. Hơn 5.000 sĩ quan cảnh sát, cứu hỏa và cấp cứu đồng loạt kích hoạt ứng dụng định vị và truyền dữ liệu hiện trường. Toàn bộ lưu lượng khổng lồ này đổ dồn vào một máy chủ Cổng API (API Gateway) duy nhất đặt tại trụ sở. CPU của Gateway chạm mốc 100%, hàng đợi kết nối bị nghẽn hoàn toàn, bộ nhớ RAM cạn kiệt và máy chủ sập ngúm. Cả thành phố mù thông tin đúng lúc nguy cấp nhất. Trong khi đó, cụm 20 máy chủ ứng dụng xử lý nghiệp vụ ở phía sau vẫn đang ngồi chơi xơi nước vì không có request nào lọt qua được cổng!",
+    "symptoms": [
+      "Hàng ngàn yêu cầu khẩn cấp đồng thời gửi tới cùng một địa chỉ IP duy nhất",
+      "Máy chủ Gateway duy nhất bị kiệt quệ tài nguyên và ngừng phản hồi",
+      "Cụm máy chủ xử lý phía sau (backend servers) hoàn toàn rảnh rỗi nhưng không nhận được việc",
+      "Ứng dụng điều phối hiện trường hiển thị lỗi kết nối mạng toàn diện"
+    ],
+    "objective": "Xóa bỏ nút thắt cổ chai tại cổng vào bằng cách triển khai cụm Bộ Cân Bằng Tải (Load Balancers) có khả năng co giãn và kiểm tra sức khỏe tự động."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "api-gateway",
+        "type": "server",
+        "label": "Central API Gateway",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Central API Gateway",
+          "logs": [
+            "[06:32:00] INFO: Earthquake alert received — all systems activating",
+            "[06:32:05] WARN: Connection count: 8,400 / 10,000 max",
+            "[06:32:10] ERROR: Connection count: 10,000 / 10,000 — MAX REACHED",
+            "[06:32:10] ERROR: Dropping new connections — HTTP 503",
+            "[06:32:15] WARN: CPU utilization: 98%",
+            "[06:32:20] ERROR: Request queue depth: 45,000 (overflow)",
+            "[06:32:25] WARN: Average response time: 12,340ms",
+            "[06:32:30] ERROR: 60% of requests being rejected"
+          ],
+          "data": {
+            "Status": "OVERLOADED",
+            "Connections": "10,000 / 10,000 (MAX)",
+            "CPU": "98%",
+            "Memory": "94%",
+            "Requests/sec (normal)": "2,000",
+            "Requests/sec (current)": "15,000",
+            "Rejected Rate": "60%",
+            "Avg Response Time": "12,340ms (normal: 50ms)",
+            "Instances": "1 (no scaling configured)"
+          },
+          "status": "Single gateway instance overwhelmed. No auto-scaling, no load balancing, no rate limiting."
+        }
+      },
+      {
+        "id": "precinct-north",
+        "type": "client",
+        "label": "North Precinct",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "North Precinct Systems",
+          "logs": [
+            "[06:32:11] ERROR: Dispatch request FAILED — gateway returned 503",
+            "[06:32:15] ERROR: Ambulance dispatch for earthquake victims FAILED",
+            "[06:32:20] ERROR: 14 consecutive 503 errors",
+            "[06:32:25] WARN: Retrying all failed requests — adding more load to gateway"
+          ],
+          "data": {
+            "Failed Requests": "847 in last 5 minutes",
+            "Pending Dispatches": "23 ambulances, 15 fire trucks",
+            "Emergency Calls Dropped": "31",
+            "Retry Strategy": "Immediate retry (making things worse)"
+          },
+          "status": "Critical emergency dispatches failing. Retry storms adding to gateway overload."
+        }
+      },
+      {
+        "id": "precinct-south",
+        "type": "client",
+        "label": "South Precinct",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 350
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "South Precinct Systems",
+          "logs": [
+            "[06:32:12] ERROR: Officer GPS tracking update FAILED — gateway 503",
+            "[06:32:18] WARN: Lost contact with 8 officers in earthquake zone",
+            "[06:32:22] ERROR: Cannot route 911 calls — gateway overwhelmed"
+          ],
+          "data": {
+            "Officers Out of Contact": "8",
+            "Failed 911 Routes": "19",
+            "Gateway Success Rate": "35%"
+          },
+          "status": "Lost contact with field officers. 911 routing failing."
+        }
+      },
+      {
+        "id": "dispatch-911",
+        "type": "client",
+        "label": "911 Dispatch Center",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "911 Emergency Dispatch",
+          "logs": [
+            "[06:32:10] ERROR: Call routing API returned 503",
+            "[06:32:12] ERROR: Cannot determine nearest available unit",
+            "[06:32:15] CRITICAL: 911 calls queuing — average wait time 4 minutes",
+            "[06:32:20] WARN: Emergency and routine requests share same gateway — no priority"
+          ],
+          "data": {
+            "Calls Waiting": "47",
+            "Average Wait": "4 min 12 sec (target: 10 sec)",
+            "Calls Dropped": "12",
+            "Priority Level": "SAME AS ROUTINE TRAFFIC (no differentiation)"
+          },
+          "status": "911 calls competing with routine traffic through same overloaded gateway. No priority mechanism."
+        }
+      },
+      {
+        "id": "backend-services",
+        "type": "server",
+        "label": "Backend Services",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Backend Services Cluster",
+          "logs": [
+            "[06:32:00] INFO: All backend services healthy",
+            "[06:32:10] INFO: Capacity available — only receiving 40% of normal traffic",
+            "[06:32:15] INFO: Database responding in 5ms",
+            "[06:32:20] WARN: Most requests never reaching us — gateway is the bottleneck"
+          ],
+          "data": {
+            "Status": "HEALTHY",
+            "CPU": "25%",
+            "Capacity Used": "40%",
+            "Response Time": "5ms",
+            "Note": "Backend is fine — gateway is the bottleneck"
+          },
+          "status": "Backend services are healthy and underutilized. The gateway is the sole bottleneck."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-north-gw",
+        "source": "precinct-north",
+        "target": "api-gateway",
+        "label": "requests",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-south-gw",
+        "source": "precinct-south",
+        "target": "api-gateway",
+        "label": "requests",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-911-gw",
+        "source": "dispatch-911",
+        "target": "api-gateway",
+        "label": "emergency calls",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-gw-backend",
+        "source": "api-gateway",
+        "target": "backend-services",
+        "label": "forwarded requests",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ gây ra sự cố sập toàn bộ hệ thống trong trận động đất là gì?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Trận động đất gây ra thiệt hại vật lý trực tiếp tới phần cứng của các trung tâm dữ liệu",
+          "correct": false,
+          "feedback": "Tất cả các máy chủ phụ trợ (backend services) đều nguyên vẹn và đang hoạt động tốt. Vấn đề nằm ở cổng tiếp nhận lưu lượng."
+        },
+        {
+          "id": "rc-1",
+          "text": "Bản thân các dịch vụ nghiệp vụ phía sau (Backend Services) không thể chịu được mức tăng đột biến của lưu lượng",
+          "correct": false,
+          "feedback": "Các dịch vụ phụ trợ phía sau thậm chí còn chưa nhận được yêu cầu nào vì cổng API Gateway đã bị nghẽn cứng ngay từ cửa vào."
+        },
+        {
+          "id": "rc-2",
+          "text": "Một cá thể API Gateway duy nhất là nút thắt cổ chai (Single Bottleneck) — nó không thể mở rộng và bị cạn kiệt tài nguyên khi lưu lượng tăng vọt 15 lần trong tình huống khẩn cấp",
+          "correct": true,
+          "feedback": "Chính xác! Cổng API Gateway là điểm tiếp xúc đầu tiên của toàn bộ hệ thống. Mặc dù các dịch vụ phía sau được chia nhỏ, việc chỉ đặt một API Gateway duy nhất phía trước mà không có bộ cân bằng tải (Load Balancer) đã tạo ra một điểm nghẽn nghiêm trọng. Khi lưu lượng bùng nổ từ 200 lên 3.000 yêu cầu/giây, gateway cạn kiệt CPU và luồng kết nối, chặn đứng mọi cuộc gọi khẩn cấp."
+        },
+        {
+          "id": "rc-3",
+          "text": "Bão thử lại (Retry Storm) dữ dội từ các đồn cảnh sát đã đánh sập cơ sở dữ liệu",
+          "correct": false,
+          "feedback": "Bão thử lại là hệ quả xuất hiện sau khi người dùng thấy lỗi kết nối, không phải nguyên nhân ban đầu đánh sập gateway."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương pháp tốt nhất để ngăn chặn tình trạng quá tải API Gateway khi lưu lượng tăng vọt là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Triển khai giới hạn tốc độ (Rate Limiting) trên Gateway để từ chối ngay các yêu cầu vượt ngưỡng",
+          "correct": false,
+          "feedback": "Trong trận động đất khẩn cấp, việc từ chối các cuộc gọi cứu nạn của người dân và cảnh sát là điều không thể chấp nhận được. Hệ thống cần phải mở rộng để tiếp nhận cuộc gọi, không phải vứt bỏ chúng."
+        },
+        {
+          "id": "fix-4",
+          "text": "Xóa bỏ hoàn toàn tầng API Gateway và để từng đồn cảnh sát kết nối trực tiếp vào từng dịch vụ backend",
+          "correct": false,
+          "feedback": "Bỏ Gateway làm lộ toàn bộ mạng nội bộ ra ngoài, gây khó khăn cho việc xác thực, định tuyến và phân tán bảo mật."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai nhiều phiên bản API Gateway phía sau một Bộ Cân Bằng Tải (Load Balancer) kết hợp cơ chế Tự Động Co Giãn (Auto-scaling)",
+          "correct": true,
+          "feedback": "Chính xác! Bằng cách đặt một cụm API Gateway nằm sau Bộ cân bằng tải L4/L7 có tính sẵn sàng cao kết hợp Auto-scaling, khi thảm họa xảy ra và lưu lượng tăng gấp 15 lần, hệ thống sẽ tự động kích hoạt thêm hàng chục instance gateway mới trong vài chục giây để san sẻ tải, đảm bảo không một yêu cầu khẩn cấp nào bị nghẽn."
+        },
+        {
+          "id": "fix-2",
+          "text": "Nâng cấp máy chủ API Gateway duy nhất hiện tại lên một cấu hình phần cứng cực mạnh (Scale Up)",
+          "correct": false,
+          "feedback": "Mở rộng theo chiều dọc luôn có giới hạn vật lý và chi phí cực kỳ đắt đỏ, đồng thời vẫn giữ nguyên điểm lỗi đơn lẻ (SPOF) nếu máy chủ đó gặp trục trặc."
+        }
+      ]
+    }
+  },
+  "conceptId": "load-balancing",
+  "badge": {
+    "name": "Kiến Trúc Sư Cân Bằng Tải",
+    "icon": "⚖️"
+  }
+}

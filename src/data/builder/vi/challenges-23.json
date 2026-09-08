@@ -1,0 +1,74 @@
+{
+  "id": "builder-23",
+  "number": 23,
+  "title": "Bộ Định Tuyến Cảnh Báo Đa Kênh",
+  "subtitle": "Điều phối cảnh báo tới nhiều kênh khác nhau thiếu tin cậy và hay thất lạc",
+  "objective": "Thiết kế bộ định tuyến cảnh báo có khả năng thử lại, cách ly lỗi và đảm bảo phân phối chính xác.",
+  "constraints": [
+    "Sự cố của một kênh (ví dụ SMS) không được làm nghẽn các kênh khác (Radio, Push, Email)",
+    "Mỗi kênh có thể điều chỉnh tốc độ gửi (rate limit) độc lập theo giới hạn của nhà cung cấp",
+    "Theo dõi trạng thái gửi thành công hoặc thất bại của từng kênh"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "blobStorage",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Hàng Đợi Phân Kênh Độc Lập",
+      "description": "Sử dụng hàng đợi riêng biệt cho từng loại kênh phân phối để cô lập lỗi.",
+      "requiredAll": [
+        "api",
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Worker Chuyên Trách Từng Kênh",
+      "description": "Các nhóm worker đảm trách việc gửi tin và xử lý thử lại (retry) theo đặc thù từng kênh.",
+      "requiredAll": [
+        "client",
+        "loadBalancer"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Ghi Nhận Trạng Thái Tập Trung",
+      "description": "Cơ sở dữ liệu lưu trữ nhật ký giao hàng phục vụ kiểm toán và báo cáo.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

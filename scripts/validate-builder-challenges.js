@@ -105,13 +105,16 @@ function validateParity(challengesEn, challengesPtBR) {
 function main() {
   const challengesEn = readChallenges('en');
   const challengesPtBR = readChallenges('pt-BR');
+  const challengesVi = readChallenges('vi');
 
   for (const entry of challengesEn) validateChallenge(entry, 'en');
   for (const entry of challengesPtBR) validateChallenge(entry, 'pt-BR');
+  for (const entry of challengesVi) validateChallenge(entry, 'vi');
 
   validateParity(challengesEn, challengesPtBR);
+  validateParity(challengesEn, challengesVi);
 
-  console.log(`Builder challenge validation passed for ${challengesEn.length} challenge pairs.`);
+  console.log(`Builder challenge validation passed for ${challengesEn.length} challenge triplets (EN, pt-BR, VI).`);
 }
 
 main();

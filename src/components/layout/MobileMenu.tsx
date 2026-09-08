@@ -65,12 +65,21 @@ export function MobileMenu({ open, onClose }: MobileMenuProps) {
             <CaseList onNavigate={onClose} />
 
             <div className="p-3 border-t border-noir-600/50 flex flex-col gap-2">
-              <button
-                onClick={() => setLocale(locale === 'en' ? 'pt-BR' : 'en')}
-                className="text-xs font-mono text-noir-300 hover:text-amber-400 transition-colors px-3 min-h-11 rounded border border-noir-600/40 hover:border-amber-500/30 text-left flex items-center"
-              >
-                {locale === 'en' ? 'PT-BR' : 'EN'}
-              </button>
+              <div className="flex items-center gap-1 rounded border border-noir-600/40 bg-noir-900/60 p-1">
+                {(['en', 'vi', 'pt-BR'] as const).map((l) => (
+                  <button
+                    key={l}
+                    onClick={() => setLocale(l)}
+                    className={`flex-1 py-2 text-xs font-mono rounded transition-colors text-center ${
+                      locale === l
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold'
+                        : 'text-noir-400 hover:text-noir-200'
+                    }`}
+                  >
+                    {l === 'en' ? 'EN' : l === 'vi' ? 'VI' : 'PT'}
+                  </button>
+                ))}
+              </div>
               <Link
                 to="/daily"
                 onClick={onClose}

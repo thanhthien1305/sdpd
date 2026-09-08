@@ -1,0 +1,71 @@
+{
+  "id": "builder-06",
+  "number": 6,
+  "title": "Kiểm Soát Tràn Hàng Đợi Sự Cố",
+  "subtitle": "Khâu tiếp nhận sự cố sụp đổ trong các đợt lưu lượng bùng phát mạnh",
+  "objective": "Thiết lập cơ chế hấp thụ và điều tiết dòng sự cố mà không làm mất dữ liệu.",
+  "constraints": [
+    "Tiếp nhận yêu cầu nhanh chóng với độ trễ tối thiểu",
+    "Ngăn chặn tràn bộ nhớ hoặc mất mát thông điệp",
+    "Mở rộng quy mô worker theo dung lượng hàng đợi"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Đệm Lưu Lượng Bằng Hàng Đợi",
+      "description": "Sử dụng hàng đợi thông điệp để đệm các sự cố gửi đến.",
+      "requiredAll": [
+        "api",
+        "queue"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Mở Rộng Quy Mô Worker",
+      "description": "Worker tiêu thụ và xử lý thông điệp từ hàng đợi một cách nhịp nhàng.",
+      "requiredAll": [
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "queue",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Ghi Nhận Đáng Tin Cậy",
+      "description": "Chỉ ghi vào cơ sở dữ liệu bền vững sau khi xử lý thành công.",
+      "requiredAll": [
+        "client",
+        "loadBalancer"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ]
+    }
+  ]
+}

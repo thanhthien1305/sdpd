@@ -1,0 +1,72 @@
+{
+  "id": "builder-14",
+  "number": 14,
+  "title": "Đường Ống Nạp Video Bodycam",
+  "subtitle": "Tải lên video camera hành trình chiếm giữ toàn bộ luồng xử lý API",
+  "objective": "Thiết kế đường dẫn nạp tệp video dung lượng lớn tách biệt hoàn toàn khỏi luồng API tác vụ.",
+  "constraints": [
+    "Không để việc truyền tải dữ liệu video nặng làm nghẽn các yêu cầu API thông thường",
+    "Lưu trữ video trực tiếp vào kho lưu trữ đối tượng tối ưu chi phí",
+    "Kích hoạt xử lý mã hóa và lập chỉ mục video bất đồng bộ sau khi tải lên hoàn tất"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "blobStorage",
+    "database",
+    "cdn"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Lưu Trữ Tệp Lớn Chuyên Dụng",
+      "description": "Blob Storage là nơi tiếp nhận và lưu trữ trực tiếp các đoạn video bodycam.",
+      "requiredAll": [
+        "blobStorage",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Xử Lý Hậu Kỳ Bất Đồng Bộ",
+      "description": "Hàng đợi thông báo cho worker tiến hành mã hóa và gắn nhãn video.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Tách Rời Luồng Nhẹ và Nặng",
+      "description": "API chính chỉ cấp URL tải lên và lưu metadata vào DB, không trung chuyển file.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,250 @@
+{
+  "id": "case-22",
+  "number": 22,
+  "title": "Mảnh Ghép Mất Tích (The Missing Shard)",
+  "subtitle": "Toàn bộ hồ sơ tội phạm bắt đầu bằng chữ cái quy định biến mất khỏi cơ sở dữ liệu",
+  "brief": {
+    "narrative": "Đội cảnh sát kinh tế đang chuẩn bị bắt giữ trùm buôn lậu Walter White. Khi tra cứu tên 'White', hệ thống báo 'Không tìm thấy kết quả'. Tra cứu 'Williams', 'Walker', 'Watson' cũng đều trống rỗng! Toàn bộ tội phạm có họ bắt đầu bằng chữ W đều bốc hơi! Hóa ra Shard 7 (phụ trách chữ cái U-Z) bị sập nguồn do chập điện ổ cắm tại phòng máy chủ. Vì hệ thống áp dụng cơ chế Sharding thô sơ mà không có bản sao dự phòng (Replica) cho từng shard, cái chết của Shard 7 đã khoét một lỗ thủng 15% vào bộ nhớ của toàn sở cảnh sát! Thám tử, hãy vá lại mảnh ghép bị mất!",
+    "symptoms": [
+      "Mọi truy vấn tra cứu trong khoảng dải U-Z đều thất bại hoặc trả về rỗng",
+      "Máy chủ Shard 7 bị mất nguồn vật lý hoàn toàn",
+      "Mỗi Shard trong hệ thống là một máy chủ đơn lẻ không có bản sao (Replica) dự phòng",
+      "Hệ thống không phát hiện và cảnh báo kịp thời về sự vắng mặt của một phân mảnh"
+    ],
+    "objective": "Kết hợp Sharding với Nhân Bản (Sharding + Replication) — mỗi phân mảnh phải là một cụm Replica Set để đảm bảo tính sẵn sàng cao."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "query-router",
+        "type": "server",
+        "label": "Query Router",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 30
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Query Router",
+          "logs": [
+            "[14:20:01] INFO: Query 'Torres' → routed to Shard-MR",
+            "[14:20:01] ERROR: Shard-MR connection refused",
+            "[14:20:02] ERROR: No replica available for range M-R",
+            "[14:20:02] WARN: Returning empty result set for 'Torres'",
+            "[14:20:15] INFO: Query 'Adams' → routed to Shard-AF (success)",
+            "[14:20:16] INFO: Query 'Williams' → routed to Shard-SZ (success)"
+          ],
+          "data": {
+            "Status": "PARTIALLY OPERATIONAL",
+            "Shards Online": "3 of 4",
+            "Failed Shard": "Shard-MR (range M-R)",
+            "Shard Replicas": "None configured",
+            "Failed Queries (last hour)": "2,847"
+          },
+          "status": "Router correctly identifies shard for each query but Shard-MR is down with no failover."
+        }
+      },
+      {
+        "id": "shard-af",
+        "type": "database",
+        "label": "Shard A-F",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Shard A-F",
+          "logs": [
+            "[14:20:15] INFO: Query 'Adams' — 1 result returned",
+            "[14:20:20] INFO: Query 'Clark' — 3 results returned"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Records": "580,000",
+            "Range": "A-F",
+            "Replicas": "0"
+          },
+          "status": "Operating normally. Serving all A-F queries."
+        }
+      },
+      {
+        "id": "shard-gl",
+        "type": "database",
+        "label": "Shard G-L",
+        "status": "healthy",
+        "position": {
+          "x": 280,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Shard G-L",
+          "logs": [
+            "[14:20:18] INFO: Query 'Johnson' — 5 results returned"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Records": "610,000",
+            "Range": "G-L",
+            "Replicas": "0"
+          },
+          "status": "Operating normally. Serving all G-L queries."
+        }
+      },
+      {
+        "id": "shard-mr",
+        "type": "database",
+        "label": "Shard M-R",
+        "status": "failed",
+        "position": {
+          "x": 480,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Shard M-R",
+          "logs": [
+            "[13:45:00] WARN: Disk latency spike detected",
+            "[13:45:30] ERROR: Storage controller failure",
+            "[13:45:31] FATAL: Database shutting down — data files inaccessible",
+            "[13:45:31] INFO: No replica configured for failover"
+          ],
+          "data": {
+            "Status": "OFFLINE",
+            "Records": "640,000 (inaccessible)",
+            "Range": "M-R",
+            "Replicas": "0",
+            "Downtime": "35 minutes"
+          },
+          "status": "Hardware failure. Entire M-R range is inaccessible. No replica exists."
+        }
+      },
+      {
+        "id": "shard-sz",
+        "type": "database",
+        "label": "Shard S-Z",
+        "status": "healthy",
+        "position": {
+          "x": 680,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Shard S-Z",
+          "logs": [
+            "[14:20:16] INFO: Query 'Williams' — 2 results returned"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Records": "570,000",
+            "Range": "S-Z",
+            "Replicas": "0"
+          },
+          "status": "Operating normally. Serving all S-Z queries."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-router-af",
+        "source": "query-router",
+        "target": "shard-af",
+        "label": "A-F queries",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-gl",
+        "source": "query-router",
+        "target": "shard-gl",
+        "label": "G-L queries",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-mr",
+        "source": "query-router",
+        "target": "shard-mr",
+        "label": "M-R queries",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-router-sz",
+        "source": "query-router",
+        "target": "shard-sz",
+        "label": "S-Z queries",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao việc mất một phân mảnh (Shard 7) lại khiến toàn bộ cổng thông tin tư pháp bị tê liệt không thể tra cứu?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Các phân mảnh không có Bản Sao Dự Phòng (No Shard Replicas) — mỗi phân mảnh là một điểm lỗi đơn lẻ độc lập, khiến việc mất 1 shard đồng nghĩa với mất vĩnh viễn quyền truy cập vào phần dữ liệu đó",
+          "correct": true,
+          "feedback": "Chính xác! Sharding chia dữ liệu theo chiều ngang để mở rộng quy mô, nhưng nếu mỗi Shard chỉ là một máy chủ đơn lẻ không có bản sao (Replication Group), thì xác suất cả hệ thống bị gián đoạn sẽ TĂNG LÊN theo số lượng Shard. Mất Shard 7 khiến 1/8 số vụ án bị biến mất và mọi truy vấn tổng hợp trên toàn thành phố bị lỗi."
+        },
+        {
+          "id": "rc-3",
+          "text": "Mạng nội bộ của trung tâm dữ liệu bị đứt cáp quang kết nối tới Shard 7",
+          "correct": false,
+          "feedback": "Máy chủ Shard 7 bị chết nguồn và hỏng bo mạch chủ, không phải lỗi cáp mạng."
+        },
+        {
+          "id": "rc-1",
+          "text": "Dữ liệu của toàn bộ sở cảnh sát đều tập trung trên Shard 7",
+          "correct": false,
+          "feedback": "Shard 7 chỉ chứa khoảng 12.5% dữ liệu của sở cảnh sát. Vấn đề là kiến trúc phân mảnh không có bản sao dự phòng."
+        },
+        {
+          "id": "rc-4",
+          "text": "Bộ định tuyến phân mảnh (Shard Router) bị lỗi phần mềm và tự ý dừng hoạt động khi một shard biến mất",
+          "correct": false,
+          "feedback": "Bộ định tuyến vẫn hoạt động bình thường, nhưng các truy vấn không có shard key buộc phải quét toàn bộ các shard (Scatter-Gather). Khi một shard không phản hồi, toàn bộ truy vấn bị treo."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn chặn việc mất một Shard làm sập hệ thống tra cứu là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Bỏ qua các bản ghi thuộc Shard 7 và chỉ trả về kết quả từ các shard còn sống",
+          "correct": false,
+          "feedback": "Trả về kết quả thiếu mà không có cảnh báo có thể khiến các thẩm phán đưa ra phán quyết sai lầm nghiêm trọng."
+        },
+        {
+          "id": "fix-1",
+          "text": "Bỏ sharding hoàn toàn và gộp toàn bộ dữ liệu trở lại một cơ sở dữ liệu khổng lồ",
+          "correct": false,
+          "feedback": "Bỏ sharding khiến hệ thống quay lại với các điểm nghẽn hiệu năng và giới hạn dung lượng lưu trữ của máy chủ đơn lẻ."
+        },
+        {
+          "id": "fix-2",
+          "text": "Cấu hình mỗi Shard thành một Nhóm Bản Sao (Replica Set) — duy trì ít nhất 1 Leader và 2 Follower cho từng phân mảnh với cơ chế tự động chuyển đổi dự phòng (Automatic Failover)",
+          "correct": true,
+          "feedback": "Chính xác! Nguyên tắc vàng trong kiến trúc phân tán là: \"Sharding để mở rộng, Replication để dự phòng\". Bằng cách biến mỗi Shard thành một Replica Set (ví dụ sử dụng Raft/Paxos hoặc Leader-Follower), khi máy chủ Shard 7 chính bị cháy bo mạch, bản sao của nó sẽ được thăng cấp lên làm Leader mới trong vài giây, hệ thống không bao giờ bị gián đoạn!"
+        },
+        {
+          "id": "fix-3",
+          "text": "In toàn bộ hồ sơ vụ án của Shard 7 ra giấy và cất trong tủ lưu trữ văn phòng",
+          "correct": false,
+          "feedback": "Hồ sơ giấy không thể tra cứu tự động qua API và không phải là giải pháp kỹ thuật cho hệ thống phần mềm."
+        }
+      ]
+    }
+  },
+  "conceptId": "sharding",
+  "badge": {
+    "name": "Kiến Trúc Sư Cụm Shard Bền Vững",
+    "icon": "💎"
+  }
+}

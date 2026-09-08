@@ -1,0 +1,74 @@
+{
+  "id": "builder-13",
+  "number": 13,
+  "title": "Bản Sao Đọc Tra Cứu Án Tích",
+  "subtitle": "Cơ sở dữ liệu chính bị bão hòa làm chậm các truy vấn điều tra trọng án",
+  "objective": "Thiết lập kiến trúc đọc phân tán sử dụng bộ nhớ đệm và bản sao chỉ đọc (read replica).",
+  "constraints": [
+    "Chuyển hướng toàn bộ truy vấn tra cứu phức tạp ra khỏi cơ sở dữ liệu ghi chính",
+    "Đảm bảo độ trễ dữ liệu giữa bản chính và bản sao ở mức chấp nhận được",
+    "Giảm thiểu tối đa việc thực hiện các truy vấn lặp lại"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "queue"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Bộ Nhớ Đệm Tra Cứu Thường Xuyên",
+      "description": "Cache lưu trữ các kết quả tìm kiếm phổ biến để trả về ngay lập tức.",
+      "requiredAll": [
+        "api",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Phân Tách Luồng Truy Vấn",
+      "description": "Bộ cân bằng tải và API định tuyến lưu lượng đọc tới các tầng phù hợp.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Bảo Vệ Nguồn Dữ Liệu Chính",
+      "description": "Cơ sở dữ liệu chính chỉ tập trung xử lý các thao tác ghi dữ liệu mới.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ],
+      "discouragedComponents": [
+        "queue"
+      ]
+    }
+  ]
+}

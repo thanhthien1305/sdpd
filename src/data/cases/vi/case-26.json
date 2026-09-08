@@ -1,0 +1,257 @@
+{
+  "id": "case-26",
+  "number": 26,
+  "title": "Bẫy Timeout Dây Chuyền (The Timeout Trap)",
+  "subtitle": "Một dịch vụ downstream chậm chạp kích hoạt hiệu ứng sụp đổ dây chuyền trên toàn hệ thống",
+  "brief": {
+    "narrative": "Kiến trúc microservices của sở cảnh sát gồm chuỗi gọi: Cổng API → Dịch vụ Điều Phối (Dispatch) → Dịch vụ Tra Cứu Xe Tuần Tra (Patrol Service) → Cơ Sở Dữ Liệu Tọa Độ GPS. Sáng nay, máy chủ GPS bị khóa bảng tạm thời khiến các câu lệnh truy vấn bị chậm, mất 15 giây mới phản hồi. Tuy nhiên, Dịch vụ Tra Cứu Xe đặt timeout là 10 giây, Dịch vụ Điều Phối đặt timeout là 5 giây, và Cổng API đặt timeout là 2 giây! Kết quả là: Cổng API cắt kết nối sau 2s và báo lỗi cho cảnh sát, nhưng 3 dịch vụ phía sau vẫn tiếp tục cắm đầu xử lý công việc vô ích trong 13 giây tiếp theo! Hàng ngàn request mới liên tục ập vào xếp chồng lên các công việc vô ích cũ, làm nghẽn sạch thread pool và đánh sập toàn bộ hệ thống dịch vụ của sở cảnh sát! Thám tử, hãy cắt đứt bẫy dây chuyền này!",
+    "symptoms": [
+      "Một dịch vụ ở tầng sâu nhất bị chậm khiến các dịch vụ ở tầng trên lần lượt bị cạn kiệt luồng xử lý (Thread Exhaustion)",
+      "Cấu hình timeout ở tầng trên ngắn hơn cấu hình timeout ở tầng dưới (Gateway 2s < Service 5s < DB 15s)",
+      "Hệ thống tiếp tục tiêu tốn tài nguyên xử lý những yêu cầu mà phía client đã từ bỏ hoặc timeout từ lâu (Wasted Work)",
+      "Toàn bộ chuỗi microservices sụp đổ dây chuyền (Cascading Failure)"
+    ],
+    "objective": "Loại bỏ hiện tượng Timeout Dây Chuyền bằng cách cấu hình chuẩn hóa Timeout (timeout tuyến dưới phải ngắn hơn tuyến trên) kết hợp Lan Truyền Thời Hạn (Deadline Propagation)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "mobile-app",
+        "type": "client",
+        "label": "Officer Mobile App",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Mobile App",
+          "logs": [
+            "[19:00:01] INFO: Request to Mobile Gateway — /api/dispatch",
+            "[19:00:31] ERROR: Request timed out after 30,000ms",
+            "[19:00:32] ERROR: Showing 'Service Unavailable' to user",
+            "[19:00:35] INFO: Retry attempt 1...",
+            "[19:01:05] ERROR: Retry timed out after 30,000ms"
+          ],
+          "data": {
+            "Status": "TIMEOUT ERRORS",
+            "Timeout Setting": "30 seconds",
+            "Requests in Flight": "0 (all timed out)",
+            "Error Rate": "100%"
+          },
+          "status": "All requests to the gateway are timing out. Officers cannot use the app."
+        }
+      },
+      {
+        "id": "gateway",
+        "type": "server",
+        "label": "Mobile Gateway (Service A)",
+        "status": "degraded",
+        "position": {
+          "x": 270,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Mobile Gateway (Service A)",
+          "logs": [
+            "[19:00:01] INFO: Received request — calling Dispatch Service",
+            "[19:00:01] INFO: Waiting for Dispatch Service response...",
+            "[19:00:26] ERROR: Dispatch Service response timeout (25,000ms)",
+            "[19:00:26] ERROR: Returning 504 Gateway Timeout to client",
+            "[19:00:26] WARN: Thread pool: 200/200 threads blocked waiting on Dispatch"
+          ],
+          "data": {
+            "Status": "DEGRADED (all threads blocked)",
+            "Thread Pool": "200/200 in use",
+            "Timeout to Service B": "25,000ms",
+            "Circuit Breaker": "Not configured",
+            "Avg Response Time": "25,000ms (normal: 150ms)"
+          },
+          "status": "All 200 threads are blocked waiting for the Dispatch Service. No circuit breaker configured to fail fast."
+        }
+      },
+      {
+        "id": "dispatch",
+        "type": "server",
+        "label": "Dispatch Service (Service B)",
+        "status": "degraded",
+        "position": {
+          "x": 460,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Service (Service B)",
+          "logs": [
+            "[19:00:01] INFO: Received request — calling Forensics Service",
+            "[19:00:01] INFO: Waiting for Forensics Service response...",
+            "[19:00:21] ERROR: Forensics Service response timeout (20,000ms)",
+            "[19:00:21] ERROR: Returning 504 to Gateway",
+            "[19:00:21] WARN: Thread pool: 150/150 threads blocked waiting on Forensics"
+          ],
+          "data": {
+            "Status": "DEGRADED (all threads blocked)",
+            "Thread Pool": "150/150 in use",
+            "Timeout to Service C": "20,000ms",
+            "Circuit Breaker": "Not configured",
+            "Avg Response Time": "20,000ms (normal: 100ms)"
+          },
+          "status": "All 150 threads blocked waiting on Forensics. Propagating slowness upstream to Gateway."
+        }
+      },
+      {
+        "id": "forensics",
+        "type": "server",
+        "label": "Forensics Service (Service C)",
+        "status": "degraded",
+        "position": {
+          "x": 650,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Analysis Service (Service C)",
+          "logs": [
+            "[18:45:00] INFO: Started batch DNA analysis job — 50,000 samples",
+            "[18:45:01] WARN: Batch job consuming 95% CPU",
+            "[19:00:01] WARN: API request received but processing at 1/100th normal speed",
+            "[19:00:18] INFO: Request processed in 18,200ms (normal: 50ms)"
+          ],
+          "data": {
+            "Status": "RUNNING (overloaded)",
+            "CPU Usage": "95% (batch job)",
+            "API Response Time": "18,200ms (normal: 50ms)",
+            "Batch Job": "DNA analysis — 50,000 samples",
+            "Request Queue": "847 pending"
+          },
+          "status": "A batch job is consuming 95% CPU, making API responses 100x slower. Still running — not crashed."
+        }
+      },
+      {
+        "id": "forensics-db",
+        "type": "database",
+        "label": "Forensics Database",
+        "status": "healthy",
+        "position": {
+          "x": 650,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Database",
+          "logs": [
+            "[18:45:00] INFO: Batch query load increased",
+            "[19:00:00] INFO: Query response times normal"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Query Latency": "5ms (normal)",
+            "Connections": "50"
+          },
+          "status": "Database is fine. The bottleneck is the Forensics service CPU, not the database."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-app-gateway",
+        "source": "mobile-app",
+        "target": "gateway",
+        "label": "HTTP (timeout 30s)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-gateway-dispatch",
+        "source": "gateway",
+        "target": "dispatch",
+        "label": "HTTP (timeout 25s)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-dispatch-forensics",
+        "source": "dispatch",
+        "target": "forensics",
+        "label": "HTTP (timeout 20s)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-forensics-db",
+        "source": "forensics",
+        "target": "forensics-db",
+        "label": "queries",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao một dịch vụ giám định pháp y chạy chậm lại có thể kéo sập toàn bộ Cổng API trung tâm của sở cảnh sát?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Bẫy Thời Gian Chờ (The Timeout Trap / Cascading Thread Exhaustion) — Cổng API có thời gian chờ (timeout) quá dài mà không có cơ chế Ngắt Mạch (Circuit Breaker), khiến toàn bộ luồng xử lý (worker threads) bị chiếm giữ vô hạn",
+          "correct": true,
+          "feedback": "Chính xác! Khi dịch vụ Giám định pháp y bị chậm do xử lý tác vụ nặng, Cổng API vẫn tiếp tục nhận các yêu cầu mới và cấu hình timeout tới 60 giây. Từng luồng xử lý (thread) trong Thread Pool của Gateway lần lượt bị khóa cứng để chờ phản hồi từ dịch vụ pháp y. Trong vài phút, toàn bộ 500 luồng của Gateway bị cạn kiệt, khiến ngay cả các yêu cầu gọi sang dịch vụ Tuần tra hay Điều phối cũng bị từ chối!"
+        },
+        {
+          "id": "rc-3",
+          "text": "Bộ cân bằng tải đã ngừng phân phối lưu lượng tới Cổng API",
+          "correct": false,
+          "feedback": "Bộ cân bằng tải vẫn gửi lưu lượng đến, nhưng Gateway không còn luồng rảnh để tiếp nhận yêu cầu mới."
+        },
+        {
+          "id": "rc-1",
+          "text": "Cổng API có lỗi tràn số nguyên trong mã nguồn xử lý định tuyến",
+          "correct": false,
+          "feedback": "Mã nguồn định tuyến không có lỗi; các luồng xử lý bị đóng băng vì chờ phản hồi từ dịch vụ phụ trợ."
+        },
+        {
+          "id": "rc-4",
+          "text": "Dịch vụ giám định pháp y bị tấn công từ chối dịch vụ (DDoS) làm lây lan sang Cổng API",
+          "correct": false,
+          "feedback": "Lưu lượng hoàn toàn bình thường; dịch vụ chỉ đơn giản là bị chậm do một tác vụ phân tích nặng."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn chặn một dịch vụ chậm làm cạn kiệt tài nguyên của toàn bộ hệ thống là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Khởi động lại Cổng API định kỳ mỗi 5 phút một lần để giải phóng luồng",
+          "correct": false,
+          "feedback": "Khởi động lại liên tục sẽ làm rớt kết nối của hàng ngàn sĩ quan đang thao tác và gây gián đoạn dịch vụ liên tục."
+        },
+        {
+          "id": "fix-1",
+          "text": "Tăng thời gian timeout của Cổng API lên 10 phút cho mỗi yêu cầu để không bị lỗi timeout",
+          "correct": false,
+          "feedback": "Tăng timeout lên 10 phút chỉ làm các luồng xử lý bị chiếm giữ lâu hơn gấp 10 lần, khiến Gateway sập nhanh hơn nữa."
+        },
+        {
+          "id": "fix-2",
+          "text": "Cấu hình Thời Gian Chờ Ngắn Chặt Chẽ (Tight Timeouts), áp dụng Lan Truyền Thời Hạn (Deadline Propagation) và triển khai Bộ Ngắt Mạch (Circuit Breaker) kết hợp Vách Ngăn (Bulkheading)",
+          "correct": true,
+          "feedback": "Chính xác! Ba biện pháp phòng thủ hoàn hảo: (1) Tight Timeouts & Deadline: Giảm timeout xuống mức hợp lý (ví dụ 3s) và truyền deadline xuyên suốt chuỗi vi dịch vụ; (2) Bulkheading: Phân chia thread pool riêng biệt cho từng dịch vụ phụ trợ để sự cố của dịch vụ pháp y không thể ăn vào tài nguyên của dịch vụ điều phối; (3) Circuit Breaker: Tự động ngắt kết nối khi phát hiện dịch vụ bị chậm liên tục, trả về phản hồi fallback tức thì."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấm dịch vụ pháp y không bao giờ được chạy tác vụ phân tích nặng trên máy chủ",
+          "correct": false,
+          "feedback": "Tác vụ phân tích pháp y là nghiệp vụ bắt buộc. Hệ thống phải có khả năng cô lập các tác vụ nặng mà không làm ảnh hưởng các dịch vụ khác."
+        }
+      ]
+    }
+  },
+  "conceptId": "cascading-timeouts",
+  "badge": {
+    "name": "Chuyên Gia Ngắt Dây Chuyền",
+    "icon": "⏳"
+  }
+}

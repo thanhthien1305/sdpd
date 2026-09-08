@@ -1,4 +1,4 @@
-export type Locale = 'en' | 'pt-BR';
+export type Locale = 'en' | 'vi' | 'pt-BR';
 
 export const DEFAULT_LOCALE: Locale = 'en';
 

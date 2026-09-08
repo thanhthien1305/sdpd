@@ -1,0 +1,73 @@
+{
+  "id": "builder-05",
+  "number": 5,
+  "title": "Sự Cố Sụp Đổ Hot Cache",
+  "subtitle": "Lượng đọc tăng vọt làm quá tải và đánh sập kho lưu trữ chính",
+  "objective": "Bảo vệ cơ sở dữ liệu chính bằng các lớp phòng thủ cache nhiều tầng.",
+  "constraints": [
+    "Chắn đứng các truy vấn đọc thường xuyên trước khi chúng chạm tới cơ sở dữ liệu",
+    "Hỗ trợ vô hiệu hóa hoặc làm ấm cache mà không gây nghẽn",
+    "Duy trì khả năng phục vụ khi một tầng cache gặp sự cố"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "blobStorage"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Phòng Ngự Bằng Bộ Nhớ Đệm",
+      "description": "Đặt cache giữa API và cơ sở dữ liệu để phục vụ dữ liệu nóng.",
+      "requiredAll": [
+        "api",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Phân Phối Biên Mạng",
+      "description": "Sử dụng CDN để chặn các yêu cầu đọc tĩnh hoặc bán tĩnh ngay tại biên.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Bảo Vệ Kho Lưu Trữ Chính",
+      "description": "Hạn chế các truy vấn trực tiếp vào cơ sở dữ liệu chỉ cho các thao tác ghi và cache-miss.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@
 //
 // Run automatically via "predev"/"prebuild" npm scripts.
 
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -13,6 +13,7 @@ const casesDir = path.join(__dirname, '..', 'src', 'data', 'cases');
 const outDir = path.join(__dirname, '..', 'src', 'data');
 
 function buildIndex(dir) {
+  if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((f) => f.startsWith('case-') && f.endsWith('.json'))
     .sort()
@@ -30,8 +31,13 @@ function buildIndex(dir) {
 
 const enIndex = buildIndex(casesDir);
 const ptBrIndex = buildIndex(path.join(casesDir, 'pt-BR'));
+const viIndex = buildIndex(path.join(casesDir, 'vi'));
 
 writeFileSync(path.join(outDir, 'case-index.json'), JSON.stringify(enIndex, null, 2) + '\n');
 writeFileSync(path.join(outDir, 'case-index.pt-BR.json'), JSON.stringify(ptBrIndex, null, 2) + '\n');
+if (viIndex.length > 0) {
+  writeFileSync(path.join(outDir, 'case-index.vi.json'), JSON.stringify(viIndex, null, 2) + '\n');
+}
 
-console.log(`Generated case-index.json (${enIndex.length} cases) and case-index.pt-BR.json (${ptBrIndex.length} cases)`);
+console.log(`Generated case-index.json (${enIndex.length} cases), case-index.pt-BR.json (${ptBrIndex.length} cases)${viIndex.length > 0 ? `, and case-index.vi.json (${viIndex.length} cases)` : ''}`);
+

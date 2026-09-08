@@ -1,0 +1,71 @@
+{
+  "id": "builder-16",
+  "number": 16,
+  "title": "Truy Xuất Lưu Trữ Hồ Sơ Lạnh",
+  "subtitle": "Truy xuất hồ sơ lưu trữ lịch sử mất nhiều phút gây gián đoạn phiên tòa",
+  "objective": "Xây dựng mô hình lưu trữ phân tầng kết hợp cache phục vụ truy xuất hồ sơ cũ nhanh chóng.",
+  "constraints": [
+    "Giữ chi phí lưu trữ thấp cho hàng triệu hồ sơ cũ ít dùng",
+    "Khi một hồ sơ được yêu cầu, các lượt đọc tiếp theo phải diễn ra tức thì",
+    "Không làm cạn kiệt tài nguyên của cơ sở dữ liệu giao dịch hiện hành"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "blobStorage",
+    "cdn"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Lưu Trữ Phân Tầng Chi Phí Thấp",
+      "description": "Blob Storage lưu trữ dữ liệu hồ sơ cũ với chi phí tiết kiệm.",
+      "requiredAll": [
+        "blobStorage",
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        },
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Bộ Nhớ Đệm Hồ Sơ Tái Kích Hoạt",
+      "description": "Cache lưu trữ tạm thời hồ sơ vừa được phục hồi để phục vụ nhanh chóng.",
+      "requiredAll": [
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Chỉ Mục Tra Cứu Nhanh",
+      "description": "Cơ sở dữ liệu lưu trữ metadata và vị trí để định vị tài liệu tức thì.",
+      "requiredAll": [
+        "client",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ]
+    }
+  ]
+}

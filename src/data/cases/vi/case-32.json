@@ -1,0 +1,225 @@
+{
+  "id": "case-32",
+  "number": 32,
+  "title": "Thất Bại Trong Chuỗi Saga (The Saga Failure)",
+  "subtitle": "Quy trình lập hồ sơ tạm giam quên cách hoàn tác sai lầm của chính mình",
+  "brief": {
+    "narrative": "Quy trình khởi tố nghi phạm trải dài qua 4 microservices độc lập: 1. Đăng ký tạm giam → 2. Tịch thu và niêm phong tài sản → 3. Đặt lịch phiên tòa sơ thẩm → 4. Gán luật sư chỉ định. Hệ thống sử dụng Mẫu Thiết Kế Saga để điều phối các giao dịch phân tán. Sáng nay, quy trình chạy đến bước 4 thì gặp lỗi: tất cả luật sư chỉ định đều bận, bước 4 thất bại hoàn toàn! Nhưng lập trình viên đã 'quên' viết Thao Tác Bù Trừ (Compensating Transactions) cho các bước trước đó! Kết quả: Nghi phạm không thể khởi tố, nhưng xe hơi và nhà của anh ta vẫn bị niêm phong, và lịch hầu tòa vẫn được gửi đi! Nghi phạm bị tước đoạt tài sản bất hợp pháp mà không có vụ án nào tồn tại! Thám tử, hãy hoàn tác mớ bòng bong này!",
+    "symptoms": [
+      "Giao dịch phân tán trải dài qua nhiều microservices bị thất bại ở bước cuối cùng",
+      "Các bước trước đó đã commit thành công vào cơ sở dữ liệu riêng của từng dịch vụ",
+      "Hệ thống không kích hoạt chuỗi Giao Dịch Bù Trừ (Compensating Transactions) để hoàn tác trạng thái",
+      "Dữ liệu giữa các dịch vụ bị phân mảnh, rơi vào trạng thái mâu thuẫn nghiệp vụ nghiêm trọng"
+    ],
+    "objective": "Hoàn thiện Mẫu Thiết Kế Saga (Saga Pattern) bằng cách định nghĩa đầy đủ các Thao Tác Bù Trừ (Compensating Transactions) cho từng bước trong quy trình phân tán."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "booking-orchestrator",
+        "type": "server",
+        "label": "Booking Orchestrator",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Booking Orchestrator",
+          "logs": [
+            "[21:15:00] INFO: Starting booking saga for Suspect #7 (Arrest ID: A-2847)",
+            "[21:15:01] INFO: Step 1 — Arrest Service → CREATE arrest record → SUCCESS",
+            "[21:15:02] INFO: Step 2 — Booking Service → ASSIGN booking number → SUCCESS (BK-90441)",
+            "[21:15:03] INFO: Step 3 — Cell Assignment → ASSIGN cell → FAILED (capacity exceeded)",
+            "[21:15:03] ERROR: Step 3 failed. No compensating transactions defined.",
+            "[21:15:03] ERROR: Saga aborted — system left in inconsistent state",
+            "[21:15:03] ERROR: Manual intervention required for Arrest A-2847, Booking BK-90441"
+          ],
+          "data": {
+            "Saga Status": "FAILED — INCONSISTENT STATE",
+            "Steps Completed": "2 of 3",
+            "Steps Rolled Back": "0 of 2 (NO COMPENSATING ACTIONS DEFINED)",
+            "Orphaned Records": "Arrest A-2847, Booking BK-90441",
+            "Rollback Strategy": "NONE IMPLEMENTED"
+          },
+          "status": "Saga failed at Step 3 but has no compensating transactions to undo Steps 1 and 2."
+        }
+      },
+      {
+        "id": "arrest-service",
+        "type": "server",
+        "label": "Arrest Service",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Arrest Service",
+          "logs": [
+            "[21:15:01] INFO: Created arrest record A-2847 for Suspect #7",
+            "[21:15:01] INFO: Status: ACTIVE — awaiting booking",
+            "[21:15:04] WARN: Arrest A-2847 still in ACTIVE state — no booking completion received",
+            "[21:20:00] WARN: Arrest A-2847 stuck in ACTIVE for 5 minutes — no rollback requested"
+          ],
+          "data": {
+            "Arrest ID": "A-2847",
+            "Suspect": "#7",
+            "Status": "ACTIVE (cannot be deleted or reprocessed)",
+            "Compensating Action": "NOT DEFINED",
+            "Expected Next Step": "Booking confirmation (never arrived)"
+          },
+          "status": "Arrest record exists and is marked ACTIVE. No compensating action to void it."
+        }
+      },
+      {
+        "id": "booking-service",
+        "type": "server",
+        "label": "Booking Service",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Booking Service",
+          "logs": [
+            "[21:15:02] INFO: Assigned booking number BK-90441 to Arrest A-2847",
+            "[21:15:02] INFO: Status: ALLOCATED — awaiting cell assignment",
+            "[21:15:05] WARN: Booking BK-90441 — no cell assignment confirmation received",
+            "[21:20:00] WARN: Booking BK-90441 stuck in ALLOCATED for 5 minutes"
+          ],
+          "data": {
+            "Booking Number": "BK-90441",
+            "Linked Arrest": "A-2847",
+            "Status": "ALLOCATED (blocks re-use of this number)",
+            "Compensating Action": "NOT DEFINED",
+            "Expected Next Step": "Cell assignment (never arrived)"
+          },
+          "status": "Booking number allocated but never completed. Number cannot be reused or released."
+        }
+      },
+      {
+        "id": "cell-assignment",
+        "type": "server",
+        "label": "Cell Assignment",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cell Assignment Service",
+          "logs": [
+            "[21:15:03] INFO: Cell assignment request for Booking BK-90441",
+            "[21:15:03] ERROR: All holding cells at capacity (48/48 occupied)",
+            "[21:15:03] ERROR: Cell assignment FAILED — no available cells",
+            "[21:15:03] INFO: Note: Cell #12 was pre-reserved for BK-90441 but reservation failed on final commit"
+          ],
+          "data": {
+            "Capacity": "48/48 (includes 1 ghost reservation)",
+            "Cell #12": "Reserved for BK-90441 but physically EMPTY",
+            "Assignment Status": "FAILED",
+            "Compensating Action": "NOT DEFINED"
+          },
+          "status": "Assignment failed but a pre-reservation exists that won't be released."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-orch-arrest",
+        "source": "booking-orchestrator",
+        "target": "arrest-service",
+        "label": "Step 1: SUCCESS",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-orch-booking",
+        "source": "booking-orchestrator",
+        "target": "booking-service",
+        "label": "Step 2: SUCCESS",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-orch-cell",
+        "source": "booking-orchestrator",
+        "target": "cell-assignment",
+        "label": "Step 3: FAILED",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ dẫn đến việc nghi phạm bị giam giữ trong trạng thái lơ lửng không có hồ sơ hợp lệ là gì?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Phần mềm của Nhà giam trung tâm bị mất kết nối mạng với phòng trực ban",
+          "correct": false,
+          "feedback": "Kết nối mạng hoàn toàn bình thường; vấn đề là bước thứ 3 trong quy trình phân tán bị thất bại vì buồng giam đã hết chỗ."
+        },
+        {
+          "id": "rc-1",
+          "text": "Dịch vụ Phân Phòng Giam có lỗi phần mềm báo sai tình trạng hết chỗ trong khi vẫn còn phòng trống",
+          "correct": false,
+          "feedback": "Buồng giam thực sự đã hết chỗ; sự cố nghiệp vụ này là hoàn toàn bình thường trong vận hành thực tế."
+        },
+        {
+          "id": "rc-2",
+          "text": "Quy Trình Giao Dịch Phân Tán Thiếu Các Hành Động Bù Đắp (Saga Rollback / Compensating Transactions) — khi một bước sau thất bại, các bước trước đã hoàn thành không được hoàn tác, để lại dữ liệu mồ côi không nhất quán",
+          "correct": true,
+          "feedback": "Chính xác! Quy trình thụ lý nghi phạm là một giao dịch phân tán trải qua 3 vi dịch vụ: (1) Lập hồ sơ bắt giữ, (2) Tạo mã số lưu ký, (3) Phân bổ buồng giam. Khi Bước 3 thất bại do trại giam quá tải, hệ thống không có cơ chế hoàn tác (compensating transactions) cho Bước 1 và Bước 2. Kết quả là nghi phạm có hồ sơ bắt và mã lưu ký nhưng lại không có buồng giam, bị kẹt trong trạng thái lơ lửng không nhất quán!"
+        },
+        {
+          "id": "rc-3",
+          "text": "Cả ba dịch vụ lẽ ra phải dùng chung một cơ sở dữ liệu tập trung để thực hiện một giao dịch ACID truyền thống duy nhất",
+          "correct": false,
+          "feedback": "Dùng chung một cơ sở dữ liệu phá hủy hoàn toàn kiến trúc vi dịch vụ (tính độc lập triển khai, mở rộng và sở hữu dữ liệu). Mô hình Saga là giải pháp tiêu chuẩn cho giao dịch xuyên vi dịch vụ."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương pháp tốt nhất để xử lý các thất bại trong quy trình giao dịch phân tán đa dịch vụ là gì?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Sử dụng giao thức Cam Kết Hai Pha (Two-Phase Commit / 2PC) đồng bộ giữa cả ba dịch vụ",
+          "correct": false,
+          "feedback": "2PC giữ khóa mạng rất lâu, làm giảm thông lượng nghiêm trọng và nếu điều phối viên gặp sự cố, các dịch vụ sẽ bị khóa cứng."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai Mô Hình Saga (Saga Pattern) Với Các Giao Dịch Bù Đắp (Compensating Transactions) — mỗi bước thực thi đều có một hành động \"hoàn tác\" tương ứng được tự động kích hoạt nếu bước sau gặp thất bại",
+          "correct": true,
+          "feedback": "Chính xác! Mô hình Saga chia nhỏ giao dịch phân tán thành chuỗi các giao dịch cục bộ độc lập. Mỗi bước đều định nghĩa sẵn hành động bù đắp tương ứng: nếu Bước 3 (phân buồng giam) thất bại, bộ điều phối Saga sẽ tự động kích hoạt \"Hành động bù đắp Bước 2\" (hủy mã số lưu ký) và tiếp theo là \"Hành động bù đắp Bước 1\" (hủy hồ sơ bắt giữ). Hệ thống tự động trở về trạng thái sạch sẽ và nhất quán 100%!"
+        },
+        {
+          "id": "fix-3",
+          "text": "Thêm logic thử lại liên tục với thời gian chờ số mũ cho đến khi trại giam có buồng trống",
+          "correct": false,
+          "feedback": "Thử lại vô hạn là điều tối kỵ — buồng giam có thể không có chỗ trong nhiều ngày và nghi phạm sẽ bị kẹt mãi mãi trong trạng thái trung gian."
+        },
+        {
+          "id": "fix-4",
+          "text": "Đặt trước toàn bộ tài nguyên (buồng giam, mã số, hồ sơ) cùng một lúc trước khi thực hiện",
+          "correct": false,
+          "feedback": "Đặt trước tài nguyên vẫn có thể thất bại khi đặt chỗ và không thể loại trừ hoàn toàn sự cố giữa các bước."
+        }
+      ]
+    }
+  },
+  "conceptId": "sagas",
+  "badge": {
+    "name": "Kiến Trúc Sư Chuỗi Saga",
+    "icon": "📜"
+  }
+}

@@ -1,0 +1,222 @@
+{
+  "id": "case-20",
+  "number": 20,
+  "title": "Đường Ống Ứ Đọng (The Backed Up Pipeline)",
+  "subtitle": "Hàng đợi điều phối tràn vỡ khi dịch vụ xử lý ngầm bị treo âm thầm",
+  "brief": {
+    "narrative": "Tất cả các camera phạt nguội gắn trên đèn giao thông toàn thành phố liên tục chụp ảnh vi phạm và bắn dữ liệu vào Hàng Đợi Xử Lý Hình Ảnh. Bình thường, cụm 5 worker xử lý 200 ảnh/giây. Lúc 14:00, một bản cập nhật phần mềm thư viện thị giác máy tính bị lỗi rò rỉ bộ nhớ (Memory Leak) khiến toàn bộ 5 worker bị treo đơ ở trạng thái 100% CPU nhưng không hề thoát tiến trình (hang silently). Trong khi đó, hàng ngàn camera ngoài đường vẫn miệt mài bắn ảnh vào hàng đợi với tốc độ 300 ảnh/giây! Hàng đợi thông điệp phình to từ 1.000 lên 2.000.000 tin, nuốt trọn 32GB RAM của broker cho đến khi máy chủ phát nổ lỗi OOM và sập toàn diện. Thám tử, hãy xả van áp lực cho đường ống!",
+    "symptoms": [
+      "Hàng đợi thông điệp tích tụ hơn 2 triệu thông điệp chưa được xử lý (Queue Backlog)",
+      "Các worker xử lý bị treo âm thầm (hang), không tiêu thụ thêm thông điệp nào",
+      "Phía phát tin (Producers / Cameras) tiếp tục bơm dữ liệu vào với tốc độ tối đa không ngừng nghỉ",
+      "Message Broker bị cạn kiệt bộ nhớ RAM và sập hoàn toàn do không có cơ chế Áp Lực Ngược (Backpressure)"
+    ],
+    "objective": "Thiết lập cơ chế Áp Lực Ngược (Backpressure), giám sát độ trễ tiêu thụ (Consumer Lag Alerting) và tự động cắt giảm tải (Load Shedding)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "call-center",
+        "type": "client",
+        "label": "Call Center (Producer)",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Call Center Producer",
+          "logs": [
+            "[03:15:01] INFO: Dispatch order #48,221 published to queue",
+            "[03:15:02] INFO: Dispatch order #48,222 published to queue",
+            "[03:15:02] INFO: Publish rate: 12 msgs/sec",
+            "[03:15:03] WARN: Queue broker reporting high memory usage"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Publish Rate": "12 msgs/sec",
+            "Messages Sent (last hour)": "43,200",
+            "Errors": "0"
+          },
+          "status": "Producer is operating normally. Messages are being accepted by the broker."
+        }
+      },
+      {
+        "id": "queue-broker",
+        "type": "server",
+        "label": "Dispatch Queue Broker",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Queue Broker",
+          "logs": [
+            "[02:30:00] INFO: Consumer 'patrol-dispatcher' disconnected",
+            "[02:30:01] WARN: No active consumers on queue 'dispatch-orders'",
+            "[02:45:00] WARN: Queue depth exceeded 10,000 messages",
+            "[03:00:00] WARN: Queue depth exceeded 30,000 messages",
+            "[03:15:00] CRITICAL: Memory usage at 91% — queue depth 50,412",
+            "[03:15:01] WARN: Approaching max memory limit, may start dropping messages"
+          ],
+          "data": {
+            "Status": "DEGRADED",
+            "Queue Depth": "50,412 messages",
+            "Active Consumers": "0",
+            "Memory Usage": "91%",
+            "Max Memory": "4 GB",
+            "Backpressure Policy": "None configured"
+          },
+          "status": "Queue is filling up with no consumers draining it. No backpressure mechanism is configured."
+        }
+      },
+      {
+        "id": "consumer-service",
+        "type": "server",
+        "label": "Patrol Dispatcher (Consumer)",
+        "status": "failed",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Dispatcher Consumer",
+          "logs": [
+            "[02:29:55] ERROR: OutOfMemoryError in message handler",
+            "[02:29:56] ERROR: Unhandled exception — process crashing",
+            "[02:29:57] FATAL: Consumer process terminated (exit code 137)",
+            "[02:29:57] INFO: No automatic restart policy configured"
+          ],
+          "data": {
+            "Status": "CRASHED",
+            "Last Active": "02:29:57",
+            "Restart Policy": "None",
+            "Messages Processed Before Crash": "5,102"
+          },
+          "status": "Consumer crashed due to OutOfMemoryError 45 minutes ago. No restart policy is in place."
+        }
+      },
+      {
+        "id": "patrol-units",
+        "type": "client",
+        "label": "Patrol Units",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Units",
+          "logs": [
+            "[02:30:05] WARN: No new dispatch orders received",
+            "[02:45:00] WARN: Still no dispatch orders — 15 min gap",
+            "[03:15:00] WARN: Officers idle for 45 minutes, no assignments"
+          ],
+          "data": {
+            "Status": "IDLE",
+            "Active Patrols": "24",
+            "Pending Assignments": "0",
+            "Last Assignment Received": "02:29:55"
+          },
+          "status": "No dispatch orders arriving. Officers are idle and unassigned."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cc-broker",
+        "source": "call-center",
+        "target": "queue-broker",
+        "label": "publish orders",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-broker-consumer",
+        "source": "queue-broker",
+        "target": "consumer-service",
+        "label": "consume orders",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-consumer-patrols",
+        "source": "consumer-service",
+        "target": "patrol-units",
+        "label": "assign patrols",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ khiến đường ống điều động bị ùn ứ hàng chục nghìn thông điệp là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Tổng đài 911 tạo ra lượng tin nhắn điều phối quá nhanh vượt quá khả năng tiếp nhận của hàng đợi",
+          "correct": false,
+          "feedback": "Tốc độ sản xuất 12 tin/giây là hoàn toàn bình thường. Vấn đề là đầu tiêu thụ (consumer) bằng 0 vì dịch vụ đã bị sập."
+        },
+        {
+          "id": "rc-2",
+          "text": "Sự Cố Thiếu Cơ Chế Áp Lực Ngược (Backpressure Failure) khi dịch vụ Consumer bị sập mà không có chính sách tự khởi động lại — tin nhắn tiếp tục đổ về vô hạn mà không có ai tiêu thụ",
+          "correct": true,
+          "feedback": "Chính xác! Dịch vụ Consumer điều phối đã bị sập do tràn bộ nhớ từ 45 phút trước và không có cơ chế giám sát tự động hồi sinh. Tổng đài vẫn liên tục đẩy tin nhắn vào hàng đợi trong khi không có ai rút tin ra. Hệ thống thiếu cơ chế áp lực ngược (backpressure) để giới hạn độ sâu hàng đợi hoặc điều tiết đầu vào, khiến hàng đợi phình to tới 91% RAM và sắp sập toàn diện."
+        },
+        {
+          "id": "rc-3",
+          "text": "Máy chủ hàng đợi tin nhắn bị hết bộ nhớ RAM và từ chối nhận các tin nhắn mới",
+          "correct": false,
+          "feedback": "Hàng đợi đang ở mức 91% RAM và vẫn đang gắng gượng nhận tin. Hết bộ nhớ là triệu chứng của vấn đề thiếu áp lực ngược chứ không phải nguyên nhân gốc."
+        },
+        {
+          "id": "rc-4",
+          "text": "Phân vùng mạng đã chia cắt máy chủ hàng đợi với các xe tuần tra",
+          "correct": false,
+          "feedback": "Xe tuần tra không kết nối trực tiếp vào hàng đợi; dịch vụ consumer trung gian mới là bên kết nối. Consumer đã chết do lỗi OutOfMemoryError."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn chặn tình trạng đường ống tin nhắn bị tắc nghẽn vô hạn trong tương lai là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Để tổng đài 911 gửi lệnh trực tiếp tới xe tuần tra mà không cần đi qua hàng đợi trung gian",
+          "correct": false,
+          "feedback": "Bỏ hàng đợi làm mất đi lớp đệm hấp thụ các đợt tăng vọt lưu lượng trong giờ cao điểm."
+        },
+        {
+          "id": "fix-2",
+          "text": "Nâng cấp dung lượng RAM của máy chủ hàng đợi lên 64 GB để chứa được nhiều tin nhắn hơn",
+          "correct": false,
+          "feedback": "Nâng RAM chỉ trì hoãn cái chết — nếu Consumer vẫn bị chết, hàng đợi sẽ lấp đầy bất kỳ dung lượng RAM nào bạn cấp cho nó."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai Kiểm Soát Áp Lực Ngược (Backpressure Controls): tự động giám sát và hồi sinh Consumer, giới hạn dung lượng tối đa của hàng đợi, và điều tiết tốc độ Producer khi hàng đợi bị đầy",
+          "correct": true,
+          "feedback": "Chính xác! Một hệ thống đường ống hoàn chỉnh bắt buộc phải có: (1) Trình giám sát tiến trình tự động khởi động lại Consumer khi bị lỗi, (2) Thiết lập kích thước hàng đợi tối đa, và (3) Cơ chế Áp lực ngược (Backpressure) phát tín hiệu cho bên gửi giảm tốc độ hoặc từ chối bớt yêu cầu khi người tiêu thụ không theo kịp. Điều này giúp bảo vệ hệ thống không bị tràn bộ nhớ."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấu hình các tin nhắn điều động tự động hết hạn và tự xóa sau 5 phút nếu chưa được tiêu thụ",
+          "correct": false,
+          "feedback": "Tự động xóa tin nhắn điều phối đồng nghĩa với việc các cuộc gọi khẩn cấp của người dân bị vứt bỏ vào hư vô."
+        }
+      ]
+    }
+  },
+  "conceptId": "backpressure",
+  "badge": {
+    "name": "Chuyên Viên Điều Tiết Áp Lực Ngược",
+    "icon": "🔧"
+  }
+}

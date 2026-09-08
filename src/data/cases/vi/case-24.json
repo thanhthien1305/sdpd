@@ -1,0 +1,222 @@
+{
+  "id": "case-24",
+  "number": 24,
+  "title": "Kho Lưu Trữ Hư Hỏng (The Corrupted Archive)",
+  "subtitle": "Bằng chứng video đến nơi bị hỏng nhưng không ai biết sự cố xảy ra ở khâu nào",
+  "brief": {
+    "narrative": "Một đoạn video an ninh 4K ghi lại rõ mặt kẻ chủ mưu vụ đánh bom được truyền từ máy chủ hiện trường về Trung tâm Dữ liệu Tòa án. Khi mở tệp video tại phiên xét xử, màn hình bị vỡ hình xanh lè, âm thanh biến dạng rè đặc và tệp bị báo lỗi 'Corrupted File'! Bên bào chữa lập tức yêu cầu tiêu hủy chứng cứ. Đội kỹ thuật kiểm tra: đường truyền mạng không báo lỗi gói tin, ổ cứng không báo bad sector. Không ai biết tệp video bị hỏng ở đâu: do card mạng truyền sai, do RAM bị lật bit (Bit Flip) vì tia vũ trụ, hay do bộ điều khiển đĩa ghi sai? Không có bất kỳ cơ chế kiểm tra toàn vẹn nào trên tệp! Thám tử, hãy tìm ra dấu vân tay của dữ liệu!",
+    "symptoms": [
+      "Tệp chứng cứ video quan trọng bị hư hỏng cấu trúc dữ liệu âm thầm (Silent Data Corruption)",
+      "Hạ tầng mạng và đĩa cứng ở tầng dưới không phát ra bất kỳ cảnh báo lỗi phần cứng nào",
+      "Hệ thống không tính toán và đính kèm Mã Kiểm Tra (Checksum) đầu-cuối khi lưu trữ và truyền tải",
+      "Không có cách nào để phát hiện hoặc tự động phục hồi tệp bị hỏng"
+    ],
+    "objective": "Áp dụng Nguyên Lý Toàn Vẹn Đầu-Cuối (End-to-End Principle) với Mã Kiểm Tra Mật Mã (Cryptographic Checksums / SHA-256) và Mã Sửa Lỗi (Erasure Coding)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "officer-upload",
+        "type": "client",
+        "label": "Officer Upload Terminal",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Upload Terminal",
+          "logs": [
+            "[11:00:00] INFO: Officer uploaded evidence file 'surveillance_cam7.mp4'",
+            "[11:00:00] INFO: File size: 2.4 GB",
+            "[11:00:01] INFO: Upload started to gateway",
+            "[11:00:45] INFO: Upload complete — 200 OK from gateway"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "File": "surveillance_cam7.mp4",
+            "File Size": "2.4 GB",
+            "Checksum at Upload": "Not computed",
+            "Upload Status": "Success"
+          },
+          "status": "File uploaded successfully but no checksum was computed at the source for later verification."
+        }
+      },
+      {
+        "id": "upload-gateway",
+        "type": "server",
+        "label": "Upload Gateway",
+        "status": "healthy",
+        "position": {
+          "x": 270,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Upload Gateway",
+          "logs": [
+            "[11:00:01] INFO: Receiving file 'surveillance_cam7.mp4'",
+            "[11:00:45] INFO: File received, size: 2.4 GB",
+            "[11:00:45] INFO: No integrity check configured — forwarding to transcoder",
+            "[11:00:46] INFO: File forwarded to Transcoding Service"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Integrity Check": "DISABLED",
+            "Checksum Verification": "None",
+            "Files Processed Today": "342"
+          },
+          "status": "Gateway accepts and forwards files without computing or verifying checksums."
+        }
+      },
+      {
+        "id": "transcoder",
+        "type": "server",
+        "label": "Transcoding Service",
+        "status": "degraded",
+        "position": {
+          "x": 460,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Transcoding Service",
+          "logs": [
+            "[11:00:47] INFO: Received file for transcoding",
+            "[11:01:30] WARN: Memory pressure during transcode — swapping to disk",
+            "[11:02:15] WARN: Transcode buffer overflow — partial frame data lost",
+            "[11:02:45] INFO: Transcode 'complete' — output written",
+            "[11:02:45] INFO: No integrity check on output — forwarding to vault"
+          ],
+          "data": {
+            "Status": "DEGRADED",
+            "Memory Usage": "97%",
+            "Swap Usage": "4.2 GB",
+            "Transcode Errors": "buffer overflow (partial frames lost)",
+            "Output Integrity Check": "DISABLED"
+          },
+          "status": "Service ran out of memory during transcoding, causing buffer overflow and data loss. No output integrity check caught the corruption."
+        }
+      },
+      {
+        "id": "evidence-vault",
+        "type": "database",
+        "label": "Evidence Storage Vault",
+        "status": "healthy",
+        "position": {
+          "x": 650,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Evidence Storage Vault",
+          "logs": [
+            "[11:02:46] INFO: Storing file 'surveillance_cam7_transcoded.mp4'",
+            "[11:02:50] INFO: File stored successfully",
+            "[11:02:50] INFO: No checksum verification performed on ingest"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "File Stored": "surveillance_cam7_transcoded.mp4",
+            "Stored File Size": "2.1 GB (smaller than original — suspicious)",
+            "Ingest Checksum": "Not computed",
+            "Storage Integrity": "File accepted without verification"
+          },
+          "status": "Vault stored the file without verifying its integrity. The corrupted file was accepted as-is."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-officer-gateway",
+        "source": "officer-upload",
+        "target": "upload-gateway",
+        "label": "upload file",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-gateway-transcode",
+        "source": "upload-gateway",
+        "target": "transcoder",
+        "label": "forward file",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-transcode-vault",
+        "source": "transcoder",
+        "target": "evidence-vault",
+        "label": "store transcoded",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tệp video bằng chứng đã bị hỏng ở vị trí nào và tại sao hệ thống không phát hiện ra sự cố?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Máy quay bodycam của cảnh sát đã ghi lại tệp video bị lỗi ngay từ ban đầu",
+          "correct": false,
+          "feedback": "Video gốc trên máy quay hoàn toàn sắc nét và đã được xem trực tiếp tại hiện trường."
+        },
+        {
+          "id": "rc-1",
+          "text": "Đường truyền mạng internet công cộng đã làm mất gói tin khi tải tệp lên máy chủ",
+          "correct": false,
+          "feedback": "Giao thức TCP đảm bảo truyền tải đầy đủ các gói tin; tệp đã đến máy chủ lưu trữ trọn vẹn lúc tải lên."
+        },
+        {
+          "id": "rc-2",
+          "text": "Hiện Tượng Thối Dữ Liệu Âm Thầm (Silent Bit Rot / Data Corruption) trên đĩa cứng lưu trữ vật lý kết hợp với việc thiếu Cơ Chế Kiểm Tra Mã Băm Toàn Vẹn (Checksum / Hash Verification)",
+          "correct": true,
+          "feedback": "Chính xác! Sau 2 năm lưu trữ trên các phiến đĩa từ, hiện tượng suy hao từ tính tự nhiên (bit rot) đã làm đảo ngược một số bit trong tệp video. Vì hệ thống lưu trữ không tạo và lưu trữ mã băm kiểm tra tính toàn vẹn (như SHA-256 Checksum) lúc tải lên, nó không hề hay biết tệp đã bị hư hỏng cho đến khi mở ra tại phiên tòa."
+        },
+        {
+          "id": "rc-3",
+          "text": "Phần mềm xem video tại tòa án bị lỗi không hỗ trợ codec của tệp bằng chứng",
+          "correct": false,
+          "feedback": "Codec hoàn toàn tương thích; các khối dữ liệu nhị phân bên trong tệp thực sự đã bị thay đổi và hỏng cấu trúc."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn chặn và phát hiện sớm hiện tượng hỏng dữ liệu bằng chứng là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Lưu trữ tất cả các video bằng chứng vào thẻ nhớ USB và cất trong két sắt cơ mật",
+          "correct": false,
+          "feedback": "Bộ nhớ flash NAND trong thẻ USB có tuổi thọ lưu giữ dữ liệu khi không cắm điện còn ngắn hơn cả đĩa cứng từ."
+        },
+        {
+          "id": "fix-4",
+          "text": "Chỉ xem video bằng chứng trực tiếp trên máy quay và không bao giờ lưu trữ trên máy chủ",
+          "correct": false,
+          "feedback": "Không thể giữ hàng ngàn máy quay bodycam trong kho lưu trữ bằng chứng của tòa án."
+        },
+        {
+          "id": "fix-1",
+          "text": "Tính toán và lưu trữ Mã Băm Toàn Vẹn (Cryptographic Checksum như SHA-256) ngay khi tải lên, kết hợp Hệ Thống Tự Quét và Tự Sửa Lỗi Định Kỳ (Background Scrubbing & Erasure Coding)",
+          "correct": true,
+          "feedback": "Chính xác! Bằng cách ghi nhận mã SHA-256 lúc tiếp nhận bằng chứng, hệ thống có thể xác minh tính toàn vẹn bất kỳ lúc nào. Kết hợp với hệ thống tệp tự phục hồi (như ZFS hoặc lưu trữ đám mây dùng Erasure Coding) chạy quét định kỳ (scrubbing), hệ thống sẽ tự động phát hiện các bit bị hỏng và tái tạo lại dữ liệu gốc từ các khối dự phòng trước khi quá muộn."
+        },
+        {
+          "id": "fix-2",
+          "text": "Nén video xuống dung lượng nhỏ nhất có thể để giảm xác suất bị lỗi bit",
+          "correct": false,
+          "feedback": "Nén dữ liệu làm giảm chất lượng bằng chứng và nếu tệp nén bị lỗi 1 bit, toàn bộ tệp nén sẽ bị hỏng hoàn toàn không thể giải nén."
+        }
+      ]
+    }
+  },
+  "conceptId": "data-integrity",
+  "badge": {
+    "name": "Người Bảo Vệ Tính Toàn Vẹn",
+    "icon": "✅"
+  }
+}

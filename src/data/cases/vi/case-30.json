@@ -1,0 +1,237 @@
+{
+  "id": "case-30",
+  "number": 30,
+  "title": "Khu Vực Khóa Chết (The Deadlock District)",
+  "subtitle": "Hai dịch vụ bị giam cầm trong thế bế tắc vĩnh cửu",
+  "brief": {
+    "narrative": "Quy trình tạm giam nghi phạm đòi hỏi cập nhật hai tài nguyên quan trọng: 'Hồ Sơ Nhân Thân' và 'Vật Chứng Tịch Thu'. Lúc 02:00 sáng, Đồn 1 tiếp nhận một vụ án và Khóa Hồ Sơ A, sau đó xin Khóa Vật Chứng B. Cùng đúng phần nghìn giây đó, Đồn 2 tiếp nhận đồng phạm của vụ án và Khóa Vật Chứng B, sau đó xin Khóa Hồ Sơ A! Cả hai tiến trình cùng đứng chờ nhau nhả tài nguyên: Đồn 1 giữ A chờ B, Đồn 2 giữ B chờ A! Không tiến trình nào chịu nhường tiến trình nào, và hệ thống không có cơ chế phát hiện Khóa Chết (Deadlock Detection) hay thời hạn thuê khóa (Lease Expiry). Hàng trăm vụ tạm giam tiếp theo bị xếp hàng chờ, khóa cứng toàn bộ phân hệ tư pháp suốt đêm! Thám tử, hãy phá tan thế bế tắc này!",
+    "symptoms": [
+      "Hai giao dịch phân tán cùng giữ một tài nguyên và chờ đợi tài nguyên mà bên kia đang nắm giữ",
+      "Hệ thống bị treo cứng vĩnh viễn trong trạng thái Bế Tắc / Khóa Chết (Deadlock)",
+      "Các giao dịch không có cấu hình thời gian chờ tối đa (Lock Timeout / TTL)",
+      "Không có quy tắc thứ tự xin cấp phát tài nguyên cố định giữa các dịch vụ"
+    ],
+    "objective": "Loại bỏ Khóa Chết Phân Tán (Distributed Deadlocks) bằng Quy Tắc Thứ Tự Khóa Toàn Cục (Global Lock Ordering) và Thời Hạn Thuê Khóa (Lock Leases / Timeouts)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "weapon-registry",
+        "type": "server",
+        "label": "Weapon Registry",
+        "status": "failed",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Weapon Registry Service",
+          "logs": [
+            "[18:00:01] INFO: Processing weapon return for Officer #347",
+            "[18:00:01] INFO: LOCK ACQUIRED — weapon_assignment_347",
+            "[18:00:01] INFO: Requesting lock on duty_status_347 to verify shift status...",
+            "[18:00:01] WARN: Waiting for lock on duty_status_347 — held by Officer Duty Service",
+            "[18:00:31] WARN: Still waiting for lock on duty_status_347 — 30s elapsed",
+            "[18:02:01] WARN: Still waiting for lock on duty_status_347 — 120s elapsed"
+          ],
+          "data": {
+            "Status": "DEADLOCKED",
+            "Lock Held": "weapon_assignment_347",
+            "Lock Waiting For": "duty_status_347",
+            "Lock Timeout": "NONE (waits indefinitely)",
+            "Blocked Threads": "50/50",
+            "CPU Usage": "0.1% (threads sleeping, not working)"
+          },
+          "status": "Holding weapon lock, waiting indefinitely for duty status lock held by Officer Duty Service."
+        }
+      },
+      {
+        "id": "officer-duty",
+        "type": "server",
+        "label": "Officer Duty Service",
+        "status": "failed",
+        "position": {
+          "x": 550,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Duty Service",
+          "logs": [
+            "[18:00:01] INFO: Processing shift change for Officer #347",
+            "[18:00:01] INFO: LOCK ACQUIRED — duty_status_347",
+            "[18:00:01] INFO: Requesting lock on weapon_assignment_347 to update equipment list...",
+            "[18:00:01] WARN: Waiting for lock on weapon_assignment_347 — held by Weapon Registry",
+            "[18:00:31] WARN: Still waiting for lock on weapon_assignment_347 — 30s elapsed",
+            "[18:02:01] WARN: Still waiting for lock on weapon_assignment_347 — 120s elapsed"
+          ],
+          "data": {
+            "Status": "DEADLOCKED",
+            "Lock Held": "duty_status_347",
+            "Lock Waiting For": "weapon_assignment_347",
+            "Lock Timeout": "NONE (waits indefinitely)",
+            "Blocked Threads": "50/50",
+            "CPU Usage": "0.2% (threads sleeping, not working)"
+          },
+          "status": "Holding duty status lock, waiting indefinitely for weapon lock held by Weapon Registry."
+        }
+      },
+      {
+        "id": "shift-terminal",
+        "type": "client",
+        "label": "Shift Change Terminal",
+        "status": "failed",
+        "position": {
+          "x": 325,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Shift Change Terminal",
+          "logs": [
+            "[18:00:05] INFO: Officer #348 requesting weapon check-in — sending to Weapon Registry",
+            "[18:00:35] WARN: No response from Weapon Registry — 30s timeout",
+            "[18:01:00] INFO: Officer #349 requesting shift start — sending to Officer Duty Service",
+            "[18:01:30] WARN: No response from Officer Duty Service — 30s timeout",
+            "[18:02:00] ERROR: Both services unresponsive — shift change blocked"
+          ],
+          "data": {
+            "Officers Waiting (Off-Duty)": "200 (cannot return weapons)",
+            "Officers Waiting (On-Duty)": "200 (cannot receive weapons)",
+            "Services Responding": "0 of 2",
+            "Shift Change Status": "COMPLETELY BLOCKED"
+          },
+          "status": "400 officers stuck at shift change. Both required services are deadlocked."
+        }
+      },
+      {
+        "id": "lock-manager",
+        "type": "database",
+        "label": "Distributed Lock Store",
+        "status": "degraded",
+        "position": {
+          "x": 325,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Redis Lock Store",
+          "logs": [
+            "[18:00:01] INFO: Lock granted — weapon_assignment_347 → Weapon Registry (no TTL)",
+            "[18:00:01] INFO: Lock granted — duty_status_347 → Officer Duty Service (no TTL)",
+            "[18:00:01] INFO: Lock request — duty_status_347 → Weapon Registry (QUEUED — already held)",
+            "[18:00:01] INFO: Lock request — weapon_assignment_347 → Officer Duty Service (QUEUED — already held)",
+            "[18:05:00] WARN: 2 locks held for >5 minutes with no release"
+          ],
+          "data": {
+            "Active Locks": "2 (both stuck)",
+            "Lock TTL": "NONE — locks never expire",
+            "Deadlock Detection": "NOT IMPLEMENTED",
+            "Lock Order Enforcement": "NONE"
+          },
+          "status": "Two locks held indefinitely. No TTL, no deadlock detection, no lock ordering."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-weapon-lock",
+        "source": "weapon-registry",
+        "target": "lock-manager",
+        "label": "holds weapon lock, wants duty lock",
+        "animated": false,
+        "style": "slow"
+      },
+      {
+        "id": "e-duty-lock",
+        "source": "officer-duty",
+        "target": "lock-manager",
+        "label": "holds duty lock, wants weapon lock",
+        "animated": false,
+        "style": "slow"
+      },
+      {
+        "id": "e-terminal-weapon",
+        "source": "shift-terminal",
+        "target": "weapon-registry",
+        "label": "no response",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-terminal-duty",
+        "source": "shift-terminal",
+        "target": "officer-duty",
+        "label": "no response",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ khiến cả hai dịch vụ cùng bị treo cứng (bị đóng băng hoàn toàn) là gì?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Tắc Nghẽn Phân Tán (Distributed Deadlock do Nghịch Đảo Thứ Tự Khóa) — Dịch vụ Điều Phối khóa Vụ Án rồi chờ khóa Xe Tuần Tra, trong khi Dịch vụ Bảo Trì khóa Xe Tuần Tra rồi chờ khóa Vụ Án",
+          "correct": true,
+          "feedback": "Chính xác! Đây là hiện tượng Bế Tắc Phân Tán (Deadlock) kinh điển. Dịch vụ A chiếm khóa tài nguyên X và yêu cầu khóa Y; cùng lúc đó Dịch vụ B đã chiếm khóa Y và yêu cầu khóa X. Hai bên giữ chặt tài nguyên của mình và vĩnh viễn chờ đợi đối phương nhượng bộ. Vì khóa được quản lý phân tán qua hai dịch vụ độc lập, cơ sở dữ liệu không thể tự động phát hiện chu trình bế tắc để rollback!"
+        },
+        {
+          "id": "rc-3",
+          "text": "Số lượng kết nối đồng thời vượt quá giới hạn max_connections của máy chủ",
+          "correct": false,
+          "feedback": "Số lượng kết nối vẫn nằm trong ngưỡng cho phép; các tiến trình bị treo cứng vì chờ khóa phân tán."
+        },
+        {
+          "id": "rc-1",
+          "text": "Cả hai dịch vụ đều có lỗi rò rỉ luồng xử lý khiến hệ thống bị hết luồng CPU",
+          "correct": false,
+          "feedback": "Các luồng xử lý không bị rò rỉ; chúng bị chặn lại (blocked) do đang chờ đợi tài nguyên bị khóa bởi luồng khác."
+        },
+        {
+          "id": "rc-4",
+          "text": "Cơ sở dữ liệu bị hỏng chỉ mục khóa ngoại giữa bảng Xe Tuần Tra và bảng Vụ Án",
+          "correct": false,
+          "feedback": "Chỉ mục và cấu trúc bảng hoàn toàn nguyên vẹn; sự cố xuất phát từ thứ tự chiếm dụng tài nguyên."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương pháp tốt nhất để triệt tiêu vĩnh viễn nguy cơ Bế Tắc Phân Tán (Distributed Deadlock) là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Chỉ cho phép duy nhất một dịch vụ hoạt động tại một thời điểm",
+          "correct": false,
+          "feedback": "Chạy tuần tự từng dịch vụ một sẽ phá hủy hoàn toàn khả năng xử lý song song và thông lượng của hệ thống."
+        },
+        {
+          "id": "fix-1",
+          "text": "Bổ sung thêm thật nhiều luồng xử lý cho cả hai dịch vụ để chúng xử lý nhanh hơn",
+          "correct": false,
+          "feedback": "Thêm luồng không giải quyết được deadlock — thậm chí còn tạo ra nhiều chu trình bế tắc hơn."
+        },
+        {
+          "id": "fix-2",
+          "text": "Thực thi Thứ Tự Khóa Toàn Cục Nhất Quán (Enforce Global Lock Ordering — tất cả các dịch vụ bắt buộc phải chiếm khóa tài nguyên theo cùng một thứ tự bảng chữ cái hoặc ID cố định), kết hợp Thời Gian Chờ Khóa (Lock Timeout)",
+          "correct": true,
+          "feedback": "Chính xác! Nguyên lý cốt lõi để loại bỏ Deadlock: \"Không có thứ tự khóa nghịch đảo thì không thể có chu trình bế tắc\". Nếu quy định rằng: Mọi dịch vụ khi cần cả hai tài nguyên BẮT BUỘC phải chiếm khóa Bảng Vụ Án (Incident) trước rồi mới được chiếm khóa Bảng Xe (Vehicle), thì Dịch vụ Bảo Trì sẽ không bao giờ giữ khóa Xe trước khi có khóa Vụ Án. Kết hợp với Lock Timeout (tự động nhả khóa nếu chờ quá 3s), deadlock sẽ bị triệt tiêu hoàn toàn!"
+        },
+        {
+          "id": "fix-3",
+          "text": "Khởi động lại toàn bộ cơ sở dữ liệu mỗi khi phát hiện có giao dịch bị chậm quá 1 phút",
+          "correct": false,
+          "feedback": "Khởi động lại cơ sở dữ liệu sẽ đánh sập toàn bộ các giao dịch đang diễn ra của toàn thành phố."
+        }
+      ]
+    }
+  },
+  "conceptId": "distributed-deadlocks",
+  "badge": {
+    "name": "Chuyên Viên Hóa Giải Khóa Chết",
+    "icon": "🔐"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "id": "builder-01",
+  "number": 1,
+  "title": "API Giờ Cao Điểm",
+  "subtitle": "Lưu lượng tăng đột biến khiến các báo cáo cảnh sát bị quá thời gian xử lý",
+  "objective": "Lựa chọn và kết nối các thành phần giúp giảm tải tăng đột biến trong khi vẫn giữ luồng yêu cầu ổn định.",
+  "constraints": [
+    "Ưu tiên khả năng mở rộng theo chiều ngang (horizontal scalability)",
+    "Tránh tạo điểm nghẽn đơn lẻ trong định tuyến yêu cầu",
+    "Kết nối các thành phần theo đúng luồng lưu lượng dự kiến"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Phân Phối Lưu Lượng",
+      "description": "Đặt một bộ cân bằng tải (load balancer) phía trước các dịch vụ API.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Tăng Tốc Đọc",
+      "description": "Bổ sung cache hoặc CDN để giảm tải cho API đối với các truy vấn đọc lặp lại.",
+      "requiredAnyOf": [
+        "cache",
+        "cdn"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Nguồn Dữ Liệu Bền Vững (Source of Truth)",
+      "description": "Lưu trữ các yêu cầu thông qua API vào kho lưu trữ bền bỉ.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        },
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ]
+    }
+  ]
+}

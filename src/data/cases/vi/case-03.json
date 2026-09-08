@@ -1,0 +1,227 @@
+{
+  "id": "case-03",
+  "number": 3,
+  "title": "Chứng Cứ Biến Mất (The Lost Evidence)",
+  "subtitle": "16 bức ảnh hiện trường vụ án biến mất vào hư không sau sự cố sập nguồn",
+  "brief": {
+    "narrative": "Đội khám nghiệm hiện trường vừa chụp 16 bức ảnh độ phân giải cao tại một vụ trộm tiệm vàng lớn. Kỹ thuật viên đã tải ảnh lên hệ thống tại Trụ sở Trung tâm và nhận được thông báo 'Tải lên thành công'. Mười phút sau, trạm biến áp của trụ sở nổ tung, kích hoạt sập nguồn toàn diện. Khi hệ thống chuyển đổi dự phòng (failover) sang máy chủ dự phòng, 16 bức ảnh đã biến mất không dấu vết! Luật sư bên bị đang yêu cầu hủy bỏ vụ án vì bằng chứng không còn. Cảnh trưởng Partition đập bàn: 'Hệ thống báo thành công rồi cơ mà?!'. Hãy tìm ra nguyên nhân, Thám tử.",
+    "symptoms": [
+      "Người dùng nhận được thông báo ghi dữ liệu thành công trước khi sự cố xảy ra",
+      "Máy chủ Leader bị sập nguồn đột ngột trước khi hoàn tất truyền dữ liệu",
+      "Máy chủ Replica được nâng cấp thành Leader mới nhưng không hề có 16 bức ảnh",
+      "Nhân bản giữa Leader và Replica được cấu hình ở chế độ hoàn toàn bất đồng bộ (Asynchronous)"
+    ],
+    "objective": "Làm rõ vì sao dữ liệu đã được xác nhận thành công lại bị bốc hơi sau khi chuyển đổi dự phòng, và cấu hình lại cơ chế nhân bản để bảo vệ chứng cứ."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "forensics",
+        "type": "client",
+        "label": "Forensics Team",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Upload Terminal",
+          "logs": [
+            "[22:00:00] INFO: Uploading 47 evidence photos...",
+            "[22:00:15] INFO: Photo 1/47 — acknowledged by leader",
+            "[22:01:30] INFO: Photo 31/47 — acknowledged by leader",
+            "[22:01:45] INFO: Photo 32/47 — acknowledged by leader",
+            "[22:03:00] INFO: Photo 47/47 — acknowledged by leader",
+            "[22:03:01] INFO: All 47 photos uploaded successfully ✓"
+          ],
+          "data": {
+            "Total Uploaded": "47 photos",
+            "All Acknowledged": "Yes",
+            "Upload Completed": "22:03:01"
+          },
+          "status": "All 47 photos were uploaded and acknowledged by the leader."
+        }
+      },
+      {
+        "id": "db-leader",
+        "type": "database",
+        "label": "Leader DB (crashed)",
+        "status": "failed",
+        "position": {
+          "x": 400,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Former Leader Database",
+          "logs": [
+            "[22:00:15] INFO: Received photo 1, writing to disk, replicating async",
+            "[22:01:30] INFO: Received photo 31, writing to disk, replicating async",
+            "[22:01:45] INFO: Received photo 32, writing to disk — replication QUEUED",
+            "[22:03:00] INFO: Received photo 47, writing to disk — replication QUEUED",
+            "[22:03:01] INFO: All 47 photos stored locally",
+            "[03:00:00] FATAL: Power failure detected",
+            "[03:00:00] FATAL: Server shutting down — 16 photos not yet replicated"
+          ],
+          "data": {
+            "Status": "OFFLINE (power failure)",
+            "Photos Stored Locally": "47",
+            "Photos Replicated to Follower": "31",
+            "Photos NOT Replicated": "16 (photos 32-47)",
+            "Replication Mode": "ASYNCHRONOUS"
+          },
+          "status": "Crashed before replicating photos 32-47 to the follower."
+        }
+      },
+      {
+        "id": "db-follower",
+        "type": "database",
+        "label": "Follower → New Leader",
+        "status": "degraded",
+        "position": {
+          "x": 400,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Follower (Promoted to Leader)",
+          "logs": [
+            "[22:00:16] INFO: Replicated photo 1 from leader",
+            "[22:01:31] INFO: Replicated photo 31 from leader",
+            "[22:01:32] INFO: Waiting for more replication events...",
+            "[03:00:01] WARN: Leader heartbeat lost",
+            "[03:00:01] INFO: Initiating automatic failover",
+            "[03:00:02] INFO: Promoted to LEADER role",
+            "[03:00:02] WARN: Last replicated photo: #31. Photos 32-47 never received."
+          ],
+          "data": {
+            "Status": "ONLINE (promoted to leader)",
+            "Photos Available": "31 of 47",
+            "Missing Photos": "16 (photos 32-47)",
+            "Replication Mode Was": "ASYNCHRONOUS",
+            "Data Loss": "YES — 16 items permanently lost"
+          },
+          "status": "Promoted to leader but missing 16 photos that were never replicated."
+        }
+      },
+      {
+        "id": "detective",
+        "type": "client",
+        "label": "Det. Latency",
+        "status": "degraded",
+        "position": {
+          "x": 650,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Detective Latency's Terminal",
+          "logs": [
+            "[08:00:00] INFO: Querying evidence for Case #5AVE-2024",
+            "[08:00:01] INFO: Connected to new leader (former follower)",
+            "[08:00:01] WARN: Only 31 photos found. Expected 47.",
+            "[08:00:02] ERROR: Missing photos include blood spatter analysis shots"
+          ],
+          "data": {
+            "Expected Photos": "47",
+            "Available Photos": "31",
+            "Missing": "16 critical evidence photos"
+          },
+          "status": "Evidence incomplete. 16 photos lost during failover."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-forensics-leader",
+        "source": "forensics",
+        "target": "db-leader",
+        "label": "upload (47 photos)",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-leader-follower",
+        "source": "db-leader",
+        "target": "db-follower",
+        "label": "async replication (31 of 47)",
+        "animated": false,
+        "style": "slow"
+      },
+      {
+        "id": "e-follower-detective",
+        "source": "db-follower",
+        "target": "detective",
+        "label": "query (31 photos)",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao 16 trong tổng số 47 bức ảnh hiện trường lại bị mất vĩnh viễn?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Cơ chế nhân bản bất đồng bộ cho phép Leader báo thành công cho client trước khi dữ liệu được nhân bản sang Replica — khi Leader bị sập nguồn, dữ liệu chưa truyền đi bị mất vĩnh viễn",
+          "correct": true,
+          "feedback": "Chính xác! Với nhân bản bất đồng bộ, Leader xác nhận đã ghi nhận ảnh ngay khi nó lưu vào đĩa cục bộ mà không cần chờ Follower xác nhận. Khi Leader bị sập nguồn đột ngột, các ảnh từ 32 đến 47 mới chỉ nằm trên Leader cũ và chưa truyền sang Follower. Khi Follower được thăng cấp lên làm Leader mới, nó hoàn toàn không có 16 bức ảnh này."
+        },
+        {
+          "id": "rc-1",
+          "text": "Quá trình tải lên của đội pháp y bị gián đoạn giữa chừng và không phải toàn bộ 47 bức ảnh đều được gửi trọn vẹn lên máy chủ",
+          "correct": false,
+          "feedback": "Nhật ký tải lên cho thấy rõ ràng toàn bộ 47 ảnh đã được máy chủ tiếp nhận thành công và trả về mã HTTP 200 OK lúc 22:03. Dữ liệu bị mất sau khi tải lên, trong quá trình nhân bản giữa các máy chủ."
+        },
+        {
+          "id": "rc-4",
+          "text": "Sự cố phân vùng mạng đã cắt đứt kết nối giữa Leader và Follower, ngăn chặn toàn bộ lưu lượng nhân bản",
+          "correct": false,
+          "feedback": "Nhật ký cho thấy các ảnh 1-31 đã được nhân bản trơn tru ngay trước khi Leader sập. Không hề có phân vùng mạng — Leader bị chết phần cứng trước khi kịp nhân bản nốt các ảnh còn lại."
+        },
+        {
+          "id": "rc-2",
+          "text": "Cơ sở dữ liệu Follower bị hết dung lượng lưu trữ được cấp phát và bắt đầu từ chối dữ liệu ảnh gửi tới",
+          "correct": false,
+          "feedback": "Follower đã lưu trữ thành công 31 bức ảnh đầu tiên và dung lượng đĩa vẫn còn rất nhiều. 16 ảnh còn lại chưa từng được Leader gửi sang."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Hệ thống lưu trữ chứng cứ cần được thay đổi như thế nào để ngăn mất mát dữ liệu khi chuyển đổi dự phòng (failover)?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Thêm một bản sao Follower thứ hai để tăng số lượng máy chủ nhận bản sao và tăng xác suất dữ liệu sống sót",
+          "correct": false,
+          "feedback": "Nếu tất cả Follower đều dùng cơ chế bất đồng bộ, việc có thêm Follower thứ hai không loại bỏ được khoảng hở mất dữ liệu. Leader vẫn báo thành công trước khi bất kỳ Follower nào nhận được dữ liệu."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tăng tốc độ băng thông nhân bản để dữ liệu được gửi sang Follower nhanh hơn, thu hẹp khoảng thời gian chưa nhân bản",
+          "correct": false,
+          "feedback": "Tăng tốc độ truyền tải giúp thu hẹp khoảng hở thời gian rủi ro nhưng KHÔNG THỂ loại bỏ nó hoàn toàn. Khi lưu lượng ghi tăng vọt hoặc sập nguồn bất ngờ, nguy cơ mất dữ liệu vẫn luôn tồn tại. Chỉ có nhân bản đồng bộ mới cam kết không mất dữ liệu."
+        },
+        {
+          "id": "fix-4",
+          "text": "Tắt hoàn toàn cơ chế chuyển đổi dự phòng tự động — giữ hệ thống ngoại tuyến và chờ Leader cũ khởi động lại",
+          "correct": false,
+          "feedback": "Giải pháp này có thể cứu được dữ liệu (nếu đĩa cứng không hỏng), nhưng cái giá phải trả là hệ thống ngừng hoạt động trong nhiều giờ. Hệ thống bằng chứng tư pháp cần cả tính sẵn sàng cao LẪN tính bền vững dữ liệu."
+        },
+        {
+          "id": "fix-1",
+          "text": "Sử dụng cơ chế nhân bản đồng bộ (Synchronous Replication) hoặc bán đồng bộ cho dữ liệu quan trọng — Leader phải chờ ít nhất một bản sao xác nhận đã ghi trước khi báo thành công cho client",
+          "correct": true,
+          "feedback": "Chính xác! Với nhân bản đồng bộ, Leader không bao giờ gửi phản hồi xác nhận cho client cho đến khi ít nhất một bản sao Follower đã nhận và ghi dữ liệu an toàn. Nếu Leader sập, bản sao được thăng cấp chắc chắn nắm giữ đầy đủ 100% dữ liệu đã xác nhận. Mặc dù độ trễ ghi tăng nhẹ, đây là sự đánh đổi bắt buộc cho sự toàn vẹn của bằng chứng pháp y."
+        }
+      ]
+    }
+  },
+  "conceptId": "sync-vs-async-replication",
+  "badge": {
+    "name": "Chuyên Gia Toàn Vẹn Bền Vững",
+    "icon": "🔒"
+  }
+}

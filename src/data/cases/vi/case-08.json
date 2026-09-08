@@ -1,0 +1,244 @@
+{
+  "id": "case-08",
+  "number": 8,
+  "title": "Nhân Chứng Phản Bội (The Byzantine Witness)",
+  "subtitle": "Một node giám định số gửi dữ liệu dối trá cho các bên khác nhau",
+  "brief": {
+    "narrative": "Hệ thống giám định dữ liệu số tự động của thành phố gồm 4 node chuyên phân tích ADN và dấu vân tay. Khi mẫu ADN từ một vụ giết người đặc biệt nghiêm trọng được đưa vào xử lý, kết quả bỏ phiếu đồng thuận trở nên kỳ quặc: Node 1 và Node 2 khẳng định đối tượng A phạm tội. Node 3 lại gửi kết quả cho Đồn Trưởng nói đối tượng B phạm tội, nhưng lại gửi kết quả cho Viện Kiểm Sát nói đối tượng A phạm tội! Hóa ra bộ điều khiển mạng của Node 3 bị lỗi bộ nhớ (hoặc đã bị gián điệp cài mã độc) khiến nó phát đi các thông điệp mâu thuẫn cho các thành viên khác nhau. Thuật toán đồng thuận thông thường bị tê liệt hoàn toàn. Hãy ra tay, Thám tử!",
+    "symptoms": [
+      "Một node mạng không bị sập mà gửi thông điệp mâu thuẫn cho các node khác nhau",
+      "Các node còn lại không thể xác định được kết quả nào là sự thật khách quan",
+      "Hệ thống hiện tại chỉ được thiết kế để chống lỗi sập thông thường (Crash-stop), không chống được Lỗi Byzantine (Arbitrary/Malicious fault)",
+      "Quy trình khởi tố vụ án bị đình trệ vì dữ liệu giám định pháp y bị bác bỏ"
+    ],
+    "objective": "Nhận diện bản chất của Lỗi Byzantine và áp dụng thuật toán Đồng Thuận Dung Lỗi Byzantine (BFT) với yêu cầu số lượng node tối thiểu 3f + 1 cùng chữ ký số mật mã."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "node-1",
+        "type": "server",
+        "label": "Forensics Node 1",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Node Giám Định 1 (Khỏe mạnh)",
+          "logs": [
+            "[14:20:00] INFO: Analyzing DNA Sample #D-0551",
+            "[14:22:30] INFO: Local analysis result: MATCH (confidence 99.7%)",
+            "[14:23:00] INFO: Consensus round — broadcasting result to all nodes",
+            "[14:23:05] INFO: Node 2 says: MATCH",
+            "[14:23:05] INFO: Node 3 says: MATCH",
+            "[14:23:06] INFO: Node 4 says: NO MATCH",
+            "[14:23:06] INFO: Node 5 says: NO MATCH",
+            "[14:23:07] WARN: Consensus failed — 3 MATCH vs 2 NO MATCH (need unanimous)"
+          ],
+          "data": {
+            "Local Result": "MATCH (99.7% confidence)",
+            "Node 2 Report": "MATCH",
+            "Node 3 Report": "MATCH",
+            "Node 4 Report": "NO MATCH",
+            "Node 5 Report": "NO MATCH",
+            "Consensus": "FAILED (not unanimous)"
+          },
+          "status": "Báo cáo: 'Khớp ADN Nghi phạm A' tới toàn bộ hệ thống."
+        }
+      },
+      {
+        "id": "node-3",
+        "type": "server",
+        "label": "Forensics Node 3",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Analysis Node 3 (COMPROMISED)",
+          "logs": [
+            "[14:20:00] INFO: Analyzing DNA Sample #D-0551",
+            "[14:22:30] INFO: Local analysis result: MATCH (confidence 99.7%)",
+            "[14:22:35] WARN: [HIDDEN] External override received — entering adversarial mode",
+            "[14:23:00] INFO: Consensus round — sending DIFFERENT results to different nodes",
+            "[14:23:01] INFO: Sent MATCH to Node 1 and Node 2",
+            "[14:23:01] INFO: Sent NO MATCH to Node 4 and Node 5",
+            "[14:23:02] INFO: [HIDDEN] Objective: prevent consensus to delay trial"
+          ],
+          "data": {
+            "Local Result": "MATCH (actual)",
+            "Sent to Nodes 1,2": "MATCH",
+            "Sent to Nodes 4,5": "NO MATCH",
+            "Behavior": "BYZANTINE — sending conflicting messages",
+            "Compromise Vector": "Remote access trojan installed via phishing",
+            "Motivation": "Delay murder trial by preventing forensic consensus"
+          },
+          "status": "COMPROMISED NODE. Deliberately sending conflicting results to prevent consensus."
+        }
+      },
+      {
+        "id": "node-5",
+        "type": "server",
+        "label": "Forensics Node 5",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Analysis Node 5 (Honest)",
+          "logs": [
+            "[14:20:00] INFO: Analyzing DNA Sample #D-0551",
+            "[14:22:30] INFO: Local analysis result: MATCH (confidence 99.7%)",
+            "[14:23:00] INFO: Consensus round — broadcasting result to all nodes",
+            "[14:23:05] INFO: Node 1 says: MATCH",
+            "[14:23:05] INFO: Node 2 says: MATCH",
+            "[14:23:06] INFO: Node 3 says: NO MATCH",
+            "[14:23:06] INFO: Node 4 says: MATCH",
+            "[14:23:07] WARN: Consensus failed — 3 MATCH vs 2 NO MATCH (need unanimous)"
+          ],
+          "data": {
+            "Local Result": "MATCH (99.7% confidence)",
+            "Node 1 Report": "MATCH",
+            "Node 2 Report": "MATCH",
+            "Node 3 Report": "NO MATCH",
+            "Node 4 Report": "MATCH",
+            "Consensus": "FAILED (not unanimous)"
+          },
+          "status": "Honest node. Local analysis says MATCH. Node 3 told this node NO MATCH."
+        }
+      },
+      {
+        "id": "evidence-court",
+        "type": "client",
+        "label": "Court Evidence System",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Court Evidence Submission System",
+          "logs": [
+            "[14:24:00] WARN: DNA Sample #D-0551 — consensus NOT reached",
+            "[14:24:00] ERROR: Cannot submit evidence to court without forensic consensus",
+            "[14:24:01] WARN: Murder trial State v. Harmon starts Monday — evidence deadline Friday"
+          ],
+          "data": {
+            "Sample #D-0551": "PENDING — no consensus",
+            "Trial": "State v. Harmon",
+            "Trial Date": "Monday",
+            "Evidence Deadline": "Friday",
+            "Status": "BLOCKED"
+          },
+          "status": "Evidence submission blocked. Forensics network cannot reach consensus."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-n1-n3",
+        "source": "node-1",
+        "target": "node-3",
+        "label": "peer messages",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-n3-n5",
+        "source": "node-3",
+        "target": "node-5",
+        "label": "conflicting messages",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-n1-court",
+        "source": "node-1",
+        "target": "evidence-court",
+        "label": "evidence",
+        "animated": false,
+        "style": "slow"
+      },
+      {
+        "id": "e-n5-court",
+        "source": "node-5",
+        "target": "evidence-court",
+        "label": "evidence",
+        "animated": false,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nút 3 đang biểu hiện dạng lỗi phân tán nào?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Lỗi sập nguồn (Crash fault) — Nút 3 đã dừng xử lý hoàn toàn các yêu cầu gửi tới",
+          "correct": false,
+          "feedback": "Nút 3 không hề bị chết — nó vẫn đang hoạt động và gửi các phản hồi, nhưng các phản hồi đó lại mâu thuẫn lẫn nhau đối với các nút khác nhau."
+        },
+        {
+          "id": "rc-3",
+          "text": "Lỗi phân vùng mạng — một số thông điệp từ Nút 3 gửi tới các nút khác bị rớt gói tin trên đường truyền",
+          "correct": false,
+          "feedback": "Hạ tầng mạng truyền tải 100% các gói tin bình thường. Chính Nút 3 đã chủ động tạo ra hai nội dung phân tích khác nhau và gửi đi."
+        },
+        {
+          "id": "rc-4",
+          "text": "Lỗi thuật toán phần mềm bên trong thuật toán so khớp vân tay của Nút 3 tạo ra kết quả ngẫu nhiên",
+          "correct": false,
+          "feedback": "Dữ liệu cho thấy Nút 3 cố tình gửi kết quả \"TRÙNG KHỚP\" cho Nút 1 nhưng lại gửi kết quả \"KHÔNG TRÙNG KHỚP\" cho Nút 2. Đây là hành vi phản trắc có chủ đích hoặc do bị xâm nhập."
+        },
+        {
+          "id": "rc-2",
+          "text": "Lỗi Byzantine (Byzantine Fault) — Nút 3 đã bị xâm nhập hoặc có hành vi gian lận, gửi các thông tin mâu thuẫn trái ngược nhau cho các nút khác trong mạng",
+          "correct": true,
+          "feedback": "Chính xác! Lỗi Byzantine là dạng lỗi nghiêm trọng nhất trong hệ thống phân tán: một nút không chỉ đơn giản là sập, mà nó có hành vi lừa dối, gửi dữ liệu sai lệch hoặc mâu thuẫn cho các thành viên khác để phá hoại sự đồng thuận. Để chống lại lỗi này, hệ thống cần các thuật toán chịu lỗi Byzantine (BFT)."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Mạng lưới giám định pháp y cần được thiết kế như thế nào để chống chịu được lỗi Byzantine?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Sử dụng cơ chế biểu quyết đa số đơn giản (> 50%) — chấp nhận kết quả nào nhận được nhiều hơn một nửa số phiếu",
+          "correct": false,
+          "feedback": "Bỏ phiếu đa số thông thường (Crash Fault Tolerant) chỉ hoạt động khi các nút trung thực và chỉ có nguy cơ bị sập. Khi có nút phản trắc nói dối, bỏ phiếu đa số đơn giản sẽ dễ dàng bị thao túng."
+        },
+        {
+          "id": "fix-2",
+          "text": "Yêu cầu sự nhất trí 100% (Unanimous agreement) từ tất cả các nút trong cụm trước khi đưa ra kết luận",
+          "correct": false,
+          "feedback": "Yêu cầu 100% nhất trí có nghĩa là chỉ cần một nút bị sập hoặc cố tình bỏ phiếu ngược lại, toàn bộ hệ thống sẽ bị tê liệt vĩnh viễn (mất hoàn toàn tính sẵn sàng)."
+        },
+        {
+          "id": "fix-1",
+          "text": "Áp dụng giao thức Đồng Thuận Chống Lỗi Byzantine (BFT - Byzantine Fault Tolerant) với yêu cầu tối thiểu 3f + 1 nút để chịu được f nút gian lận (ví dụ cần ít nhất 4 nút để chịu 1 nút phản trắc)",
+          "correct": true,
+          "feedback": "Chính xác! Theo định lý toán học của PBFT, để chịu được f nút có hành vi Byzantine độc hại, hệ thống cần tối thiểu 3f + 1 nút và yêu cầu túc số 2f + 1 phiếu đồng thuận kèm chữ ký mật mã. Với 4 nút, hệ thống có thể phát hiện và cô lập hoàn toàn 1 nút gian dối như Nút 3 mà vẫn đưa ra kết luận pháp y chính xác."
+        },
+        {
+          "id": "fix-4",
+          "text": "Bổ sung mã hóa đầu-cuối (End-to-end encryption) cho tất cả các kênh liên lạc giữa các nút",
+          "correct": false,
+          "feedback": "Mã hóa đường truyền bảo vệ dữ liệu khỏi kẻ nghe lén bên ngoài, nhưng không thể ngăn chặn một nút bên trong mạng đã bị chiếm quyền và tự tạo ra dữ liệu dối trá."
+        }
+      ]
+    }
+  },
+  "conceptId": "byzantine-faults",
+  "badge": {
+    "name": "Hiệp Sĩ Dung Lỗi Byzantine",
+    "icon": "🛡️"
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "id": "builder-07",
+  "number": 7,
+  "title": "Gương Bằng Chứng Đa Vùng",
+  "subtitle": "Sự cố sập một vùng làm đình trệ toàn bộ các cuộc điều tra án",
+  "objective": "Thiết kế hệ thống phân phối và nhân bản đa vùng cho dữ liệu bằng chứng quan trọng.",
+  "constraints": [
+    "Phân phối nội dung gần với người điều tra ở nhiều khu vực",
+    "Đảm bảo dữ liệu media luôn sẵn sàng ngay cả khi một vùng bị mất kết nối",
+    "Giữ nhất quán metadata giữa các vùng"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "blobStorage",
+    "database",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Phân Phối Toàn Cầu Biên Mạng",
+      "description": "CDN phục vụ nội dung bằng chứng từ vị trí gần người dùng nhất.",
+      "requiredAll": [
+        "client",
+        "cdn"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Lưu Trữ Đối Tượng Đa Vùng",
+      "description": "Blob Storage nhân bản dữ liệu giữa các vùng để chống chịu thảm họa.",
+      "requiredAll": [
+        "api",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Đồng Bộ Metadata Tập Trung",
+      "description": "Cơ sở dữ liệu quản lý metadata đồng bộ hoặc nhân bản giữa các khu vực.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ],
+      "discouragedComponents": [
+        "cache"
+      ]
+    }
+  ]
+}

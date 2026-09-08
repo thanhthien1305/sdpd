@@ -1,0 +1,71 @@
+{
+  "id": "builder-08",
+  "number": 8,
+  "title": "Độ Trễ Tra Cứu Lệnh Bắt",
+  "subtitle": "Thời gian tra cứu lệnh truy nã vượt quá SLA vào các khung giờ cao điểm",
+  "objective": "Tối ưu hóa kiến trúc đọc để phản hồi tra cứu lệnh bắt dưới 50ms.",
+  "constraints": [
+    "Hạn chế tối đa việc quét toàn bộ bảng cơ sở dữ liệu",
+    "Bộ nhớ đệm phải luôn phản ánh dữ liệu mới nhất khi có lệnh mới",
+    "Cân bằng tải đồng đều qua các dịch vụ tra cứu"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "cdn"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Tăng Tốc Bằng Bộ Nhớ Đệm",
+      "description": "Lưu trữ các lệnh bắt đang hoạt động trong Cache tốc độ cao.",
+      "requiredAll": [
+        "api",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Cân Bằng Tải Tra Cứu",
+      "description": "Bộ cân bằng tải phân phối đều các truy vấn đọc tới các instance API.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Phân Tách Đọc / Ghi",
+      "description": "Truy vấn từ kho đọc chuyên dụng để giải phóng tài nguyên cho ghi.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

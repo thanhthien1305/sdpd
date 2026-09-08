@@ -1,0 +1,222 @@
+{
+  "id": "case-25",
+  "number": 25,
+  "title": "Kho Chứng Cứ Quá Tải (The Overloaded Vault)",
+  "subtitle": "Hệ thống ghi nhật ký chứng cứ gây ra hiện tượng khuếch đại ghi khổng lồ làm cháy ổ đĩa",
+  "brief": {
+    "narrative": "Kho lưu trữ chứng cứ kỹ thuật số của thành phố ghi nhận trung bình 5MB nhật ký giám sát mỗi giây. Nhưng đội ngũ hạ tầng bàng hoàng phát hiện: ổ cứng SSD doanh nghiệp trị giá $50,000 liên tục báo hỏng sau mỗi 3 tháng, và tốc độ ghi vật lý xuống đĩa đo được lên tới 150MB/giây — gấp 30 lần lượng dữ liệu thực tế! Cơ sở dữ liệu B-Tree truyền thống phải cập nhật 12 chỉ mục (Index) khác nhau cho mỗi dòng log nhỏ, cộng thêm việc ghi WAL và cơ chế khuếch đại ghi (Write Amplification) của chip nhớ flash SSD đã biến một dòng nước chảy nhẹ thành một cơn hồng thủy nghiền nát phần cứng! Ổ đĩa đang bắt đầu rơi rụng. Thám tử, hãy dập tắt ngọn lửa khuếch đại này!",
+    "symptoms": [
+      "Lưu lượng ghi vật lý xuống ổ đĩa cao gấp 30 lần lưu lượng dữ liệu logic thực tế của ứng dụng",
+      "Hệ số Khuếch Đại Ghi (Write Amplification Factor - WAF) chạm mốc 30x",
+      "Các ổ cứng SSD bị cạn kiệt tuổi thọ ghi (TBW - Terabytes Written) chỉ sau vài tháng vận hành",
+      "Hệ thống cơ sở dữ liệu quan hệ truyền thống sử dụng B-Tree với quá nhiều chỉ mục thứ cấp trên bảng ghi nhiều"
+    ],
+    "objective": "Giảm thiểu Khuếch Đại Ghi (Write Amplification) bằng cách chuyển sang công nghệ lưu trữ tối ưu hóa cho ghi tuần tự như Cây LSM (Log-Structured Merge-tree) hoặc cắt giảm chỉ mục dư thừa."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "bodycam-ingest",
+        "type": "client",
+        "label": "Body Camera Ingest",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Body Camera Ingestion Service",
+          "logs": [
+            "[08:00:00] INFO: Ingesting frames at 500 writes/sec",
+            "[08:00:15] WARN: Write latency increasing — p99 now 800ms",
+            "[08:00:30] WARN: Write latency p99 now 2,400ms — compaction pressure"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Write Rate": "500 writes/sec",
+            "Data Generated (daily)": "~170 GB",
+            "Write Latency p99": "2,400ms (target: 50ms)"
+          },
+          "status": "Producing data at expected rate but write latency is spiking due to storage engine backpressure."
+        }
+      },
+      {
+        "id": "radio-ingest",
+        "type": "client",
+        "label": "Radio Log Ingest",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Radio Log Ingestion Service",
+          "logs": [
+            "[08:00:00] INFO: Logging radio transmissions at 200 writes/sec",
+            "[08:00:30] WARN: Write latency increasing — p99 now 1,200ms"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Write Rate": "200 writes/sec",
+            "Data Generated (daily)": "~30 GB"
+          },
+          "status": "Operating normally but experiencing write latency spikes from shared storage."
+        }
+      },
+      {
+        "id": "lsm-engine",
+        "type": "server",
+        "label": "LSM-Tree Storage Engine",
+        "status": "degraded",
+        "position": {
+          "x": 380,
+          "y": 150
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "LSM-Tree Storage Engine",
+          "logs": [
+            "[07:00:00] WARN: L0 SSTable count: 47 (threshold: 4)",
+            "[07:00:01] INFO: Compaction triggered: L0 → L1 merge",
+            "[07:15:00] WARN: Compaction backlog growing — 200+ pending compactions",
+            "[07:30:00] WARN: Write amplification ratio: 42x",
+            "[08:00:00] CRITICAL: Compaction consuming 90% disk I/O",
+            "[08:00:01] WARN: Write stalls detected — memtable flush blocked"
+          ],
+          "data": {
+            "Status": "DEGRADED",
+            "Write Amplification": "42x",
+            "Levels": "7 (L0 has 47 SSTables, limit is 4)",
+            "Pending Compactions": "213",
+            "Disk I/O (compaction)": "90%",
+            "Disk I/O (writes)": "8%",
+            "Logical Data Size": "5 TB",
+            "Actual Disk Usage": "48 TB"
+          },
+          "status": "Severe write amplification. Each byte written results in 42 bytes of actual disk I/O due to repeated compaction merges across levels."
+        }
+      },
+      {
+        "id": "disk-storage",
+        "type": "database",
+        "label": "Evidence Disk Array",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 150
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Evidence Disk Array",
+          "logs": [
+            "[08:00:00] WARN: Disk usage at 80% (48 TB / 50 TB)",
+            "[08:00:00] WARN: Disk I/O at 98% utilization",
+            "[08:00:01] WARN: I/O queue depth: 256 (max)"
+          ],
+          "data": {
+            "Status": "NEAR CAPACITY",
+            "Total Capacity": "50 TB",
+            "Used": "48 TB (80%)",
+            "Logical Data": "5 TB",
+            "Space Amplification": "9.6x",
+            "Disk I/O Utilization": "98%"
+          },
+          "status": "Disk nearly full. 48 TB used for 5 TB of logical data due to write amplification and space amplification from compaction."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-bodycam-lsm",
+        "source": "bodycam-ingest",
+        "target": "lsm-engine",
+        "label": "500 writes/sec",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-radio-lsm",
+        "source": "radio-ingest",
+        "target": "lsm-engine",
+        "label": "200 writes/sec",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-lsm-disk",
+        "source": "lsm-engine",
+        "target": "disk-storage",
+        "label": "compaction I/O (42x amplified)",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao hệ thống lưu trữ chỉ chứa 8 TB dữ liệu thực tế nhưng lại tiêu tốn tới 48 TB dung lượng đĩa và gây bão I/O?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Cơ chế nén dữ liệu của cơ sở dữ liệu bị hỏng khiến kích thước dữ liệu bị phình to gấp 6 lần",
+          "correct": false,
+          "feedback": "Thuật toán nén vẫn hoạt động bình thường trên từng khối dữ liệu."
+        },
+        {
+          "id": "rc-2",
+          "text": "Hiện Tượng Khuếch Đại Ghi Quá Mức (Excessive Write Amplification) do quá trình Gom và Hợp Nhất (Compaction) của Cây LSM (Log-Structured Merge-tree) bị quá tải khi dữ liệu ghi liên tục",
+          "correct": true,
+          "feedback": "Chính xác! Cây LSM tối ưu cho thao tác ghi nhanh bằng cách ghi vào MemTable rồi xả tuần tự xuống các tầng SSTable trên đĩa. Tuy nhiên, khi dữ liệu ghi liên tục với tốc độ cao, quá trình Compaction (đọc các tầng cũ, hợp nhất, sắp xếp và ghi lại ra tầng mới) phải chạy không ngừng nghỉ. Một byte dữ liệu được ghi đi ghi lại trên đĩa tới 6 lần (Write Amplification Factor = 6), gây nghẽn toàn bộ băng thông I/O đĩa cứng."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hệ điều hành máy chủ bị nhiễm mã độc tự động nhân bản dữ liệu rác vào ổ đĩa",
+          "correct": false,
+          "feedback": "Không có mã độc nào; toàn bộ dữ liệu đều thuộc cơ sở dữ liệu nhật ký camera giám sát."
+        },
+        {
+          "id": "rc-4",
+          "text": "Quản trị viên đã vô tình kích hoạt chế độ sao lưu 6 bản copy trên cùng một ổ đĩa",
+          "correct": false,
+          "feedback": "Cơ sở dữ liệu chỉ được cấu hình 1 bản lưu duy nhất; dung lượng đĩa bị phình to do các tệp SSTable trung gian chưa kịp dọn dẹp trong quá trình Compaction."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để giảm thiểu hiện tượng khuếch đại ghi và giải phóng I/O cho hệ thống lưu trữ LSM là gì?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Tinh chỉnh chiến lược Compaction (chuyển sang Leveled hoặc Tiered Compaction phù hợp), tăng kích thước MemTable và phân tầng lưu trữ (đẩy dữ liệu cũ sang kho lưu trữ đối tượng giá rẻ như S3)",
+          "correct": true,
+          "feedback": "Chính xác! Bằng cách tinh chỉnh chiến lược Compaction (ví dụ Size-Tiered Compaction tối ưu cho khối lượng ghi lớn), tăng dung lượng MemTable trong RAM để xả các khối SSTable lớn hơn, và tự động di chuyển các tệp SSTable cũ đã đóng băng sang Blob Storage giá rẻ, hệ thống sẽ cắt giảm đáng kể số chu kỳ ghi đĩa lặp lại, đưa Write Amplification về mức tối thiểu."
+        },
+        {
+          "id": "fix-1",
+          "text": "Chuyển sang công cụ lưu trữ sử dụng B-tree truyền thống cho toàn bộ khối lượng dữ liệu ghi camera khổng lồ",
+          "correct": false,
+          "feedback": "B-tree thực hiện ghi ngẫu nhiên (random I/O) trực tiếp xuống các trang đĩa, với khối lượng ghi camera khổng lồ thì B-tree sẽ bị nghẽn đĩa còn nhanh hơn nhiều so với LSM."
+        },
+        {
+          "id": "fix-3",
+          "text": "Quay lại sử dụng băng từ từ tính thế hệ cũ để lưu trữ toàn bộ dữ liệu nhật ký camera",
+          "correct": false,
+          "feedback": "Băng từ có độ trễ truy xuất ngẫu nhiên cực lớn (mất nhiều phút để cuộn băng) và không thể phục vụ tra cứu biển số xe theo thời gian thực."
+        },
+        {
+          "id": "fix-4",
+          "text": "Xóa toàn bộ dữ liệu nhật ký camera cũ sau mỗi 24 giờ hoạt động",
+          "correct": false,
+          "feedback": "Quy định pháp lý yêu cầu lưu trữ dữ liệu camera giám sát giao thông tối thiểu 90 ngày phục vụ điều tra án."
+        }
+      ]
+    }
+  },
+  "conceptId": "write-amplification",
+  "badge": {
+    "name": "Chuyên Viên Tối Ưu Hóa Ghi",
+    "icon": "✍️"
+  }
+}

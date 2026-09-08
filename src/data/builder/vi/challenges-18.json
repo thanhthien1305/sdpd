@@ -1,0 +1,72 @@
+{
+  "id": "builder-18",
+  "number": 18,
+  "title": "Tăng Vọt Video Nhân Chứng Gửi",
+  "subtitle": "Video người dân gửi hỗ trợ điều tra gây tắc nghẽn toàn bộ nền tảng",
+  "objective": "Tạo đường truyền tiếp nhận video số lượng lớn từ đám đông mà không làm sập hạ tầng.",
+  "constraints": [
+    "Hấp thụ hàng nghìn video tải lên đồng thời từ điện thoại của người dân",
+    "Tách biệt băng thông tải lên khỏi hệ thống quản lý nghiệp vụ nội bộ",
+    "Tự động quét virus và phân loại video trước khi kiểm duyệt viên xem"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "blobStorage",
+    "database"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Cổng Tải Lên Trực Tiếp Tới Lưu Trữ",
+      "description": "Blob Storage tiếp nhận trực tiếp luồng video tải lên qua pre-signed URL.",
+      "requiredAll": [
+        "api",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Hàng Đợi Điều Phối Kiểm Duyệt",
+      "description": "Queue xếp hàng các video đã tải xong để chờ xử lý bảo mật và nén.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Worker Quét và Trích Xuất",
+      "description": "Worker phân tích và cập nhật metadata video đã được xác thực vào DB.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}
