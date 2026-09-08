@@ -1,0 +1,215 @@
+{
+  "id": "case-12",
+  "number": 12,
+  "title": "Giới Hạn Chiều Dọc (The Vertical Limit)",
+  "subtitle": "Máy chủ phân tích tội phạm chạm trần giới hạn phần cứng",
+  "brief": {
+    "narrative": "Máy chủ phân tích dự báo tội phạm của thành phố là một 'siêu máy tính' nguyên khối trị giá hàng triệu đô la. Suốt 3 năm qua, mỗi khi hệ thống chậm, đội ngũ kỹ thuật lại mua thêm RAM và CPU xịn nhất cắm vào. Nhưng sáng nay, máy chủ đã chạm trần giới hạn vật lý: bo mạch chủ đã cắm kín 128 lõi CPU và 1.5TB RAM, không thể nâng cấp thêm được nữa! Trong khi đó, các thuật toán máy học phân tích hành vi tội phạm mới đòi hỏi gấp 3 lần tài nguyên. Máy chủ bắt đầu sập vì tràn bộ nhớ đệm (Out of Memory). Hướng đi nâng cấp dọc (Scale Up) đã đi vào ngõ cụt. Hãy chỉ ra con đường mở rộng theo chiều ngang, Thám tử!",
+    "symptoms": [
+      "Máy chủ duy nhất đã đạt cấu hình phần cứng tối đa có thể mua được trên thị trường",
+      "Chi phí nâng cấp máy chủ tăng theo cấp số nhân nhưng hiệu năng chỉ tăng nhẹ",
+      "Khi máy chủ phân tích gặp sự cố, toàn bộ nghiệp vụ dự báo trên toàn thành phố bị đình trệ",
+      "Hệ thống không được thiết kế để phân chia công việc xử lý song song trên nhiều máy"
+    ],
+    "objective": "Chuyển đổi tư duy từ mở rộng theo chiều dọc (Scale Up) sang mở rộng theo chiều ngang (Scale Out) với kiến trúc phân tán phi trạng thái."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "analytics-server",
+        "type": "server",
+        "label": "Analytics Server",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Crime Analytics Server",
+          "logs": [
+            "[08:15:01] WARN: CPU utilization at 98%",
+            "[08:15:02] WARN: Memory usage at 94% (961GB/1024GB)",
+            "[08:15:10] WARN: Query queue depth: 847 pending",
+            "[08:15:22] ERROR: Query timeout for district-7 trend analysis (>45s)",
+            "[08:15:30] INFO: No horizontal scaling configured — single node only"
+          ],
+          "data": {
+            "CPU Cores": "128 (all saturated)",
+            "RAM": "1024 GB (94% used)",
+            "Status": "MAXED OUT",
+            "Pending Queries": "847",
+            "Avg Query Time": "45.2s",
+            "Max Vertical Upgrade": "Already at maximum"
+          },
+          "status": "Server hardware fully maxed. No further vertical scaling possible."
+        }
+      },
+      {
+        "id": "district-api",
+        "type": "server",
+        "label": "District API Gateway",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 220
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "District API Gateway",
+          "logs": [
+            "[08:15:05] WARN: Upstream analytics server response slow",
+            "[08:15:12] WARN: 312 requests queued waiting for analytics",
+            "[08:15:25] ERROR: Client timeouts increasing"
+          ],
+          "data": {
+            "Status": "SLOW",
+            "Queued Requests": "312",
+            "Upstream Targets": "1 (analytics-server only)"
+          },
+          "status": "Only one upstream analytics target. Cannot distribute load."
+        }
+      },
+      {
+        "id": "precinct-dashboard",
+        "type": "client",
+        "label": "Precinct Dashboards",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Precinct Dashboard Clients",
+          "logs": [
+            "[08:16:00] WARN: Dashboard loading time > 40s",
+            "[08:16:15] ERROR: Crime trend widget timed out"
+          ],
+          "data": {
+            "Active Users": "85",
+            "Avg Load Time": "42s",
+            "Timeout Rate": "34%"
+          },
+          "status": "Dashboards extremely slow due to analytics server bottleneck."
+        }
+      },
+      {
+        "id": "batch-processor",
+        "type": "client",
+        "label": "Batch Processor",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Overnight Batch Processor",
+          "logs": [
+            "[00:00:01] INFO: Nightly batch started",
+            "[14:12:33] WARN: Batch still running — expected completion in 3h",
+            "[14:12:34] WARN: Competing with daytime queries for CPU"
+          ],
+          "data": {
+            "Batch Duration": "14h 12m (target: 3h)",
+            "Records Processed": "12.4M",
+            "Status": "RUNNING BEHIND"
+          },
+          "status": "Batch job competing for resources on the single server."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-api-analytics",
+        "source": "district-api",
+        "target": "analytics-server",
+        "label": "queries",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-dashboard-api",
+        "source": "precinct-dashboard",
+        "target": "district-api",
+        "label": "requests",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-batch-analytics",
+        "source": "batch-processor",
+        "target": "analytics-server",
+        "label": "batch jobs",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến hệ thống phân tích không thể đáp ứng nhu cầu tăng trưởng là gì?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Phần mềm phân tích dữ liệu bị lỗi cú pháp trong vòng lặp tính toán",
+          "correct": false,
+          "feedback": "Thuật toán hoàn toàn hợp lệ, chỉ là khối lượng dữ liệu phân tích đã vượt quá sức chứa của một máy."
+        },
+        {
+          "id": "rc-1",
+          "text": "Bộ vi xử lý của máy chủ bị tích bụi làm giảm hiệu suất tản nhiệt",
+          "correct": false,
+          "feedback": "Vấn đề không phải tản nhiệt mà là giới hạn vật lý của kiến trúc máy chủ đơn lẻ."
+        },
+        {
+          "id": "rc-2",
+          "text": "Phụ thuộc vào chiến lược mở rộng theo chiều dọc (Vertical Scaling / Scale Up) — vốn luôn có trần giới hạn phần cứng và chi phí tăng phi mã",
+          "correct": true,
+          "feedback": "Chính xác! Scale Up chỉ giúp trì hoãn vấn đề. Đến một ngưỡng nhất định, bạn không thể mua được linh kiện mạnh hơn, và chiếc máy duy nhất đó sẽ trở thành nút thắt cổ chai không thể vượt qua."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hệ điều hành Linux bị giới hạn không cho phép chạy quá 100 tiến trình",
+          "correct": false,
+          "feedback": "Linux hỗ trợ hàng chục ngàn tiến trình đồng thời; giới hạn ở đây là tài nguyên tính toán thực tế."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp kiến trúc dài hạn bền vững để hệ thống có thể mở rộng không giới hạn là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Tắt bớt các thuật toán phân tích và chỉ dự báo tội phạm dựa trên linh cảm",
+          "correct": false,
+          "feedback": "Phương pháp cảm tính không đáp ứng tiêu chuẩn khoa học hình sự hiện đại."
+        },
+        {
+          "id": "fix-2",
+          "text": "Chờ đợi 5 năm nữa để các hãng chip sản xuất ra loại CPU mạnh hơn",
+          "correct": false,
+          "feedback": "Sở cảnh sát không thể dừng công tác phòng chống tội phạm để chờ đợi tiến trình công nghệ tương lai."
+        },
+        {
+          "id": "fix-1",
+          "text": "Tái cấu trúc hệ thống sang mô hình Mở Rộng Theo Chiều Ngang (Horizontal Scaling / Scale Out) — chia nhỏ tác vụ để chạy song song trên cụm nhiều máy chủ thông thường (Commodity Hardware)",
+          "correct": true,
+          "feedback": "Chính xác! Mở rộng ngang cho phép bạn bổ sung thêm 5, 10 hay 100 máy chủ bất kỳ lúc nào để tăng sức mạnh tính toán mà không bị giới hạn bởi trần phần cứng của một máy đơn lẻ."
+        },
+        {
+          "id": "fix-4",
+          "text": "Chuyển toàn bộ dữ liệu phân tích sang phần mềm bảng tính Excel",
+          "correct": false,
+          "feedback": "Excel có giới hạn 1 triệu dòng và không thể xử lý khối lượng dữ liệu lớn phân tán."
+        }
+      ]
+    }
+  },
+  "conceptId": "horizontal-scaling",
+  "badge": {
+    "name": "Bậc Thầy Mở Rộng Ngang",
+    "icon": "📐"
+  }
+}

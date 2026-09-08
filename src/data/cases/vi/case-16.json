@@ -1,0 +1,217 @@
+{
+  "id": "case-16",
+  "number": 16,
+  "title": "Đống Hỗn Loạn Cache (The Dog Pile)",
+  "subtitle": "Hàng trăm yêu cầu đồng loạt tranh giành nhau tái tạo một mục dữ liệu duy nhất",
+  "brief": {
+    "narrative": "Vụ cướp ngân hàng trung tâm vừa xảy ra, danh tính tên cướp khét tiếng 'Bóng Ma' được công bố. Hàng trăm đồn cảnh sát và hàng ngàn xe tuần tra cùng lúc mở hồ sơ của tên này để xem nhận dạng. Đúng lúc đó, khóa cache của tên cướp vừa hết hạn. Thay vì chỉ một máy chủ đi tính toán lại, hơn 300 luồng xử lý trên 10 máy chủ ứng dụng cùng lúc thấy cache miss và cùng chạy câu lệnh SQL phức tạp gồm 8 phép JOIN để dựng lại hồ sơ! Cơ sở dữ liệu bị kẹt cứng trong 'đống hỗn loạn' (Dog Pile / Cache Stampede) khi 300 luồng tranh giành nhau tính toán lại một việc giống hệt nhau. Hãy lập lại trật tự, Thám tử!",
+    "symptoms": [
+      "Một khóa dữ liệu đơn lẻ có tần suất truy cập cực cao bị trượt cache (Hot Key Miss)",
+      "Hàng trăm tiến trình ứng dụng cùng chạy truy vấn SQL nặng nề để tính toán lại cùng một dữ liệu",
+      "Cơ sở dữ liệu bị bóp nghẹt bởi các truy vấn trùng lặp 100% về nội dung",
+      "Thời gian phản hồi hồ sơ tăng từ 2ms lên 45 giây"
+    ],
+    "objective": "Áp dụng kỹ thuật Khóa Bộ Đệm Phân Tán (Mutex Locking) hoặc Gộp Yêu Cầu (Singleflight / Request Coalescing) để chỉ một tiến trình được phép tái tạo cache."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "cache",
+        "type": "server",
+        "label": "Redis Cache",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Redis Cache",
+          "logs": [
+            "[10:30:00.000] INFO: Key 'most-wanted-top10' expired (TTL reached)",
+            "[10:30:00.001] INFO: Cache MISS for 'most-wanted-top10' (request #1)",
+            "[10:30:00.002] INFO: Cache MISS for 'most-wanted-top10' (request #2)",
+            "[10:30:00.050] INFO: Cache MISS for 'most-wanted-top10' (requests #3-#100)",
+            "[10:30:00.200] INFO: No lock mechanism — all requests fall through to DB"
+          ],
+          "data": {
+            "Key": "most-wanted-top10",
+            "Status": "EXPIRED",
+            "Concurrent Misses": "100+ in 200ms",
+            "Lock/Mutex": "Not configured",
+            "Normal Hit Rate": "99.8%"
+          },
+          "status": "Key expired. No cache lock — all concurrent requests miss and hit DB independently."
+        }
+      },
+      {
+        "id": "api-fleet",
+        "type": "server",
+        "label": "API Servers (x8)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "API Server Fleet",
+          "logs": [
+            "[10:30:00.010] INFO: Cache miss — querying DB for most-wanted-top10",
+            "[10:30:00.011] INFO: Cache miss — querying DB for most-wanted-top10",
+            "[10:30:00.012] INFO: (x100) All servers independently querying DB for same key",
+            "[10:30:03.200] INFO: DB finally responded — writing back to cache"
+          ],
+          "data": {
+            "Concurrent DB Queries": "100+ (all identical)",
+            "Avg Response Time": "12s (normally 50ms)",
+            "Status": "DOG PILE IN PROGRESS"
+          },
+          "status": "All API instances independently trying to rebuild the same cache entry."
+        }
+      },
+      {
+        "id": "database",
+        "type": "database",
+        "label": "Wanted Persons DB",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Wanted Persons Database",
+          "logs": [
+            "[10:30:00.050] WARN: 100 identical queries received for most-wanted aggregation",
+            "[10:30:00.100] WARN: CPU spike to 100% from duplicate work",
+            "[10:30:02.000] WARN: Query time inflated from 200ms to 3000ms due to contention"
+          ],
+          "data": {
+            "Duplicate Queries": "100+ (identical)",
+            "CPU": "100%",
+            "Normal Query Time": "200ms",
+            "Current Query Time": "3000ms",
+            "Status": "OVERLOADED BY DUPLICATES"
+          },
+          "status": "Executing 100 copies of the same expensive query simultaneously."
+        }
+      },
+      {
+        "id": "users",
+        "type": "client",
+        "label": "Public Portal",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 370
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Public Most Wanted Portal",
+          "logs": [
+            "[10:30:01] WARN: Page load time exceeding 10s",
+            "[10:30:05] ERROR: Multiple timeout errors reported"
+          ],
+          "data": {
+            "Active Users": "~2,000",
+            "Requests/sec": "500",
+            "Avg Response": "12s (normally 50ms)"
+          },
+          "status": "Users experiencing severe slowdown during cache rebuild."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-api-cache",
+        "source": "api-fleet",
+        "target": "cache",
+        "label": "cache miss",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "api-fleet",
+        "target": "database",
+        "label": "100x same query",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-users-api",
+        "source": "users",
+        "target": "api-fleet",
+        "label": "500 req/sec",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Hiện tượng hàng trăm tiến trình cùng lúc lao vào tính toán lại cùng một mục dữ liệu cache bị trượt được gọi là gì?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Hiện tượng Đống Hỗn Loạn (Dog Pile / Cache Stampede) trên một Hot Key — thiếu cơ chế đồng bộ hóa khiến hàng trăm luồng cùng làm một công việc trùng lặp gây quá tải DB",
+          "correct": true,
+          "feedback": "Chính xác! Khi không có cơ chế khóa, mọi luồng đều nghĩ mình có nghĩa vụ phải đi nạp lại cache. Kết quả là 300 tiến trình cùng đè bẹp database để tính ra một kết quả y hệt nhau."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hồ sơ của tên cướp có dung lượng quá lớn làm hỏng giao thức TCP",
+          "correct": false,
+          "feedback": "Dữ liệu hồ sơ chỉ vài chục kilobyte, hoàn toàn trong chuẩn TCP."
+        },
+        {
+          "id": "rc-4",
+          "text": "Mạng nội bộ của sở cảnh sát bị đứt cáp quang",
+          "correct": false,
+          "feedback": "Mạng hoàn toàn thông suốt; chính lưu lượng truy vấn nội bộ đã gây nghẽn máy chủ."
+        },
+        {
+          "id": "rc-1",
+          "text": "Lỗi vòng lặp đệ quy vô tận trong tầng xử lý giao diện người dùng",
+          "correct": false,
+          "feedback": "Không có lỗi đệ quy; đây là vấn đề tranh chấp tài nguyên đồng thời ở tầng backend."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Mẫu thiết kế nào giúp đảm bảo chỉ có duy nhất một tiến trình được phép truy vấn database để nạp lại cache cho hot key?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Sử dụng Khóa Mutex Phân Tán (ví dụ: Redis SETNX) hoặc thư viện Gộp Yêu Cầu (Singleflight) — luồng đầu tiên giữ khóa đi nạp DB, các luồng khác chờ và nhận kết quả dùng chung",
+          "correct": false,
+          "feedback": "Chính xác! Với Singleflight hoặc Mutex, luồng đầu tiên giành được khóa sẽ đi tính toán dữ liệu trong DB. 299 luồng còn lại sẽ kiên nhẫn chờ đợi và cùng chia sẻ kết quả mà luồng thứ nhất vừa mang về. Database chỉ phải chạy đúng 1 truy vấn duy nhất!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Khởi động lại toàn bộ máy chủ cơ sở dữ liệu mỗi khi có hot key",
+          "correct": true,
+          "feedback": "Khởi động lại làm gián đoạn toàn bộ các dịch vụ khác và khiến tình trạng nghẽn thêm trầm trọng."
+        },
+        {
+          "id": "fix-4",
+          "text": "Tăng bộ nhớ RAM của cơ sở dữ liệu lên gấp 10 lần",
+          "correct": false,
+          "feedback": "Tăng RAM không giải quyết được vấn đề thuật toán lãng phí tài nguyên CPU cho 300 phép JOIN trùng lặp."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấm các sĩ quan tuần tra không được xem hồ sơ của tên cướp cùng một lúc",
+          "correct": false,
+          "feedback": "Trong tình huống truy bắt khẩn cấp, mọi sĩ quan đều cần xem nhận dạng ngay lập tức."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-locking",
+  "badge": {
+    "name": "Chuyên Viên Gộp Yêu Cầu",
+    "icon": "🔨"
+  }
+}

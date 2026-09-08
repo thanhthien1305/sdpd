@@ -1,0 +1,221 @@
+{
+  "id": "case-29",
+  "number": 29,
+  "title": "Thảm Họa Phân Giải Tên Miền (The DNS Disaster)",
+  "subtitle": "Khi một máy chủ chuyển nhà và không ai nhận được địa chỉ mới",
+  "brief": {
+    "narrative": "Để nâng cấp hạ tầng, đội ngũ IT đã di dời Máy Chủ Cơ Sở Dữ Liệu Hồ Sơ Tội Phạm từ trung tâm dữ liệu cũ sang trung tâm dữ liệu mới với dải IP mới toanh. Địa chỉ tên miền 'db.records.police.local' đã được cập nhật bản ghi DNS trỏ sang IP mới thành công. Tuy nhiên, lập trình viên cấu hình TTL của bản ghi DNS trước đó là... 7 ngày (604.800 giây)! Ngoài ra, máy ảo Java của các ứng dụng phía client còn bật tính năng 'networkaddress.cache.ttl = -1' (lưu cache DNS vĩnh viễn không bao giờ hết hạn)! Kết quả là: suốt 48 giờ sau khi máy chủ cũ bị dỡ bỏ, hàng ngàn ứng dụng xe tuần tra vẫn miệt mài gửi dữ liệu vào địa chỉ IP chết của phòng máy cũ đã tắt đèn! Cả sở cảnh sát bị tê liệt vì không ai tìm thấy cơ sở dữ liệu. Thám tử, hãy giải mã thảm họa tên miền này!",
+    "symptoms": [
+      "Máy chủ cơ sở dữ liệu đã chuyển sang địa chỉ IP mới thành công",
+      "Các máy khách (Clients) vẫn tiếp tục cố gắng kết nối tới địa chỉ IP cũ đã ngừng hoạt động",
+      "Bản ghi DNS được cấu hình thời gian sống TTL quá dài (7 ngày)",
+      "Môi trường thực thi ứng dụng (JVM) lưu cache phân giải DNS vĩnh viễn trong suốt vòng đời tiến trình"
+    ],
+    "objective": "Làm chủ cơ chế Phát Hiện Dịch Vụ (Service Discovery), cấu hình DNS TTL hợp lý (vài giây) và xử lý triệt để bộ nhớ đệm DNS ở tầng client."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "evidence-tracker",
+        "type": "server",
+        "label": "Evidence Tracker (new)",
+        "status": "healthy",
+        "position": {
+          "x": 400,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Evidence Tracker Service (New Server)",
+          "logs": [
+            "[02:15:00] INFO: Service started on 10.0.5.47:8080",
+            "[02:15:01] INFO: Database connection established",
+            "[02:15:02] INFO: Health check passing — all systems nominal",
+            "[02:16:00] WARN: No incoming requests in 60s — unusually quiet",
+            "[02:20:00] WARN: Still no incoming requests — 5 minutes of silence"
+          ],
+          "data": {
+            "IP Address": "10.0.5.47 (NEW)",
+            "Old IP": "10.0.5.31 (DECOMMISSIONED)",
+            "Status": "HEALTHY — accepting requests",
+            "Requests Received": "0 since startup",
+            "Registered In": "No service registry exists"
+          },
+          "status": "Service is healthy and ready but no clients can find it at the new IP."
+        }
+      },
+      {
+        "id": "forensics-lab",
+        "type": "client",
+        "label": "Forensics Lab",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensics Lab Portal",
+          "logs": [
+            "[02:16:05] INFO: Submitting DNA evidence report for Case #7821",
+            "[02:16:05] ERROR: Connection refused to 10.0.5.31:8080",
+            "[02:16:10] ERROR: Retry 1 — Connection refused to 10.0.5.31:8080",
+            "[02:16:15] ERROR: Retry 2 — Connection refused to 10.0.5.31:8080",
+            "[02:16:20] ERROR: Evidence submission failed — Evidence Tracker unreachable"
+          ],
+          "data": {
+            "Config File": "forensics-lab.conf",
+            "evidence_tracker_host": "10.0.5.31 (HARDCODED - STALE)",
+            "Last Config Update": "6 months ago",
+            "Discovery Method": "Manual IP in config file"
+          },
+          "status": "Cannot reach Evidence Tracker — still pointing to decommissioned IP."
+        }
+      },
+      {
+        "id": "court-liaison",
+        "type": "client",
+        "label": "Court Liaison",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 220
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Court Liaison Portal",
+          "logs": [
+            "[02:17:00] INFO: Requesting evidence chain-of-custody for Case #6554",
+            "[02:17:01] ERROR: Connection refused to 10.0.5.31:8080",
+            "[02:17:30] ERROR: Evidence chain request failed — service unreachable"
+          ],
+          "data": {
+            "Config File": "court-liaison.yaml",
+            "evidence_api_url": "http://10.0.5.31:8080/api (HARDCODED - STALE)",
+            "Last Config Update": "4 months ago",
+            "Discovery Method": "Manual IP in config file"
+          },
+          "status": "Cannot retrieve evidence records — pointing to old IP address."
+        }
+      },
+      {
+        "id": "patrol-upload",
+        "type": "client",
+        "label": "Patrol Evidence Upload",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 390
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Evidence Upload App",
+          "logs": [
+            "[02:18:00] INFO: Officer uploading body-cam footage for Incident #9203",
+            "[02:18:01] ERROR: Connection refused to 10.0.5.31:8080",
+            "[02:18:05] ERROR: Upload failed — Evidence Tracker unreachable",
+            "[02:18:10] WARN: Queueing upload locally — will retry when service available"
+          ],
+          "data": {
+            "Config File": "patrol-upload.env",
+            "EVIDENCE_HOST": "10.0.5.31 (HARDCODED - STALE)",
+            "Last Config Update": "8 months ago",
+            "Queued Uploads": "23 (growing)"
+          },
+          "status": "Cannot upload evidence — hardcoded IP points to decommissioned server."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-forensics-evidence",
+        "source": "forensics-lab",
+        "target": "evidence-tracker",
+        "label": "10.0.5.31 (wrong IP)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-court-evidence",
+        "source": "court-liaison",
+        "target": "evidence-tracker",
+        "label": "10.0.5.31 (wrong IP)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-patrol-evidence",
+        "source": "patrol-upload",
+        "target": "evidence-tracker",
+        "label": "10.0.5.31 (wrong IP)",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao các ứng dụng cảnh sát vẫn tiếp tục gửi dữ liệu về địa chỉ IP cũ đã tắt suốt 48 giờ sau khi di dời?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Tin tặc đã thực hiện tấn công đầu độc bộ đệm DNS (DNS Cache Poisoning)",
+          "correct": true,
+          "feedback": "Không có tấn công mạng; sự cố hoàn toàn do cấu hình TTL và chính sách cache DNS nội bộ."
+        },
+        {
+          "id": "rc-1",
+          "text": "Máy chủ cơ sở dữ liệu mới bị cháy card mạng nên từ chối kết nối",
+          "correct": false,
+          "feedback": "Máy chủ mới hoạt động hoàn toàn bình thường và sẵn sàng tiếp nhận kết nối."
+        },
+        {
+          "id": "rc-2",
+          "text": "Thời gian sống DNS TTL quá dài (7 ngày) kết hợp với bộ đệm DNS vô hạn ở tầng ứng dụng (JVM DNS caching) khiến client không bao giờ thực hiện phân giải lại tên miền để nhận IP mới",
+          "correct": false,
+          "feedback": "Chính xác! Khi client lưu cache DNS quá lâu hoặc vĩnh viễn, việc thay đổi IP trên DNS server trở nên vô tác dụng đối với các tiến trình đang chạy. Chúng sẽ tiếp tục đâm đầu vào IP cũ cho đến khi tiến trình được khởi động lại."
+        },
+        {
+          "id": "rc-4",
+          "text": "Tên miền của sở cảnh sát bị tổ chức quốc tế thu hồi",
+          "correct": false,
+          "feedback": "Đây là tên miền nội bộ mạng riêng (.local), không thuộc quản lý của tổ chức quốc tế."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp chuẩn mực để quản lý địa chỉ dịch vụ động và di dời hạ tầng mà không gây gián đoạn là gì?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Giữ nguyên máy chủ cũ chạy mãi mãi tại phòng máy cũ",
+          "correct": true,
+          "feedback": "Không thể duy trì hạ tầng cũ lỗi thời khi cần nâng cấp công nghệ."
+        },
+        {
+          "id": "fix-1",
+          "text": "Hạ thấp DNS TTL xuống mức ngắn (ví dụ: 5-30 giây) trước khi chuyển đổi, cấu hình client JVM cache DNS trong thời gian ngắn (ví dụ: 30 giây), hoặc sử dụng hệ thống Phát Hiện Dịch Vụ chuyên dụng (Service Discovery như Consul, Eureka, Envoy hoặc K8s CoreDNS)",
+          "correct": false,
+          "feedback": "Chính xác! Hạ thấp TTL trước khi bảo trì giúp client nhanh chóng cập nhật IP mới trong vài giây. Sử dụng các hệ thống Service Discovery chuyên dụng hoặc mesh proxy (Envoy) giúp việc định tuyến tự động hội tụ ngay khi máy chủ di dời."
+        },
+        {
+          "id": "fix-3",
+          "text": "Đi đến từng xe tuần tra trong thành phố và cài đặt lại hệ điều hành thủ công",
+          "correct": false,
+          "feedback": "Cài đặt thủ công hàng ngàn thiết bị mất hàng tuần và cực kỳ tốn kém nhân lực."
+        },
+        {
+          "id": "fix-4",
+          "text": "Gán cứng địa chỉ IP trực tiếp vào trong mã nguồn của ứng dụng",
+          "correct": false,
+          "feedback": "Gán cứng IP là sai lầm sơ đẳng, khiến việc thay đổi máy chủ trong tương lai bắt buộc phải biên dịch lại toàn bộ ứng dụng."
+        }
+      ]
+    }
+  },
+  "conceptId": "service-discovery",
+  "badge": {
+    "name": "Bậc Thầy Định Tuyến Tên Miền",
+    "icon": "🔭"
+  }
+}

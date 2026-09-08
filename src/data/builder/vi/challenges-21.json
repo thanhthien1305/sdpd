@@ -1,0 +1,70 @@
+{
+  "id": "builder-21",
+  "number": 21,
+  "title": "Chi Phí API Bằng Chứng Tăng Vọt",
+  "subtitle": "Phục vụ các yêu cầu đọc bằng chứng giống hệt nhau khiến chi phí điện toán tăng phi mã",
+  "objective": "Tối ưu hóa chi phí vận hành bằng cách đưa nội dung đọc tĩnh và bán tĩnh ra biên mạng.",
+  "constraints": [
+    "Cắt giảm ít nhất 80% số lượng cuộc gọi tới máy chủ ứng dụng API",
+    "Duy trì tính xác thực và an toàn của các tệp bằng chứng kỹ thuật số",
+    "Phản hồi tức thì cho người dùng từ các điểm mạng gần nhất"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "cache",
+    "loadBalancer",
+    "api",
+    "database",
+    "queue"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Lưu Đệm Biên Mạng Bằng CDN",
+      "description": "CDN phục vụ nội dung hình ảnh, video phổ biến trực tiếp cho người dùng.",
+      "requiredAnyOf": [
+        "cdn",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Bộ Nhớ Đệm Tầng Dịch Vụ",
+      "description": "Cache giảm tải các yêu cầu xác thực và thông tin bằng chứng lặp lại.",
+      "requiredAll": [
+        "api",
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Tối Thiểu Hóa Tính Toán API",
+      "description": "API chỉ phải xử lý các yêu cầu chưa có trong bộ nhớ đệm.",
+      "requiredAll": [
+        "loadBalancer"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ],
+      "discouragedComponents": [
+        "queue"
+      ]
+    }
+  ]
+}

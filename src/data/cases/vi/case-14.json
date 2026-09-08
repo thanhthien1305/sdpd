@@ -1,0 +1,213 @@
+{
+  "id": "case-14",
+  "number": 14,
+  "title": "Bản Ghi Bóng Ma (The Ghost Record)",
+  "subtitle": "Hồ sơ tội phạm đã xóa vẫn tiếp tục ám ảnh hệ thống",
+  "brief": {
+    "narrative": "Tòa án tối cao vừa tuyên bố nghi phạm Arthur Pendelton hoàn toàn vô tội và ra lệnh xóa sạch toàn bộ hồ sơ tiền án của anh ta khỏi hệ thống. Quản trị viên cơ sở dữ liệu đã chạy lệnh DELETE và xác nhận bản ghi đã biến mất hoàn toàn trong bảng MySQL. Tuy nhiên, sáng nay khi Pendelton đi xin việc, cảnh sát khu vực tra cứu và vẫn thấy hiện lên tiền án 'Cướp có vũ trang' và bắt giữ anh ta lại! Hóa ra hồ sơ đó đã được lưu trong bộ đệm Redis với TTL 7 ngày, và khi lệnh DELETE được thực thi ở cơ sở dữ liệu, không ai phát lệnh xóa khóa tương ứng trong Redis! Bản ghi bóng ma vẫn tiếp tục tồn tại suốt cả tuần. Hãy giải cứu Pendelton, Thám tử!",
+    "symptoms": [
+      "Bản ghi đã bị xóa hoàn toàn khỏi cơ sở dữ liệu nguồn (Source of Truth)",
+      "Bộ nhớ đệm Redis vẫn tiếp tục trả về dữ liệu cũ cho đến khi hết hạn TTL",
+      "Hệ thống không có cơ chế tự động Hủy Hiệu Lực Cache (Cache Invalidation) khi dữ liệu nguồn thay đổi",
+      "Người dùng nhận được thông tin sai lệch nghiêm trọng về mặt pháp lý"
+    ],
+    "objective": "Thiết lập cơ chế Hủy Hiệu Lực Cache (Cache Invalidation) chuẩn xác thông qua mẫu Cache-Aside (xóa cache khi ghi) hoặc Event-Driven Invalidation."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "records-db",
+        "type": "database",
+        "label": "Records Database",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Criminal Records Database",
+          "logs": [
+            "[3 weeks ago] INFO: DELETE record #CR-8847 executed (court order #2024-1192)",
+            "[3 weeks ago] INFO: Record #CR-8847 confirmed removed from all tables",
+            "[Today] INFO: Query for #CR-8847 returns: NO RECORD FOUND"
+          ],
+          "data": {
+            "Status": "HEALTHY",
+            "Record #CR-8847": "DELETED (3 weeks ago)",
+            "Deletion Confirmed": "Yes — court order #2024-1192"
+          },
+          "status": "Database is correct. Record was properly deleted."
+        }
+      },
+      {
+        "id": "cache-layer",
+        "type": "server",
+        "label": "Redis Cache",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Redis Cache Layer",
+          "logs": [
+            "[3 weeks ago] INFO: Cache entry for #CR-8847 created with TTL 30d",
+            "[Today] INFO: Cache HIT for #CR-8847 — serving cached data",
+            "[Today] WARN: No cache invalidation triggered on record deletion",
+            "[Today] INFO: TTL remaining for #CR-8847: 9 days"
+          ],
+          "data": {
+            "Status": "SERVING STALE DATA",
+            "Cache Key": "record:CR-8847",
+            "Cached Value": "{name: 'J. Doe', priors: 'felony', status: 'active'}",
+            "TTL Remaining": "9 days",
+            "Invalidation Policy": "None — TTL expiry only"
+          },
+          "status": "Cache still holds the deleted record. No invalidation was triggered on delete."
+        }
+      },
+      {
+        "id": "api-server",
+        "type": "server",
+        "label": "Lookup API",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 350
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Record Lookup API",
+          "logs": [
+            "[Today 09:15:00] INFO: Lookup request for #CR-8847",
+            "[Today 09:15:00] INFO: Cache HIT — returning cached result",
+            "[Today 09:15:00] INFO: Database NOT queried (cache served response)"
+          ],
+          "data": {
+            "Cache Hit Rate": "94%",
+            "DB Queries Bypassed": "94% of lookups",
+            "Invalidation on Write": "NOT CONFIGURED"
+          },
+          "status": "API serves cached data without checking if source record still exists."
+        }
+      },
+      {
+        "id": "officer-terminal",
+        "type": "client",
+        "label": "Officer MDT",
+        "status": "degraded",
+        "position": {
+          "x": 550,
+          "y": 350
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Mobile Data Terminal",
+          "logs": [
+            "[Today 09:15:01] INFO: Record lookup for suspect returned: PRIOR FELONY",
+            "[Today 09:15:02] WARN: Officer escalated stop based on displayed record"
+          ],
+          "data": {
+            "Displayed Record": "Prior felony — ACTIVE",
+            "Actual Record": "EXPUNGED (deleted 3 weeks ago)",
+            "Data Source": "Served from cache, not database"
+          },
+          "status": "Displaying stale cached data that no longer exists in the database."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cache-db",
+        "source": "cache-layer",
+        "target": "records-db",
+        "label": "read-through",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-cache",
+        "source": "api-server",
+        "target": "cache-layer",
+        "label": "cache lookup",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-terminal-api",
+        "source": "officer-terminal",
+        "target": "api-server",
+        "label": "lookup request",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao bản ghi đã bị xóa trong cơ sở dữ liệu vẫn tiếp tục hiển thị trên màn hình tra cứu của cảnh sát?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Thiếu cơ chế Hủy Hiệu Lực Cache (Cache Invalidation) — tầng ứng dụng chỉ xóa dữ liệu trong DB mà không chủ động xóa hoặc cập nhật khóa tương ứng trong bộ nhớ đệm Redis",
+          "correct": true,
+          "feedback": "Chính xác! Đây là bài học kinh điển về tính nhất quán giữa Cache và DB. Nếu bạn thay đổi hoặc xóa dữ liệu ở tầng lưu trữ chính mà quên xóa cache, cache sẽ tiếp tục trả về 'bản ghi bóng ma' cho tới khi nó tự hết hạn TTL."
+        },
+        {
+          "id": "rc-3",
+          "text": "Màn hình máy tính của cảnh sát bị hiện tượng lưu ảnh (burn-in)",
+          "correct": false,
+          "feedback": "Hiện tượng vật lý màn hình không thể tự sinh ra dữ liệu truy vấn từ server."
+        },
+        {
+          "id": "rc-1",
+          "text": "Lệnh DELETE trong MySQL bị lỗi khóa bảng nên chưa thực sự xóa dữ liệu",
+          "correct": false,
+          "feedback": "Kiểm tra trực tiếp trong MySQL cho thấy dòng dữ liệu đã biến mất 100%."
+        },
+        {
+          "id": "rc-4",
+          "text": "Trình duyệt web của người dùng đã tự động khôi phục lại bản ghi từ lịch sử duyệt web",
+          "correct": false,
+          "feedback": "Dữ liệu được trả về trực tiếp từ API backend thông qua Redis."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cách thức xử lý chuẩn xác nhất khi cập nhật hoặc xóa dữ liệu trong mô hình Cache-Aside là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Yêu cầu cảnh sát nhấn phím F5 ba lần mỗi khi tra cứu hồ sơ nghi phạm",
+          "correct": false,
+          "feedback": "F5 chỉ tải lại trang web nhưng request vẫn sẽ lấy dữ liệu cũ từ Redis trả về."
+        },
+        {
+          "id": "fix-1",
+          "text": "Áp dụng chiến lược Xóa Cache Khi Ghi (Write-Invalidate): Bất cứ khi nào một bản ghi bị sửa hoặc xóa trong DB, ứng dụng phải lập tức xóa ngay khóa đó khỏi Redis (hoặc dùng CDC - Change Data Capture lắng nghe binlog để xóa cache tự động)",
+          "correct": false,
+          "feedback": "Chính xác! Khi bản ghi bị xóa hoặc sửa, việc xóa ngay lập tức khóa cache tương ứng sẽ đảm bảo lần tra cứu kế tiếp chắc chắn sẽ truy vấn xuống DB và nhận được trạng thái mới nhất, loại bỏ hoàn toàn hiện tượng dữ liệu ma."
+        },
+        {
+          "id": "fix-2",
+          "text": "Đặt thời gian sống TTL của toàn bộ cache về mức vô hạn để không bao giờ phải nạp lại",
+          "correct": true,
+          "feedback": "Đặt TTL vô hạn sẽ khiến dữ liệu cũ tồn tại vĩnh viễn và không bao giờ biến mất."
+        },
+        {
+          "id": "fix-3",
+          "text": "Xóa toàn bộ cơ sở dữ liệu Redis mỗi khi có bất kỳ ai sửa đổi một dòng dữ liệu",
+          "correct": false,
+          "feedback": "Xóa trắng toàn bộ Redis (FLUSHALL) sẽ gây ra thảm họa Bão trượt cache (Cache Stampede) làm sập database."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-invalidation",
+  "badge": {
+    "name": "Chuyên Viên Trừ Tà Cache",
+    "icon": "👻"
+  }
+}

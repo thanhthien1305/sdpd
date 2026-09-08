@@ -26,9 +26,9 @@
     --color-status-failed: #f87171;
 
     /* ── Typography ── */
-    --font-display: "Bebas Neue", "Impact", sans-serif;
-    --font-mono: "Space Mono", "Courier New", monospace;
-    --font-sans: "DM Sans", system-ui, sans-serif;
+    --font-display: "Montserrat", "Bebas Neue", "Impact", sans-serif;
+    --font-mono: "JetBrains Mono", "Space Mono", monospace;
+    --font-sans: "Be Vietnam Pro", "DM Sans", system-ui, sans-serif;
 }
 
 /* ── Base ── */
@@ -36,6 +36,8 @@ body {
     @apply bg-noir-950 text-white font-sans;
     margin: 0;
     overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -44,20 +46,9 @@ body {
     position: relative;
 }
 
-/* ── Scan-line Overlay ── */
+/* ── Scan-line Overlay (disabled to prevent visual moire and eye strain) ── */
 #root::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 9999;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0, 0, 0, 0.03) 2px,
-        rgba(0, 0, 0, 0.03) 4px
-    );
+    display: none;
 }
 
 /* ── Noise Grain Texture ── */

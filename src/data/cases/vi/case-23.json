@@ -1,0 +1,218 @@
+{
+  "id": "case-23",
+  "number": 23,
+  "title": "Hàng Nhận Dạng Bất Nhất (The Inconsistent Lineup)",
+  "subtitle": "Hai đồn cảnh sát nhìn thấy hai phiên bản khác nhau của cùng một nghi phạm trong cùng một giờ",
+  "brief": {
+    "narrative": "Đồn Bắc vừa bắt được một nghi phạm cướp có vũ trang và gán ảnh nhận diện mới vào hồ sơ. Cùng lúc đó, đồn Nam đang tổ chức cho nhân chứng nhận diện thủ phạm qua màn hình. Nhân chứng tại đồn Nam chỉ vào màn hình: 'Gã này không có hình xăm rồng trên cổ, không phải hắn!'. Trong khi đó, hồ sơ tại đồn Bắc rõ ràng hiển thị hình xăm rồng mới chụp! Hóa ra mạng bị phân vùng chập chờn, và hệ thống được thiết kế theo mô hình AP (Available / Eventual Consistency) ngây thơ của Định lý CAP: chấp nhận tính sẵn sàng và hy sinh tính nhất quán. Hai đồn đang nhìn vào hai sự thật khác nhau! Nhân chứng bỏ về, kẻ cướp suýt được tại ngoại. Thám tử, hãy lập lại Định lý CAP!",
+    "symptoms": [
+      "Hai đồn cảnh sát đọc cùng một bản ghi tại cùng một thời điểm nhưng nhận được hai dữ liệu khác nhau",
+      "Hệ thống cơ sở dữ liệu phân tán được cấu hình ưu tiên Tuyệt Đối Tính Sẵn Sàng (AP mode)",
+      "Dữ liệu nhận dạng nhạy cảm về mặt pháp lý lại bị áp dụng mô hình Nhất Quán Cuối Cùng (Eventual Consistency)",
+      "Thời gian trễ đối chiếu hợp nhất dữ liệu kéo dài gây sai lệch trong công tác tố tụng hình sự"
+    ],
+    "objective": "Áp dụng Định Lý CAP chuẩn xác: Chuyển đổi các nghiệp vụ pháp lý nhạy cảm sang mô hình Nhất Quán Mạnh (CP mode / Strong Consistency)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "north-precinct",
+        "type": "client",
+        "label": "North Precinct",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "North Precinct Terminal",
+          "logs": [
+            "[16:30:00] INFO: Query suspect 'Reznikov' — reading from DC-North",
+            "[16:30:00] INFO: Result: Status='Cleared', Last Updated='15:50:00'",
+            "[16:30:05] INFO: Officer released suspect based on 'Cleared' status"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Data Center": "DC-North",
+            "Read Consistency": "Local (eventual)",
+            "Reznikov Status Seen": "Cleared — no charges"
+          },
+          "status": "Reading stale data from local DC-North replica. Does not see the update made at DC-South."
+        }
+      },
+      {
+        "id": "dc-north",
+        "type": "database",
+        "label": "DC-North (Replica)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 230
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Data Center North — Database Replica",
+          "logs": [
+            "[15:50:00] INFO: Reznikov record: Status='Cleared'",
+            "[16:20:00] WARN: Replication lag from DC-South: 10 minutes",
+            "[16:30:00] WARN: Still awaiting replication of Reznikov update from DC-South"
+          ],
+          "data": {
+            "Status": "ONLINE (stale data)",
+            "Replication Mode": "Async from DC-South",
+            "Replication Lag": "10+ minutes",
+            "Reznikov Record Version": "v3 (outdated)",
+            "Consistency Level": "Eventual"
+          },
+          "status": "Serving reads from stale local data. Async replication has not delivered the latest Reznikov update."
+        }
+      },
+      {
+        "id": "south-precinct",
+        "type": "client",
+        "label": "South Precinct",
+        "status": "healthy",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "South Precinct Terminal",
+          "logs": [
+            "[16:20:00] INFO: Updated suspect 'Reznikov' status to 'Prime Suspect'",
+            "[16:30:00] INFO: Query suspect 'Reznikov' — reading from DC-South",
+            "[16:30:00] INFO: Result: Status='Prime Suspect', Last Updated='16:20:00'",
+            "[16:30:10] INFO: Preparing arrest warrant for Reznikov"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Data Center": "DC-South",
+            "Read Consistency": "Local (eventual)",
+            "Reznikov Status Seen": "Prime Suspect — armed and dangerous"
+          },
+          "status": "Reading up-to-date data from local DC-South replica where the write happened."
+        }
+      },
+      {
+        "id": "dc-south",
+        "type": "database",
+        "label": "DC-South (Primary)",
+        "status": "healthy",
+        "position": {
+          "x": 600,
+          "y": 230
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Data Center South — Primary Database",
+          "logs": [
+            "[16:20:00] INFO: Write: Reznikov status updated to 'Prime Suspect' (v4)",
+            "[16:20:01] INFO: Queuing async replication to DC-North",
+            "[16:30:00] WARN: Replication to DC-North delayed — network congestion"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Role": "Primary (accepts writes)",
+            "Reznikov Record Version": "v4 (current)",
+            "Pending Replications": "47 records",
+            "Replication Mode": "Asynchronous"
+          },
+          "status": "Primary database with latest data. Async replication to DC-North is delayed."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-north-dcn",
+        "source": "north-precinct",
+        "target": "dc-north",
+        "label": "read (stale)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-south-dcs",
+        "source": "south-precinct",
+        "target": "dc-south",
+        "label": "read/write",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-dcs-dcn",
+        "source": "dc-south",
+        "target": "dc-north",
+        "label": "async replication (lagging)",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao hai đồn cảnh sát lại nhìn thấy hai phiên bản hồ sơ mâu thuẫn nhau trong một phiên nhận diện tội phạm?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Nhân chứng bị cận thị nên nhìn nhầm hình ảnh",
+          "correct": false,
+          "feedback": "Nhân chứng nhìn đúng những gì màn hình hiển thị; chính máy chủ Đồn Nam đang hiển thị dữ liệu cũ."
+        },
+        {
+          "id": "rc-2",
+          "text": "Lựa chọn sai mô hình trong Định lý CAP — áp dụng tính nhất quán cuối cùng (AP mode) cho dữ liệu pháp lý nhạy cảm, khiến hệ thống ưu tiên trả lời nhanh hơn là trả lời chính xác",
+          "correct": true,
+          "feedback": "Chính xác! Theo định lý CAP, hệ thống AP chấp nhận trả về dữ liệu cũ khi có phân vùng mạng để giữ độ sẵn sàng cao. Nhưng đối với hồ sơ tội phạm và nhận diện nhân chứng, dữ liệu sai lệch là thảm họa pháp lý — hệ thống bắt buộc phải là CP (Strong Consistency)!"
+        },
+        {
+          "id": "rc-3",
+          "text": "Máy ảnh tại Đồn Bắc bị lỗi ống kính tự vẽ thêm hình xăm",
+          "correct": false,
+          "feedback": "Hình xăm là có thật trên cổ nghi phạm ngoài đời thực."
+        },
+        {
+          "id": "rc-4",
+          "text": "Đồn Nam chưa thanh toán cước internet tháng này",
+          "correct": false,
+          "feedback": "Hạ tầng mạng nội bộ vẫn đang kết nối nhưng bị trễ lan truyền dữ liệu."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần cấu hình mô hình nhất quán như thế nào cho các nghiệp vụ tư pháp trọng yếu?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Chuyển sang chế độ Nhất Quán Mạnh (CP mode / Strong Consistency / Read Quorum) — bắt buộc truy vấn đọc phải xác thực với đa số các node hoặc đọc từ Leader trước khi hiển thị cho người dùng",
+          "correct": false,
+          "feedback": "Chính xác! Với mô hình CP (R + W > N), mọi truy vấn đọc bắt buộc phải lấy dữ liệu mới nhất được xác nhận bởi đa số cụm máy chủ. Nếu mạng bị gián đoạn chưa đồng bộ xong, hệ thống thà báo 'Đang đồng bộ vui lòng chờ 1 giây' còn hơn trả về dữ liệu cũ làm oan người vô tội!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Chụp ảnh nghi phạm bằng máy ảnh phim lấy ngay Polaroids",
+          "correct": true,
+          "feedback": "Ảnh phim không thể tích hợp vào hệ thống cơ sở dữ liệu số toàn quốc."
+        },
+        {
+          "id": "fix-4",
+          "text": "Xóa hình xăm trên cổ nghi phạm để khớp với màn hình Đồn Nam",
+          "correct": false,
+          "feedback": "Can thiệp thân thể nghi phạm là hành vi vi phạm nhân quyền nghiêm trọng."
+        },
+        {
+          "id": "fix-3",
+          "text": "Yêu cầu nhân chứng quay lại nhận diện sau 30 ngày để đảm bảo dữ liệu đã nhất quán",
+          "correct": false,
+          "feedback": "Tạm giữ nghi phạm quá thời hạn quy định mà không có bằng chứng là vi phạm hiến pháp."
+        }
+      ]
+    }
+  },
+  "conceptId": "cap-theorem",
+  "badge": {
+    "name": "Thẩm Phán Định Lý CAP",
+    "icon": "🧭"
+  }
+}

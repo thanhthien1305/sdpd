@@ -1,0 +1,78 @@
+{
+  "id": "builder-04",
+  "number": 4,
+  "title": "Dự Phòng Luồng Tuần Tra Trực Tiếp",
+  "subtitle": "Luồng tuần tra trực tiếp bị ngắt bất cứ khi nào một node API gặp sự cố",
+  "objective": "Xây dựng tuyến đường chuyển đổi dự phòng (failover) đảm bảo tính sẵn sàng cao cho các cập nhật tuần tra.",
+  "constraints": [
+    "Đảm bảo không có điểm lỗi đơn lẻ (SPOF) ở tầng phục vụ",
+    "Định tuyến lưu lượng qua các node dự phòng khi node chính gặp lỗi",
+    "Bảo vệ cơ sở dữ liệu khỏi việc kết nối trực tiếp từ client"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "blobStorage",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Cân Bằng Tải Sẵn Sàng Cao",
+      "description": "Bộ cân bằng tải định tuyến lại lưu lượng khi các phiên bản API bị lỗi.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Tách Rời Tầng Phục Vụ",
+      "description": "Client giao tiếp qua API thay vì kết nối thẳng tới cơ sở dữ liệu.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Khả Năng Phục Hồi Dữ Liệu",
+      "description": "Sử dụng cơ chế nhân bản cơ sở dữ liệu hoặc cache dự phòng để duy trì hoạt động liên tục.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

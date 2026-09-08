@@ -1,0 +1,73 @@
+{
+  "id": "builder-12",
+  "number": 12,
+  "title": "Cửa Sổ Xử Lý Khám Nghiệm Ban Đêm",
+  "subtitle": "Các công việc xử lý dữ liệu giám định ban đêm tràn sang giờ làm việc ban ngày",
+  "objective": "Tách biệt và tăng tốc độ xử lý hàng loạt mà không gây ảnh hưởng đến hệ thống vận hành trực tiếp.",
+  "constraints": [
+    "Công việc xử lý nặng không được chiếm dụng tài nguyên của giao dịch trực tuyến (OLTP)",
+    "Có khả năng mở rộng xử lý song song khi khối lượng giám định tăng cao",
+    "Ghi nhận kết quả giám định vào lưu trữ lâu dài"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "blobStorage"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Hàng Đợi Xử Lý Hàng Loạt",
+      "description": "Đưa các công việc giám định vào Queue để xử lý theo đợt có trật tự.",
+      "requiredAll": [
+        "api",
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Đội Ngũ Worker Song Song",
+      "description": "Mở rộng các Worker chuyên dụng để xử lý đồng thời nhiều phân tích kỹ thuật số.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "blobStorage"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Phân Tách Lưu Trữ Dữ Liệu",
+      "description": "Lưu trữ các tập tin giám định lớn vào Blob Storage và cập nhật chỉ mục vào DB.",
+      "requiredAll": [
+        "client",
+        "loadBalancer"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "id": "case-20",
+  "number": 20,
+  "title": "Đường Ống Ứ Đọng (The Backed Up Pipeline)",
+  "subtitle": "Hàng đợi điều phối tràn vỡ khi dịch vụ xử lý ngầm bị treo âm thầm",
+  "brief": {
+    "narrative": "Tất cả các camera phạt nguội gắn trên đèn giao thông toàn thành phố liên tục chụp ảnh vi phạm và bắn dữ liệu vào Hàng Đợi Xử Lý Hình Ảnh. Bình thường, cụm 5 worker xử lý 200 ảnh/giây. Lúc 14:00, một bản cập nhật phần mềm thư viện thị giác máy tính bị lỗi rò rỉ bộ nhớ (Memory Leak) khiến toàn bộ 5 worker bị treo đơ ở trạng thái 100% CPU nhưng không hề thoát tiến trình (hang silently). Trong khi đó, hàng ngàn camera ngoài đường vẫn miệt mài bắn ảnh vào hàng đợi với tốc độ 300 ảnh/giây! Hàng đợi thông điệp phình to từ 1.000 lên 2.000.000 tin, nuốt trọn 32GB RAM của broker cho đến khi máy chủ phát nổ lỗi OOM và sập toàn diện. Thám tử, hãy xả van áp lực cho đường ống!",
+    "symptoms": [
+      "Hàng đợi thông điệp tích tụ hơn 2 triệu thông điệp chưa được xử lý (Queue Backlog)",
+      "Các worker xử lý bị treo âm thầm (hang), không tiêu thụ thêm thông điệp nào",
+      "Phía phát tin (Producers / Cameras) tiếp tục bơm dữ liệu vào với tốc độ tối đa không ngừng nghỉ",
+      "Message Broker bị cạn kiệt bộ nhớ RAM và sập hoàn toàn do không có cơ chế Áp Lực Ngược (Backpressure)"
+    ],
+    "objective": "Thiết lập cơ chế Áp Lực Ngược (Backpressure), giám sát độ trễ tiêu thụ (Consumer Lag Alerting) và tự động cắt giảm tải (Load Shedding)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "call-center",
+        "type": "client",
+        "label": "Call Center (Producer)",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Call Center Producer",
+          "logs": [
+            "[03:15:01] INFO: Dispatch order #48,221 published to queue",
+            "[03:15:02] INFO: Dispatch order #48,222 published to queue",
+            "[03:15:02] INFO: Publish rate: 12 msgs/sec",
+            "[03:15:03] WARN: Queue broker reporting high memory usage"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Publish Rate": "12 msgs/sec",
+            "Messages Sent (last hour)": "43,200",
+            "Errors": "0"
+          },
+          "status": "Producer is operating normally. Messages are being accepted by the broker."
+        }
+      },
+      {
+        "id": "queue-broker",
+        "type": "server",
+        "label": "Dispatch Queue Broker",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Queue Broker",
+          "logs": [
+            "[02:30:00] INFO: Consumer 'patrol-dispatcher' disconnected",
+            "[02:30:01] WARN: No active consumers on queue 'dispatch-orders'",
+            "[02:45:00] WARN: Queue depth exceeded 10,000 messages",
+            "[03:00:00] WARN: Queue depth exceeded 30,000 messages",
+            "[03:15:00] CRITICAL: Memory usage at 91% — queue depth 50,412",
+            "[03:15:01] WARN: Approaching max memory limit, may start dropping messages"
+          ],
+          "data": {
+            "Status": "DEGRADED",
+            "Queue Depth": "50,412 messages",
+            "Active Consumers": "0",
+            "Memory Usage": "91%",
+            "Max Memory": "4 GB",
+            "Backpressure Policy": "None configured"
+          },
+          "status": "Queue is filling up with no consumers draining it. No backpressure mechanism is configured."
+        }
+      },
+      {
+        "id": "consumer-service",
+        "type": "server",
+        "label": "Patrol Dispatcher (Consumer)",
+        "status": "failed",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Dispatcher Consumer",
+          "logs": [
+            "[02:29:55] ERROR: OutOfMemoryError in message handler",
+            "[02:29:56] ERROR: Unhandled exception — process crashing",
+            "[02:29:57] FATAL: Consumer process terminated (exit code 137)",
+            "[02:29:57] INFO: No automatic restart policy configured"
+          ],
+          "data": {
+            "Status": "CRASHED",
+            "Last Active": "02:29:57",
+            "Restart Policy": "None",
+            "Messages Processed Before Crash": "5,102"
+          },
+          "status": "Consumer crashed due to OutOfMemoryError 45 minutes ago. No restart policy is in place."
+        }
+      },
+      {
+        "id": "patrol-units",
+        "type": "client",
+        "label": "Patrol Units",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Units",
+          "logs": [
+            "[02:30:05] WARN: No new dispatch orders received",
+            "[02:45:00] WARN: Still no dispatch orders — 15 min gap",
+            "[03:15:00] WARN: Officers idle for 45 minutes, no assignments"
+          ],
+          "data": {
+            "Status": "IDLE",
+            "Active Patrols": "24",
+            "Pending Assignments": "0",
+            "Last Assignment Received": "02:29:55"
+          },
+          "status": "No dispatch orders arriving. Officers are idle and unassigned."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cc-broker",
+        "source": "call-center",
+        "target": "queue-broker",
+        "label": "publish orders",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-broker-consumer",
+        "source": "queue-broker",
+        "target": "consumer-service",
+        "label": "consume orders",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-consumer-patrols",
+        "source": "consumer-service",
+        "target": "patrol-units",
+        "label": "assign patrols",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao hàng đợi thông điệp lại bị phình to vô hạn dẫn đến sập toàn bộ máy chủ Broker?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Các camera giao thông bị hacker điều khiển từ xa để gửi ảnh giả mạo",
+          "correct": false,
+          "feedback": "Không có hacker; lưu lượng là ảnh giao thông thực tế giờ cao điểm."
+        },
+        {
+          "id": "rc-2",
+          "text": "Thiếu cơ chế Áp Lực Ngược (Backpressure) và giới hạn kích thước hàng đợi — Producer tiếp tục bơm dữ liệu với tốc độ cao hơn khả năng tiêu thụ của Consumer cho đến khi cạn kiệt bộ nhớ",
+          "correct": true,
+          "feedback": "Chính xác! Khi bên tiêu thụ bị chậm hoặc tê liệt, nếu không có cơ chế áp lực ngược để bắt bên gửi giảm tốc hoặc từ chối bớt việc, hàng đợi chắc chắn sẽ phát nổ vì cạn kiệt bộ nhớ vật lý."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dung lượng thẻ nhớ trên các camera ngoài đường bị hỏng",
+          "correct": false,
+          "feedback": "Thẻ nhớ camera bình thường; vấn đề xảy ra tại cụm máy chủ trung tâm."
+        },
+        {
+          "id": "rc-4",
+          "text": "Thuật toán mã hóa hình ảnh trên worker sử dụng sai khóa bảo mật",
+          "correct": false,
+          "feedback": "Worker bị treo do lỗi thư viện rò rỉ RAM, không liên quan đến khóa mã hóa."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp toàn diện để bảo vệ hàng đợi trước tình trạng nghẽn tắc và tràn bộ nhớ là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Mua thêm 1TB RAM cắm vào máy chủ Message Broker",
+          "correct": false,
+          "feedback": "Bổ sung RAM chỉ trì hoãn thời điểm sập thêm vài tiếng; nếu worker vẫn không chạy, 1TB RAM cũng sẽ bị lấp đầy."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tắt toàn bộ hệ thống camera giao thông trên toàn thành phố",
+          "correct": false,
+          "feedback": "Tắt camera làm tê liệt công tác kiểm soát an toàn giao thông đô thị."
+        },
+        {
+          "id": "fix-1",
+          "text": "Áp dụng cơ chế Áp Lực Ngược (Backpressure - giới hạn tốc độ Producer / tạm dừng nhận tin khi hàng đợi đầy), đặt trần dung lượng hàng đợi (Max-length with Drop/Reject), và cấu hình cảnh báo Consumer Lag",
+          "correct": true,
+          "feedback": "Chính xác! Đặt giới hạn kích thước tối đa cho hàng đợi (Max Queue Length) buộc broker phải từ chối hoặc chuyển tin sang hàng đợi phụ (Dead Letter) khi vượt ngưỡng, kết hợp cơ chế báo động Consumer Lag để tự động khởi động lại các worker bị treo."
+        },
+        {
+          "id": "fix-4",
+          "text": "Xóa toàn bộ ảnh chụp người vi phạm mỗi 10 phút một lần",
+          "correct": false,
+          "feedback": "Xóa bằng chứng vi phạm khiến cảnh sát không thể phạt nguội và thu ngân sách."
+        }
+      ]
+    }
+  },
+  "conceptId": "backpressure",
+  "badge": {
+    "name": "Chuyên Viên Điều Tiết Áp Lực Ngược",
+    "icon": "🔧"
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "id": "builder-03",
+  "number": 3,
+  "title": "Ùn Tắc Điều Phối Khẩn Cấp",
+  "subtitle": "Các thông báo khẩn cấp bị trễ nghiêm trọng khi hệ thống quá tải",
+  "objective": "Thiết kế kiến trúc xử lý dựa trên hàng đợi nhằm duy trì khả năng phản hồi khi lưu lượng tăng đột biến.",
+  "constraints": [
+    "Tách rời API đồng bộ khỏi các tác vụ nặng cần xử lý bất đồng bộ",
+    "Sử dụng hàng đợi để mở rộng xử lý (fan-out)",
+    "Giữ đường dẫn rõ ràng từ điểm tiếp nhận đến nơi lưu trữ bền vững"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "database",
+    "queue",
+    "worker",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Độ Tin Cậy Khâu Tiếp Nhận",
+      "description": "Đặt cân bằng tải và tầng API làm cổng tiếp nhận yêu cầu.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Kiểm Soát Áp Lực Ngược (Backpressure)",
+      "description": "Hàng đợi và worker hấp thụ các đợt bùng phát lưu lượng trước khi ghi vào lưu trữ.",
+      "requiredAll": [
+        "queue",
+        "worker",
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Tối Ưu Hóa Phản Hồi",
+      "description": "Dùng cache để giảm độ trễ tra cứu dữ liệu điều phối lặp đi lặp lại.",
+      "requiredAnyOf": [
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    }
+  ]
+}

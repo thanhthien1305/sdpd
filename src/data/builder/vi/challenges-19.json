@@ -1,0 +1,67 @@
+{
+  "id": "builder-19",
+  "number": 19,
+  "title": "Bộ Nhớ Đệm Điều Phối Khu Vực",
+  "subtitle": "Các bàn điều phối khu vực liên tục truy vấn cùng một tập bản ghi sự cố",
+  "objective": "Thiết kế hệ thống cache phân vùng theo khu vực địa lý để giảm tải cho trung tâm chỉ huy.",
+  "constraints": [
+    "Các đơn vị tại cùng một quận/khu vực chia sẻ bộ nhớ đệm chung",
+    "Thời gian truy xuất dữ liệu sự cố địa bàn đạt tốc độ dưới 10ms",
+    "Tự động làm mới khi có cập nhật điều động mới từ chỉ huy trưởng"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "cache",
+    "loadBalancer",
+    "api",
+    "database",
+    "blobStorage"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Tầng Bộ Nhớ Đệm Địa Bàn",
+      "description": "Cache lưu trữ danh sách sự cố và vị trí xe tuần tra riêng cho từng khu vực.",
+      "requiredAnyOf": [
+        "cdn",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Định Tuyến Theo Khu Vực",
+      "description": "Bộ cân bằng tải chuyển tiếp yêu cầu của điều phối viên vào cụm máy chủ tương ứng.",
+      "requiredAll": [
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Đồng Bộ Hóa Trung Tâm",
+      "description": "Cơ sở dữ liệu trung tâm duy trì trạng thái tổng thể toàn thành phố.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

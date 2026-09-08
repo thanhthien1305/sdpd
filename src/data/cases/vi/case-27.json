@@ -1,0 +1,226 @@
+{
+  "id": "case-27",
+  "number": 27,
+  "title": "Cơn Bão Thử Lại (The Retry Storm)",
+  "subtitle": "Một yêu cầu thất bại biến thành hàng triệu tiếng gõ cửa hung hãn",
+  "brief": {
+    "narrative": "Máy chủ cơ sở dữ liệu giấy phép lái xe gặp sự cố quá tải nhẹ và phản hồi chậm trong 5 giây. Lập trình viên phía ứng dụng di động xe tuần tra đã cài đặt cơ chế: 'Nếu lỗi, thử lại ngay lập tức (Immediate Retry) tối đa 10 lần!'. Hơn 3.000 xe tuần tra cùng lúc nhận thông báo lỗi, và mỗi xe lập tức bắn thêm 10 request dồn dập trong cùng một giây! Từ 3.000 request ban đầu, hệ thống hứng chịu một đợt sóng thần hơn 30.000 request thử lại dồn về máy chủ đang chao đảo. Máy chủ vừa mới kịp thở thì bị cơn bão thử lại (Retry Storm) giáng đòn chí mạng, bốc khói và sập hoàn toàn suốt 4 tiếng đồng hồ! Thám tử, hãy xoa dịu cơn bão thử lại này!",
+    "symptoms": [
+      "Lưu lượng request tăng vọt gấp 10 lần ngay sau khi hệ thống gặp sự cố chậm nhẹ",
+      "Phía client áp dụng cơ chế thử lại tức thời (Immediate Retry) không có thời gian nghỉ",
+      "Hàng ngàn client cùng đồng loạt thử lại tại cùng một thời điểm tạo ra các đợt sóng xung kích (Pulse Waves)",
+      "Máy chủ đang suy yếu bị dập tắt hoàn toàn cơ hội tự phục hồi"
+    ],
+    "objective": "Dập tắt Cơn Bão Thử Lại (Retry Storm) bằng thuật toán Exponential Backoff, Thêm Độ Lệch Ngẫu Nhiên (Jitter) và Giới Hạn Số Lần Thử Lại Toàn Cục (Retry Budgets)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "patrol-app",
+        "type": "client",
+        "label": "Patrol App (x200)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Car Mobile Terminals",
+          "logs": [
+            "[14:30:01] INFO: Request to Records Service — plate lookup #A7X-219",
+            "[14:30:04] WARN: Request timed out after 3s — retrying immediately (attempt 2/5)",
+            "[14:30:04] WARN: Request timed out after 3s — retrying immediately (attempt 3/5)",
+            "[14:30:04] WARN: Request timed out after 3s — retrying immediately (attempt 4/5)",
+            "[14:30:05] ERROR: All 5 retries exhausted — auto-restarting request cycle",
+            "[14:30:05] INFO: New request to Records Service — plate lookup #A7X-219 (cycle 2)"
+          ],
+          "data": {
+            "Active Terminals": "200",
+            "Retry Policy": "Immediate retry, max 5 attempts, then restart",
+            "Retry Delay": "0ms (no backoff)",
+            "Avg Requests/Terminal": "~15/min (normally 3/min)",
+            "Total Request Rate": "~3000/min (normally 600/min)"
+          },
+          "status": "All terminals stuck in retry loops. Each failed request triggers 5 immediate retries with no delay."
+        }
+      },
+      {
+        "id": "api-gateway",
+        "type": "server",
+        "label": "API Gateway",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "API Gateway",
+          "logs": [
+            "[14:30:01] INFO: Forwarding requests to Records Service — queue depth normal",
+            "[14:30:03] WARN: Request queue depth increasing — 150 pending",
+            "[14:30:05] WARN: Request queue depth critical — 2,400 pending",
+            "[14:30:08] ERROR: Connection pool to Records Service exhausted",
+            "[14:30:10] ERROR: Dropping incoming requests — queue overflow"
+          ],
+          "data": {
+            "Request Queue": "OVERFLOW (max 5000)",
+            "Connection Pool": "EXHAUSTED (500/500 in use)",
+            "Requests Dropped": "1,847 in last 60s",
+            "Rate Limiting": "NONE CONFIGURED",
+            "Retry-After Header": "NOT SENT"
+          },
+          "status": "Gateway overwhelmed by retry traffic. No rate limiting or backpressure configured."
+        }
+      },
+      {
+        "id": "records-service",
+        "type": "server",
+        "label": "Records Service",
+        "status": "failed",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Records Service",
+          "logs": [
+            "[14:29:55] INFO: Database maintenance starting — expect slight latency increase",
+            "[14:30:00] WARN: Response time degraded — avg 800ms (threshold: 500ms)",
+            "[14:30:05] ERROR: Thread pool saturated — 200/200 threads busy",
+            "[14:30:08] ERROR: Request timeout rate 100% — service effectively down",
+            "[14:30:15] ERROR: OOM warning — excessive connection objects in memory"
+          ],
+          "data": {
+            "Status": "UNRESPONSIVE",
+            "Thread Pool": "200/200 (saturated)",
+            "Avg Response Time": "TIMEOUT (>30s)",
+            "Original Issue": "Routine DB maintenance — 2x latency increase",
+            "Current Issue": "50x normal request volume from retry storm"
+          },
+          "status": "Service was merely slow due to DB maintenance but is now completely down under retry storm load."
+        }
+      },
+      {
+        "id": "records-db",
+        "type": "database",
+        "label": "Records Database",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Records Database",
+          "logs": [
+            "[14:29:55] INFO: Index rebuild started on warrants table",
+            "[14:30:00] WARN: Query latency increased during maintenance — expected",
+            "[14:30:06] ERROR: Connection limit reached — 500/500 connections",
+            "[14:30:10] ERROR: New connections refused — too many open connections"
+          ],
+          "data": {
+            "CPU Usage": "100% (was 45% pre-storm)",
+            "Active Connections": "500/500 (max)",
+            "Maintenance Status": "Index rebuild — 60% complete",
+            "Query Latency": "TIMEOUT (was 400ms during maintenance)"
+          },
+          "status": "Database was handling maintenance fine until retry storm saturated all connections."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-patrol-gateway",
+        "source": "patrol-app",
+        "target": "api-gateway",
+        "label": "retries (50x volume)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-gateway-records",
+        "source": "api-gateway",
+        "target": "records-service",
+        "label": "overwhelmed",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-records-db",
+        "source": "records-service",
+        "target": "records-db",
+        "label": "queries",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao một sự cố chậm tạm thời 5 giây lại biến thành thảm họa sập hệ thống kéo dài suốt 4 tiếng?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Hệ thống bị nhiễm virus tự động nhân bản file cơ sở dữ liệu",
+          "correct": false,
+          "feedback": "Không có virus; lưu lượng là các cuộc gọi API hợp lệ bị gửi lặp lại dồn dập."
+        },
+        {
+          "id": "rc-1",
+          "text": "Tin tặc đã thực hiện cuộc tấn công từ chối dịch vụ phân tán botnet từ Nga",
+          "correct": false,
+          "feedback": "Lưu lượng tấn công chính là từ các xe tuần tra của sở cảnh sát do thuật toán thử lại gây ra."
+        },
+        {
+          "id": "rc-2",
+          "text": "Cơn Bão Thử Lại (Retry Storm) — cơ chế thử lại tức thời (Immediate Retry) không có Backoff và độ lệch ngẫu nhiên (Jitter) đã nhân bản lưu lượng lên gấp nhiều lần, tiêu diệt khả năng tự phục hồi của dịch vụ",
+          "correct": true,
+          "feedback": "Chính xác! Khi máy chủ đang quá tải, hành vi thử lại ngay lập tức giống như việc dẫm đạp lên người vừa ngã. Lưu lượng nhân bản theo cấp số nhân biến một vết nứt nhỏ thành sự sụp đổ toàn diện."
+        },
+        {
+          "id": "rc-3",
+          "text": "Máy chủ cơ sở dữ liệu hết tiền nộp hóa đơn điện toán đám mây",
+          "correct": false,
+          "feedback": "Hạ tầng đám mây bình thường; lỗi nằm ở hành vi của client."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Chiến lược thử lại chuẩn mực mà mọi ứng dụng phân tán bắt buộc phải tuân thủ là gì?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Cấm hoàn toàn việc thử lại; nếu lỗi thì hiển thị thông báo lỗi vĩnh viễn cho cảnh sát",
+          "correct": false,
+          "feedback": "Không thử lại sẽ khiến các lỗi mạng tạm thời 50 mili-giây biến thành trải nghiệm tồi tệ cho người dùng."
+        },
+        {
+          "id": "fix-4",
+          "text": "Yêu cầu các sĩ quan tự đếm nhẩm từ 1 đến 10 trong đầu trước khi bấm nút tra cứu lại",
+          "correct": false,
+          "feedback": "Quy tắc phải được xử lý tự động trong code phần mềm, không dựa vào hành vi con người."
+        },
+        {
+          "id": "fix-1",
+          "text": "Áp dụng Exponential Backoff kèm Độ Lệch Ngẫu Nhiên (Full Jitter), kết hợp Ngân Sách Thử Lại (Retry Budget - tối đa 10% tổng lưu lượng) và chỉ thử lại các mã lỗi tạm thời (503/429/Timeout)",
+          "correct": false,
+          "feedback": "Chính xác! Exponential backoff giúp tăng thời gian chờ sau mỗi lần lỗi, và Jitter rải đều các lần gọi ngẫu nhiên trên dòng thời gian để triệt tiêu các đợt sóng xung kích. Ngân sách thử lại ngăn chặn client làm tràn ngập hệ thống khi sự cố diện rộng xảy ra!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng số lần thử lại từ 10 lần lên 100 lần để đảm bảo chắc chắn thành công",
+          "correct": true,
+          "feedback": "Tăng lên 100 lần sẽ tạo ra 300.000 request và biến thảm họa 4 tiếng thành thảm họa cả tuần."
+        }
+      ]
+    }
+  },
+  "conceptId": "retry-strategies",
+  "badge": {
+    "name": "Người Chế Ngự Bão Thử Lại",
+    "icon": "🌪️"
+  }
+}

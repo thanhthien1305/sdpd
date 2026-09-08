@@ -1,0 +1,217 @@
+{
+  "id": "case-18",
+  "number": 18,
+  "title": "Bản Điều Phối Thất Lạc (The Lost Dispatch)",
+  "subtitle": "Sự cố sập máy chủ làm bốc hơi toàn bộ các cuộc gọi khẩn cấp trong hàng đợi",
+  "brief": {
+    "narrative": "Hệ thống tổng đài 911 nhận cuộc gọi của người dân và đẩy thông tin vào Hàng Đợi Thông Điệp (Message Queue) để các điều phối viên phân công xe tuần tra. Để đạt tốc độ xử lý hàng chục ngàn tin mỗi giây, lập trình viên cấu hình hàng đợi lưu trữ hoàn toàn trong bộ nhớ RAM (Non-durable, in-memory mode). Lúc 21:15, máy chủ Message Broker bị đứt cầu chì và sập ngúm. Sau 3 phút khởi động lại, hàng đợi hoàn toàn trống rỗng! Hơn 1.200 cuộc gọi báo án khẩn cấp — bao gồm cướp có vũ trang, tai nạn giao thông và hỏa hoạn — đã bốc hơi vào không khí mà không có xe cảnh sát nào được cử đi. Cảnh trưởng Partition run rẩy vì hậu quả khôn lường. Thám tử, hãy tìm lại tính bền vững cho hệ thống!",
+    "symptoms": [
+      "Hơn 1.200 thông điệp cuộc gọi khẩn cấp đang nằm trong hàng đợi biến mất sau khi broker khởi động lại",
+      "Hàng đợi (Queue) và thông điệp (Messages) được cấu hình ở chế độ tạm thời (Transient / Non-Durable)",
+      "Broker không ghi dữ liệu xuống đĩa cứng (Disk Persistence) trước khi xác nhận với bên gửi",
+      "Các nạn nhân chờ đợi trong vô vọng vì không có xe tuần tra nào nhận được điều động"
+    ],
+    "objective": "Cấu hình Tính Bền Vững Thông Điệp (Message Durability & Persistence) và cơ chế xác nhận (Publisher Confirms / Acknowledgments) để không bao giờ mất thông điệp khi xảy ra sự cố."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dispatch-intake",
+        "type": "server",
+        "label": "911 Dispatch Intake",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "911 Dispatch Intake System",
+          "logs": [
+            "[03:00:01] INFO: Dispatch call #D-4471 queued (armed robbery)",
+            "[03:00:15] INFO: Dispatch call #D-4472 queued (armed robbery)",
+            "[03:01:00] INFO: 21 additional calls queued between 03:00-03:04",
+            "[03:04:10] WARN: Queue server connection lost — calls buffering locally"
+          ],
+          "data": {
+            "Calls Sent to Queue": "23 (between 03:00-03:04)",
+            "Acknowledgments Received": "23 (queue accepted them)",
+            "Status": "HEALTHY"
+          },
+          "status": "Intake system working. All 23 calls were accepted by the queue."
+        }
+      },
+      {
+        "id": "message-queue",
+        "type": "server",
+        "label": "Message Queue",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Message Queue",
+          "logs": [
+            "[03:00:00] INFO: 23 messages in queue (in-memory)",
+            "[03:04:05] FATAL: Process crashed — out of memory",
+            "[03:04:06] INFO: All in-memory data lost",
+            "[03:08:10] INFO: Server restarted — queue is EMPTY",
+            "[03:08:11] WARN: No persistence layer — cannot recover messages"
+          ],
+          "data": {
+            "Storage": "In-memory ONLY",
+            "Persistence": "DISABLED",
+            "Messages Before Crash": "23",
+            "Messages After Restart": "0",
+            "Write-Ahead Log": "Not configured",
+            "Disk Backup": "None"
+          },
+          "status": "Crashed. All 23 queued messages permanently lost — no persistence configured."
+        }
+      },
+      {
+        "id": "patrol-units",
+        "type": "client",
+        "label": "Patrol Units",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Unit Fleet",
+          "logs": [
+            "[03:04:10] WARN: No new dispatches received",
+            "[03:08:15] INFO: Queue reconnected — but no pending assignments",
+            "[03:08:20] WARN: 23 calls never dispatched to any unit"
+          ],
+          "data": {
+            "Available Units": "12",
+            "Dispatches Received (03:00-03:08)": "0",
+            "Expected Dispatches": "23",
+            "Status": "IDLE (waiting for assignments that were lost)"
+          },
+          "status": "Patrol units never received the 23 lost dispatch calls."
+        }
+      },
+      {
+        "id": "callers",
+        "type": "client",
+        "label": "911 Callers",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "911 Callers",
+          "logs": [
+            "[03:15:00] WARN: Caller #D-4471 called back — no officers arrived",
+            "[03:18:00] WARN: Caller #D-4472 called back — armed robbery still in progress"
+          ],
+          "data": {
+            "Affected Callers": "23",
+            "High Priority Lost": "2 (armed robbery)",
+            "Avg Wait Before Callback": "15 minutes"
+          },
+          "status": "Callers waiting for response to dispatches that were never sent."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-intake-queue",
+        "source": "dispatch-intake",
+        "target": "message-queue",
+        "label": "enqueue calls",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-queue-patrol",
+        "source": "message-queue",
+        "target": "patrol-units",
+        "label": "dispatch (lost)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-callers-intake",
+        "source": "callers",
+        "target": "dispatch-intake",
+        "label": "911 calls",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao 1.200 cuộc gọi khẩn cấp lại biến mất hoàn toàn sau khi máy chủ broker khởi động lại?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Hàng đợi và thông điệp được cấu hình ở chế độ tạm thời trong bộ nhớ (In-Memory / Non-durable) — không ghi xuống đĩa cứng (Persistent Storage) nên bị xóa sạch khi mất nguồn",
+          "correct": true,
+          "feedback": "Chính xác! Để đổi lấy tốc độ cao, hệ thống đã bỏ qua việc ghi đĩa. Khi máy tính mất điện, dữ liệu trong RAM biến mất 100%. Với các hệ thống trọng yếu như 911, thông điệp bắt buộc phải được lưu bền vững (Durable)."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dung lượng ổ cứng của máy chủ broker bị đầy 100%",
+          "correct": false,
+          "feedback": "Ổ cứng còn trống rất nhiều vì broker căn bản không hề ghi thông điệp xuống đĩa."
+        },
+        {
+          "id": "rc-1",
+          "text": "Các nhân viên tổng đài đã vô tình bấm nhầm nút 'Xóa toàn bộ cuộc gọi'",
+          "correct": false,
+          "feedback": "Không có thao tác xóa thủ công từ con người; nhật ký hệ thống ghi nhận broker bị sập nguồn đột ngột."
+        },
+        {
+          "id": "rc-4",
+          "text": "Mạng viễn thông thành phố đã chặn các cuộc gọi đến tổng đài",
+          "correct": false,
+          "feedback": "Các cuộc gọi đã vào được tổng đài và đã được đẩy vào hàng đợi thành công."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần cấu hình hàng đợi thông điệp như thế nào để đảm bảo dữ liệu sống sót qua mọi sự cố sập nguồn?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Chuyển toàn bộ thông điệp khẩn cấp gửi qua ứng dụng mạng xã hội",
+          "correct": false,
+          "feedback": "Mạng xã hội không đảm bảo tính bảo mật và cam kết độ sẵn sàng cho các tình huống cứu nạn khẩn cấp."
+        },
+        {
+          "id": "fix-1",
+          "text": "Cấu hình Hàng Đợi Bền Vững (Durable Queue) và bật chế độ Thông Điệp Bền Vững (Persistent Messages) ghi xuống đĩa cứng (WAL), kết hợp cơ chế Xác Nhận Từ Bên Gửi (Publisher Confirms)",
+          "correct": true,
+          "feedback": "Chính xác! Khi cấu hình Durable + Persistent, broker sẽ ghi thông điệp xuống đĩa cứng an toàn trước khi báo thành công cho producer. Khi broker khởi động lại, toàn bộ 1.200 thông điệp sẽ tự động được nạp lại nguyên vẹn từ đĩa."
+        },
+        {
+          "id": "fix-2",
+          "text": "Mua thêm bộ lưu điện UPS lớn hơn để máy chủ không bao giờ bị mất điện",
+          "correct": false,
+          "feedback": "UPS không bảo vệ được trước lỗi phần mềm, lỗi kernel hệ điều hành hay hỏng linh kiện máy tính."
+        },
+        {
+          "id": "fix-4",
+          "text": "Tăng tốc độ xử lý của các worker lên gấp 10 lần bằng cách ép xung CPU",
+          "correct": false,
+          "feedback": "Ép xung làm máy chủ kém ổn định và dễ gây sập nguồn thường xuyên hơn."
+        }
+      ]
+    }
+  },
+  "conceptId": "message-durability",
+  "badge": {
+    "name": "Vệ Binh Hàng Đợi Bền Vững",
+    "icon": "📨"
+  }
+}

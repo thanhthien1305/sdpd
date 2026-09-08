@@ -1,0 +1,72 @@
+{
+  "id": "builder-20",
+  "number": 20,
+  "title": "Tái Hiện Dòng Thời Gian Vụ Án",
+  "subtitle": "Việc tái hiện dòng thời gian chi tiết của vụ án làm quá tải hệ thống OLTP",
+  "objective": "Xây dựng giải pháp tổng hợp và phân tích sự kiện lịch sử mà không phong tỏa cơ sở dữ liệu chính.",
+  "constraints": [
+    "Tổng hợp hàng nghìn mốc sự kiện (cuộc gọi, định vị, lời khai) thành dòng thời gian liên tục",
+    "Không chạy các câu lệnh JOIN nặng nề trên cơ sở dữ liệu vận hành trực tiếp",
+    "Bộ nhớ tạm thời lưu trữ kết quả tái hiện cho điều tra viên đối chiếu"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "blobStorage",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Tách Rời Luồng Đọc Phân Tích",
+      "description": "Hàng đợi và worker tổng hợp dữ liệu sự kiện sang dạng xem tối ưu hóa.",
+      "requiredAll": [
+        "api",
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Bộ Nhớ Đệm Dòng Thời Gian",
+      "description": "Cache lưu trữ cây sự kiện đã được tổng hợp để điều tra viên lướt mượt mà.",
+      "requiredAll": [
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "blobStorage"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Bảo Vệ Cơ Sở Dữ Liệu Giao Dịch",
+      "description": "Database vận hành được miễn nhiễm khỏi các truy vấn tổng hợp phức tạp.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

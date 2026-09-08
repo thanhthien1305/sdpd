@@ -1,0 +1,70 @@
+{
+  "id": "builder-11",
+  "number": 11,
+  "title": "Bùng Nổ Cổng Thông Tin Dân Cư",
+  "subtitle": "Lưu lượng truy cập cổng thông tin cộng đồng tăng đột biến khi xảy ra sự cố diện rộng",
+  "objective": "Xây dựng giải pháp chịu tải cao cho người dân theo dõi tình hình khẩn cấp.",
+  "constraints": [
+    "Phần lớn nội dung là tài nguyên công cộng cần phục vụ ngay tại biên",
+    "Bảo vệ hệ thống nội bộ của sở cảnh sát khỏi nguy cơ bị từ chối dịch vụ (DoS)",
+    "Cho phép cập nhật thông tin khẩn cấp tức thời tới công chúng"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Giảm Tải Tại Biên Mạng (Edge Offloading)",
+      "description": "CDN hấp thụ phần lớn lưu lượng đọc trang tin tức và thông báo công cộng.",
+      "requiredAll": [
+        "client",
+        "cdn"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Bộ Nhớ Đệm Phản Hồi Nhanh",
+      "description": "Cache lưu trữ các bản tin mới nhất giảm áp lực lên API và database.",
+      "requiredAll": [
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "cdn",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Bảo Vệ Tầng Cơ Sở Dữ Liệu",
+      "description": "Database chỉ nhận các cập nhật từ biên tập viên, không phục vụ trực tiếp công chúng.",
+      "requiredAll": [
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    }
+  ]
+}

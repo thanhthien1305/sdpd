@@ -1,0 +1,878 @@
+[
+  {
+    "id": "replication-basics",
+    "title": "Nhân Bản & Dự Phòng (Replication & Redundancy)",
+    "summary": "Lưu trữ nhiều bản sao dữ liệu trên các máy chủ khác nhau để hệ thống sống sót qua các lỗi phần cứng đơn lẻ.",
+    "explanation": [
+      "Điểm Lỗi Đơn (Single Point of Failure - SPOF) là bất kỳ thành phần nào mà khi nó hỏng, toàn bộ hệ thống sẽ sập theo. Nếu máy chủ cơ sở dữ liệu duy nhất bị sập, tất cả các đồn cảnh sát đều mất quyền truy cập.",
+      "Nhân bản (Replication) giải quyết triệt để vấn đề này bằng cách duy trì các bản sao dữ liệu đồng nhất trên nhiều máy chủ. Nếu một máy gặp sự cố, các máy còn lại vẫn tiếp tục phục vụ truy vấn bình thường.",
+      "Hình thức đơn giản nhất là nhân bản Leader-Follower: một máy chủ (Leader) xử lý mọi thao tác ghi, và một hoặc nhiều máy chủ (Follower) lưu giữ bản sao. Khi Leader sập, một Follower có thể được nâng cấp lên làm Leader mới.",
+      "Dự phòng (Redundancy) là nguyên lý cốt lõi: không bao giờ phụ thuộc vào một thực thể duy nhất cho bất kỳ thành phần quan trọng nào. Áp dụng cho cơ sở dữ liệu, mạng, nguồn điện — mọi điểm lỗi tiềm ẩn."
+    ],
+    "keyTerms": [
+      {
+        "term": "Điểm Lỗi Đơn (SPOF)",
+        "definition": "Một thành phần mà nếu hỏng, toàn bộ hệ thống sẽ ngừng hoạt động hoàn toàn."
+      },
+      {
+        "term": "Nhân Bản (Replication)",
+        "definition": "Duy trì các bản sao dữ liệu trên nhiều máy chủ nhằm tăng tính dự phòng và độ sẵn sàng."
+      },
+      {
+        "term": "Chuyển Đổi Dự Phòng (Failover)",
+        "definition": "Quy trình tự động chuyển sang hệ thống phụ khi máy chủ chính gặp sự cố."
+      },
+      {
+        "term": "Bản Sao (Replica)",
+        "definition": "Một máy chủ lưu giữ bản sao dữ liệu đồng bộ từ máy chủ khác."
+      }
+    ]
+  },
+  {
+    "id": "leader-follower-replication",
+    "title": "Nhân Bản Leader-Follower",
+    "summary": "Một máy chủ xử lý ghi; các follower nhân bản và phục vụ truy vấn đọc — nhưng có thể gặp hiện tượng dữ liệu trễ.",
+    "explanation": [
+      "Trong mô hình Leader-Follower, máy chủ Leader tiếp nhận toàn bộ các thao tác ghi dữ liệu. Một hoặc nhiều Follower nhận luồng thay đổi từ Leader và áp dụng vào bản sao cục bộ của mình.",
+      "Follower có thể phục vụ các truy vấn đọc, giúp giảm tải đáng kể cho Leader. Tuy nhiên, việc truyền dữ liệu cần có thời gian, nên Follower có thể bị chậm hơn Leader vài giây hoặc vài phút.",
+      "Khoảng thời gian chậm trễ này gọi là Độ trễ nhân bản (Replication Lag). Nếu client đọc từ một Follower đang bị trễ, họ có thể nhìn thấy dữ liệu cũ (Stale Read) — dữ liệu đã được cập nhật ở Leader nhưng chưa tới Follower.",
+      "Đối với các truy vấn đọc yêu cầu tính chính xác tuyệt đối ngay sau khi ghi, ứng dụng có thể định tuyến thẳng về Leader. Mô hình này gọi là tính nhất quán 'Đọc những gì bạn vừa ghi' (Read-your-own-writes)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Máy Chủ Chính (Leader/Primary)",
+        "definition": "Máy chủ tiếp nhận các thao tác ghi và truyền dữ liệu thay đổi tới các follower."
+      },
+      {
+        "term": "Máy Chủ Bản Sao (Follower/Replica)",
+        "definition": "Máy chủ nhận và áp dụng các thay đổi từ leader, phục vụ các truy vấn đọc."
+      },
+      {
+        "term": "Độ Trễ Nhân Bản (Replication Lag)",
+        "definition": "Khoảng thời gian chênh lệch giữa khi thao tác ghi hoàn tất trên leader và khi nó xuất hiện trên follower."
+      },
+      {
+        "term": "Đọc Dữ Liệu Cũ (Stale Read)",
+        "definition": "Đọc phải dữ liệu chưa được cập nhật từ một follower đang bị trễ so với leader."
+      }
+    ]
+  },
+  {
+    "id": "sync-vs-async-replication",
+    "title": "Nhân Bản Đồng Bộ vs Bất Đồng Bộ",
+    "summary": "Nhân bản đồng bộ đảm bảo an toàn dữ liệu tuyệt đối nhưng chậm hơn; bất đồng bộ có tốc độ cao nhưng tiềm ẩn rủi ro mất dữ liệu.",
+    "explanation": [
+      "Với nhân bản bất đồng bộ (Asynchronous), Leader xác nhận hoàn tất thao tác ghi với client ngay sau khi lưu trữ trên máy cục bộ, không cần đợi Follower xác nhận. Cách này cực nhanh, nhưng nếu Leader sập trước khi kịp truyền dữ liệu sang Follower, dữ liệu đó sẽ biến mất vĩnh viễn.",
+      "Với nhân bản đồng bộ (Synchronous), Leader phải đợi ít nhất một Follower xác nhận đã nhận dữ liệu trước khi báo thành công cho client. Cách này làm tăng độ trễ ghi, nhưng bảo đảm dữ liệu luôn tồn tại an toàn trên ít nhất hai máy chủ.",
+      "Hầu hết các hệ thống thực tế áp dụng mô hình lai (Semi-synchronous): một Follower đồng bộ (đảm bảo luôn mới nhất) và các Follower còn lại bất đồng bộ (để tối ưu hiệu năng).",
+      "Đây là sự đánh đổi kinh điển: Độ Bền Vững (Durability) vs Hiệu Năng (Performance). Với dữ liệu nhạy cảm như chứng cứ tội phạm hay giao dịch ngân hàng, chi phí độ trễ của nhân bản đồng bộ là hoàn toàn xứng đáng."
+    ],
+    "keyTerms": [
+      {
+        "term": "Nhân Bản Bất Đồng Bộ",
+        "definition": "Leader xác nhận ghi mà không cần chờ follower. Nhanh nhưng có nguy cơ mất mát dữ liệu."
+      },
+      {
+        "term": "Nhân Bản Đồng Bộ",
+        "definition": "Leader chờ ít nhất một follower xác nhận trước khi báo thành công. Chậm hơn nhưng đảm bảo an toàn dữ liệu."
+      },
+      {
+        "term": "Độ Bền Vững (Durability)",
+        "definition": "Cam kết rằng dữ liệu sau khi được ghi nhận sẽ không bao giờ bị mất, ngay cả khi máy chủ gặp sự cố nguồn điện hay sập ổ cứng."
+      },
+      {
+        "term": "Bán Đồng Bộ (Semi-Synchronous)",
+        "definition": "Mô hình lai với một follower đồng bộ và các follower khác bất đồng bộ."
+      }
+    ]
+  },
+  {
+    "id": "network-partitions",
+    "title": "Phân Vùng Mạng & Hiện Tượng Não Đôi (Split Brain)",
+    "summary": "Khi lỗi mạng chia cắt cụm máy chủ thành các vùng cô lập, các node có thể tự hành động độc lập — dẫn đến xung đột dữ liệu thảm khốc.",
+    "explanation": [
+      "Phân vùng mạng (Network Partition) xảy ra khi các node trong hệ thống phân tán không thể giao tiếp với nhau dù bản thân từng máy vẫn đang chạy bình thường. Cụm máy chủ bị chia thành các nhóm cô lập.",
+      "Hiện tượng Não Đôi (Split Brain) là hậu quả nguy hiểm nhất: nếu cả hai phía phân vùng đều tưởng bên kia đã chết và tự bầu ra Leader riêng, cả hai sẽ cùng chấp nhận các tác vụ ghi độc lập, tạo ra hai phiên bản dữ liệu mâu thuẫn hoàn toàn.",
+      "Để ngăn chặn Não Đôi, các hệ thống phân tán áp dụng cơ chế Quorum: một node chỉ có thể đóng vai trò Leader nếu nó giữ liên lạc được với đa số tuyệt đối (> 50%) số node trong cụm. Phía thiểu số sẽ từ chối nhận ghi.",
+      "Nếu cụm có 3 node và bị tách thành nhóm 2 node và nhóm 1 node: nhóm 2 node (chiếm đa số) sẽ tiếp tục phục vụ, còn nhóm 1 node (thiểu số) sẽ tự chuyển sang chế độ chỉ đọc hoặc dừng hoạt động."
+    ],
+    "keyTerms": [
+      {
+        "term": "Phân Vùng Mạng (Network Partition)",
+        "definition": "Sự cố mất kết nối mạng chia cắt cụm máy chủ thành hai hay nhiều vùng riêng biệt."
+      },
+      {
+        "term": "Hiện Tượng Não Đôi (Split Brain)",
+        "definition": "Trạng thái nguy hiểm khi hai node cùng tự nhận là leader và tiếp nhận các thao tác ghi trái ngược nhau."
+      },
+      {
+        "term": "Quorum",
+        "definition": "Số lượng node tối thiểu cần thiết (thường là quá bán: N/2 + 1) để một quyết định hoặc thao tác ghi được công nhận hợp lệ."
+      },
+      {
+        "term": "Cách Ly (Fencing)",
+        "definition": "Cơ chế vô hiệu hóa hoặc thu hồi quyền hạn của một leader cũ trước khi leader mới bắt đầu tiếp quản."
+      }
+    ]
+  },
+  {
+    "id": "leader-election",
+    "title": "Bầu Chọn Leader (Leader Election)",
+    "summary": "Khi leader gặp sự cố, hệ thống phải bầu ra một leader mới một cách an toàn mà không để xảy ra tranh chấp quyền lực.",
+    "explanation": [
+      "Trong các hệ thống phân tán, leader phụ trách điều phối các tác vụ quan trọng. Khi leader sập hoặc mất kết nối, các node còn lại phải phát hiện kịp thời và bầu chọn một leader mới.",
+      "Thuật toán bầu chọn sử dụng cơ chế heartbeat (nhịp tim). Nếu các follower không nhận được tín hiệu từ leader sau một khoảng thời gian timeout, chúng sẽ khởi động quy trình bầu cử.",
+      "Các thuật toán đồng thuận như Raft hoặc Paxos đảm bảo rằng tại bất kỳ thời điểm nào, chỉ có tối đa một leader hợp lệ được công nhận nhờ yêu cầu đạt quorum đa số phiếu bầu.",
+      "Thời gian timeout ngẫu nhiên (randomized election timeout) được sử dụng để tránh hiện tượng phiếu bầu bị chia rẽ (split vote) khi nhiều node cùng tự ứng cử tại một thời điểm."
+    ],
+    "keyTerms": [
+      {
+        "term": "Bầu Chọn Leader",
+        "definition": "Quy trình phân tán để các node thỏa thuận chọn ra một node duy nhất làm máy chủ điều phối."
+      },
+      {
+        "term": "Nhịp Tim (Heartbeat)",
+        "definition": "Tín hiệu định kỳ mà leader gửi tới các node khác để khẳng định nó vẫn đang sống và hoạt động."
+      },
+      {
+        "term": "Thời Gian Chờ Bầu Cử (Election Timeout)",
+        "definition": "Khoảng thời gian một node chờ nhận tín hiệu heartbeat trước khi coi leader đã chết và tự khởi tạo cuộc bầu cử."
+      },
+      {
+        "term": "Chia Rẽ Phiếu Bầu (Split Vote)",
+        "definition": "Tình huống nhiều ứng viên nhận được số phiếu bằng nhau khiến không ai đạt đa số, buộc phải bầu lại."
+      }
+    ]
+  },
+  {
+    "id": "multi-leader-replication",
+    "title": "Nhân Bản Đa Leader (Multi-Leader)",
+    "summary": "Nhiều máy chủ cùng chấp nhận ghi để phục vụ trên diện rộng, nhưng đòi hỏi cơ chế giải quyết xung đột khi cùng sửa một bản ghi.",
+    "explanation": [
+      "Trong mô hình Multi-Leader (hoặc Active-Active), có nhiều hơn một máy chủ có quyền tiếp nhận tác vụ ghi. Mô hình này rất hữu ích cho các hệ thống đa trung tâm dữ liệu đặt tại nhiều châu lục.",
+      "Ưu điểm lớn nhất là hiệu năng ghi vượt trội và khả năng sống sót cao: nếu một trung tâm dữ liệu bị ngắt mạng, các trung tâm khác vẫn tiếp tục ghi bình thường.",
+      "Tuy nhiên, thách thức lớn nhất là Xung Đột Ghi (Write Conflicts): nếu hai cảnh sát ở hai đồn khác nhau cùng lúc sửa trạng thái của cùng một nghi phạm, hệ thống phải giải quyết ai là người thắng.",
+      "Các chiến lược giải quyết xung đột bao gồm: Last-Write-Wins (dựa vào timestamp, nhưng có rủi ro lệch đồng hồ), hội tụ theo logic nghiệp vụ, hoặc cấu trúc dữ liệu CRDT (Conflict-free Replicated Data Types)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Nhân Bản Đa Leader",
+        "definition": "Kiến trúc trong đó nhiều máy chủ cùng có quyền tiếp nhận và xử lý các thao tác ghi dữ liệu."
+      },
+      {
+        "term": "Xung Đột Ghi (Write Conflict)",
+        "definition": "Xảy ra khi hai node cùng sửa đổi cùng một bản ghi dữ liệu một cách độc lập trước khi đồng bộ."
+      },
+      {
+        "term": "Ghi Đè Cuối Cùng Thắng (LWW)",
+        "definition": "Chiến lược giải quyết xung đột bằng cách giữ lại bản ghi có nhãn thời gian mới nhất."
+      },
+      {
+        "term": "CRDT",
+        "definition": "Cấu trúc dữ liệu có khả năng tự động dung hòa và hội tụ các thay đổi phân tán mà không bao giờ xảy ra xung đột."
+      }
+    ]
+  },
+  {
+    "id": "clock-synchronization",
+    "title": "Đồng Bộ Đồng Hồ (Clock Synchronization)",
+    "summary": "Đồng hồ vật lý giữa các máy chủ luôn bị lệch; việc phụ thuộc vào nhãn thời gian thực để xếp thứ tự sự kiện là rất nguy hiểm.",
+    "explanation": [
+      "Mỗi máy tính có một tinh thể thạch anh dao động để đo thời gian, nhưng không có hai tinh thể nào giống hệt nhau. Đồng hồ vật lý luôn bị trôi (Clock Drift) theo nhiệt độ và tuổi thọ linh kiện.",
+      "Giao thức NTP (Network Time Protocol) cố gắng đồng bộ thời gian qua mạng, nhưng độ trễ gói tin biến thiên khiến sai số vẫn có thể lên tới hàng chục mili-giây.",
+      "Nếu bạn dùng timestamp vật lý để quyết định xem ai sửa đổi trước (ví dụ chiến lược Last-Write-Wins), một máy chủ có đồng hồ chạy nhanh hơn có thể vô tình xóa sổ bản ghi đúng của một máy chủ khác.",
+      "Các hệ thống phân tán đáng tin cậy sử dụng Đồng Hồ Logic (Lamport Timestamps hoặc Vector Clocks) hoặc các công nghệ thời gian phần cứng chuẩn xác như Google TrueTime."
+    ],
+    "keyTerms": [
+      {
+        "term": "Trôi Đồng Hồ (Clock Drift)",
+        "definition": "Hiện tượng đồng hồ phần cứng của máy tính chạy nhanh hơn hoặc chậm hơn thời gian thực tế."
+      },
+      {
+        "term": "Giao Thức NTP",
+        "definition": "Giao thức mạng dùng để đồng bộ đồng hồ máy tính với các nguồn giờ nguyên tử chuẩn."
+      },
+      {
+        "term": "Đồng Hồ Lamport (Lamport Clock)",
+        "definition": "Cơ chế đánh số thứ tự logic của các sự kiện mà không cần phụ thuộc vào đồng hồ vật lý."
+      },
+      {
+        "term": "Vector Clock",
+        "definition": "Mở rộng của đồng hồ Lamport giúp phát hiện chính xác hai sự kiện có quan hệ nhân quả hay xảy ra đồng thời."
+      }
+    ]
+  },
+  {
+    "id": "byzantine-faults",
+    "title": "Dung Lỗi Byzantine (Byzantine Fault Tolerance)",
+    "summary": "Các node không chỉ bị sập mà còn có thể gửi thông tin sai lệch hoặc cố tình nói dối, đòi hỏi cơ chế đồng thuận kháng lỗi đặc biệt.",
+    "explanation": [
+      "Lỗi sập thông thường (Crash-stop) là khi một node dừng hoạt động hoàn toàn. Nhưng Lỗi Byzantine là khi một node vẫn hoạt động nhưng gửi dữ liệu sai, trả lời mâu thuẫn cho các bên khác nhau, hoặc bị tấn công.",
+      "Bài toán Các Vị Tướng Byzantine mô tả tình huống các tướng lĩnh phải đồng lòng tấn công hoặc rút lui, nhưng trong số họ có những kẻ phản bội phát đi mệnh lệnh trái ngược.",
+      "Để chịu được 'f' node Byzantine nói dối, hệ thống phải có tổng cộng ít nhất 3f + 1 node và cần đạt quorum ít nhất 2f + 1 node đồng thuận.",
+      "Dung lỗi Byzantine (BFT) là nền tảng của các mạng blockchain, hệ thống điều khiển hàng không vũ trụ và các mạng lưu trữ chứng cứ tư pháp tối mật."
+    ],
+    "keyTerms": [
+      {
+        "term": "Lỗi Byzantine",
+        "definition": "Lỗi mà một node hành xử bất thường, trả về dữ liệu sai lệch hoặc gửi thông điệp trái ngược cho các thành viên khác."
+      },
+      {
+        "term": "Dung Lỗi BFT",
+        "definition": "Khả năng của hệ thống phân tán duy trì hoạt động chính xác ngay cả khi một số node bị lỗi Byzantine hoặc phá hoại."
+      },
+      {
+        "term": "Thuật Toán PBFT",
+        "definition": "Thuật toán dung lỗi Byzantine thực tế cho phép đạt đồng thuận trong mạng phân tán với hiệu năng cao."
+      }
+    ]
+  },
+  {
+    "id": "load-balancing",
+    "title": "Cân Bằng Tải (Load Balancing)",
+    "summary": "Phân bổ lưu lượng truy cập qua nhiều máy chủ để không máy chủ nào bị quá tải, tối ưu hóa thông lượng và độ sẵn sàng.",
+    "explanation": [
+      "Bộ cân bằng tải (Load Balancer - LB) đóng vai trò là cửa ngõ đón nhận toàn bộ request từ người dùng và phân phối chúng đến các máy chủ ứng dụng phía sau.",
+      "LB có hai cấp độ chính: Layer 4 (dựa trên IP và cổng TCP/UDP, tốc độ cực nhanh) và Layer 7 (dựa trên HTTP header, cookie, đường dẫn URL, linh hoạt và thông minh).",
+      "Các thuật toán phân phối phổ biến gồm: Round-Robin (tuần tự), Least Connections (chọn máy đang có ít kết nối nhất), và Latency-aware (ưu tiên máy phản hồi nhanh nhất).",
+      "Health Check (Kiểm tra sức khỏe) là tính năng cốt lõi: LB liên tục ping các máy chủ; nếu một máy không phản hồi, LB sẽ tự động ngừng điều hướng request tới đó cho đến khi nó bình phục."
+    ],
+    "keyTerms": [
+      {
+        "term": "Bộ Cân Bằng Tải (LB)",
+        "definition": "Thiết bị hoặc phần mềm phân phối lưu lượng mạng đến cụm máy chủ xử lý."
+      },
+      {
+        "term": "Cân Bằng Tải Layer 4",
+        "definition": "Định tuyến lưu lượng dựa trên tầng truyền vận (TCP/UDP) mà không kiểm tra nội dung gói tin."
+      },
+      {
+        "term": "Cân Bằng Tải Layer 7",
+        "definition": "Định tuyến thông minh dựa trên nội dung ứng dụng như HTTP URL, Headers hoặc Cookies."
+      },
+      {
+        "term": "Kiểm Tra Sức Khỏe (Health Check)",
+        "definition": "Cơ chế kiểm tra định kỳ để phát hiện máy chủ lỗi và loại bỏ nó khỏi nhóm phục vụ."
+      }
+    ]
+  },
+  {
+    "id": "cache-stampede",
+    "title": "Bão Trượt Cache (Cache Stampede / Thundering Herd)",
+    "summary": "Khi một khóa hot hết hạn hoặc bị xóa, hàng loạt truy vấn đồng thời ập xuống cơ sở dữ liệu làm sập hệ thống.",
+    "explanation": [
+      "Bộ nhớ đệm (Cache) giúp giảm tải tới 99% truy vấn cho database. Nhưng khi một khóa dữ liệu có tần suất truy cập cực cao (Hot Key) bất ngờ hết hạn, lá chắn này đột ngột biến mất.",
+      "Hàng nghìn request đồng thời nhận thấy 'Cache Miss' và cùng lao xuống cơ sở dữ liệu để truy vấn và tính toán lại cùng một dữ liệu. Hiện tượng này gọi là Bão trượt cache (Cache Stampede) hay Đàn bò giẫm đạp (Thundering Herd).",
+      "Cơ sở dữ liệu nhanh chóng cạn kiệt connection pool, CPU chạm 100%, độ trễ tăng vọt và hệ thống có thể sập hoàn toàn.",
+      "Các giải pháp phòng vệ: Khóa mutex phân tán (chỉ 1 request được xuống DB nạp cache, các request khác chờ), làm mới sớm có xác suất (XFetch), hoặc áp dụng cơ chế Stale-while-revalidate."
+    ],
+    "keyTerms": [
+      {
+        "term": "Bão Trượt Cache",
+        "definition": "Hiện tượng lượng lớn truy vấn đồng loạt đổ xuống cơ sở dữ liệu khi một dữ liệu đệm phổ biến hết hạn."
+      },
+      {
+        "term": "Hot Key",
+        "definition": "Khóa dữ liệu trong cache nhận được lượng truy vấn khổng lồ và liên tục từ người dùng."
+      },
+      {
+        "term": "Stale-While-Revalidate",
+        "definition": "Chiến lược trả về dữ liệu cũ ngay lập tức cho client trong khi âm thầm tải dữ liệu mới ở nền."
+      },
+      {
+        "term": "Khóa Mutex Phân Tán",
+        "definition": "Cơ chế chỉ cho phép một luồng duy nhất tái tạo dữ liệu cache tại một thời điểm."
+      }
+    ]
+  },
+  {
+    "id": "data-partitioning",
+    "title": "Phân Vùng Dữ Liệu (Data Partitioning / Sharding)",
+    "summary": "Chia nhỏ tập dữ liệu lớn thành các phần độc lập để mở rộng quy mô lưu trữ và truy vấn vượt qua giới hạn một máy chủ.",
+    "explanation": [
+      "Khi cơ sở dữ liệu phình to vượt quá dung lượng ổ cứng hoặc băng thông của một máy, giải pháp duy nhất là chia nhỏ dữ liệu ra nhiều máy (gọi là Partition hoặc Shard).",
+      "Phân vùng theo dải (Range-based): chia theo bảng chữ cái (A-M, N-Z) hoặc ngày tháng. Rất trực quan nhưng dễ tạo ra phân vùng nóng (Hot Partition) nếu nhiều người có tên bắt đầu bằng một chữ cái phổ biến.",
+      "Phân vùng theo hàm băm (Hash-based): băm ID bản ghi rồi chia dư theo số lượng shard. Dữ liệu được rải cực kỳ đồng đều, nhưng việc truy vấn theo khoảng dải sẽ phải quét toàn bộ các shard.",
+      "Băm Nhất Quán (Consistent Hashing) giải quyết bài toán thêm/bớt máy chủ mà không phải di chuyển toàn bộ dữ liệu của hệ thống."
+    ],
+    "keyTerms": [
+      {
+        "term": "Phân Vùng (Partition/Shard)",
+        "definition": "Một phần tập con của cơ sở dữ liệu được lưu trữ độc lập trên một máy chủ riêng biệt."
+      },
+      {
+        "term": "Khóa Phân Vùng (Partition Key)",
+        "definition": "Thuộc tính được sử dụng để xác định bản ghi sẽ thuộc về phân vùng nào."
+      },
+      {
+        "term": "Phân Vùng Nóng (Hot Partition)",
+        "definition": "Phân vùng nhận lượng truy cập hoặc lưu trữ vượt trội so với các phân vùng khác, gây nghẽn cổ chai."
+      },
+      {
+        "term": "Băm Nhất Quán (Consistent Hashing)",
+        "definition": "Kỹ thuật băm giúp giảm thiểu số lượng khóa cần di dời khi số lượng node thay đổi."
+      }
+    ]
+  },
+  {
+    "id": "horizontal-scaling",
+    "title": "Mở Rộng Ngang vs Mở Rộng Dọc (Horizontal vs Vertical)",
+    "summary": "Bổ sung thêm máy chủ thay vì nâng cấp phần cứng của một máy duy nhất để nâng cao năng lực hệ thống bền vững.",
+    "explanation": [
+      "Mở rộng dọc (Scale Up): nâng cấp CPU, RAM, ổ cứng xịn hơn cho chiếc máy chủ hiện tại. Dễ triển khai ban đầu nhưng có trần phần cứng vật lý và chi phí tăng theo cấp số nhân, lại tạo ra một SPOF khổng lồ.",
+      "Mở rộng ngang (Scale Out): bổ sung thêm nhiều máy chủ cấu hình thông thường (commodity hardware) vào cụm và dùng Load Balancer chia việc.",
+      "Mở rộng ngang gần như không có giới hạn trên, nhưng đòi hỏi ứng dụng phải được thiết kế theo hướng phân tán (phi trạng thái, đồng bộ dữ liệu, xử lý lỗi mạng).",
+      "Trong thiết kế hệ thống hiện đại, nguyên tắc vàng luôn là ưu tiên kiến trúc có khả năng mở rộng ngang ngay từ đầu."
+    ],
+    "keyTerms": [
+      {
+        "term": "Mở Rộng Dọc (Vertical Scaling)",
+        "definition": "Tăng cường sức mạnh cho một máy chủ bằng cách bổ sung thêm CPU, RAM hoặc ổ cứng."
+      },
+      {
+        "term": "Mở Rộng Ngang (Horizontal Scaling)",
+        "definition": "Gia tăng năng lực hệ thống bằng cách bổ sung thêm nhiều máy chủ vào cụm xử lý."
+      },
+      {
+        "term": "Hệ Thống Phân Tán",
+        "definition": "Mô hình tập hợp nhiều máy tính độc lập liên kết với nhau qua mạng để vận hành như một hệ thống duy nhất."
+      }
+    ]
+  },
+  {
+    "id": "stateless-services",
+    "title": "Dịch Vụ Phi Trạng Thái (Stateless Services)",
+    "summary": "Giữ các máy chủ ứng dụng phi trạng thái để bất kỳ máy chủ nào cũng có thể xử lý bất kỳ request nào của người dùng.",
+    "explanation": [
+      "Trạng thái (State) là dữ liệu về phiên làm việc của người dùng (như token đăng nhập, giỏ hàng, tiến trình).",
+      "Nếu lưu trạng thái trong bộ nhớ RAM của máy chủ (Stateful), người dùng bắt buộc phải gắn chặt với máy chủ đó (Sticky Session). Nếu máy chủ đó sập, phiên làm việc biến mất và họ bị văng ra ngoài.",
+      "Ngược lại, Dịch Vụ Phi Trạng Thái (Stateless) đẩy toàn bộ trạng thái ra một kho lưu trữ tập trung (như Redis, Database) hoặc mã hóa trong Client Token (JWT).",
+      "Nhờ đó, bất kỳ máy chủ nào trong cụm cũng có thể xử lý request tiếp theo của người dùng. Việc thêm/bớt máy chủ hay khởi động lại diễn ra hoàn toàn trong suốt."
+    ],
+    "keyTerms": [
+      {
+        "term": "Dịch Vụ Phi Trạng Thái",
+        "definition": "Dịch vụ không lưu trữ bất kỳ dữ liệu phiên làm việc nào của client trong bộ nhớ nội bộ giữa các request."
+      },
+      {
+        "term": "Phiên Dính (Sticky Session)",
+        "definition": "Cơ chế của load balancer luôn định tuyến một client về cùng một máy chủ cụ thể."
+      },
+      {
+        "term": "Kho Lưu Trữ Tập Trung",
+        "definition": "Cơ sở dữ liệu hoặc bộ nhớ cache bên ngoài (như Redis) nơi lưu trữ trạng thái chung cho toàn bộ ứng dụng."
+      }
+    ]
+  },
+  {
+    "id": "cache-invalidation",
+    "title": "Hủy Hiệu Lực Bộ Đệm (Cache Invalidation)",
+    "summary": "Đảm bảo dữ liệu trong cache được cập nhật hoặc xóa bỏ ngay khi dữ liệu gốc thay đổi để tránh hiện tượng bóng ma.",
+    "explanation": [
+      "Có hai việc khó nhất trong khoa học máy tính: đặt tên biến và hủy hiệu lực cache. Khi dữ liệu gốc trong DB thay đổi, dữ liệu trong cache sẽ bị 'thiu' (stale).",
+      "Nếu không có cơ chế hủy hiệu lực, người dùng sẽ liên tục nhìn thấy bản ghi cũ đã bị xóa hoặc sửa (Ghost Record).",
+      "Chiến lược Write-Through: ghi đồng thời vào cả Cache và Database. Dữ liệu luôn mới nhưng ghi chậm hơn.",
+      "Chiến lược Cache-Aside (Lazy Loading): ứng dụng tự kiểm tra cache; nếu miss thì đọc DB rồi ghi vào cache. Khi cập nhật dữ liệu, ứng dụng chủ động xóa khóa cache tương ứng."
+    ],
+    "keyTerms": [
+      {
+        "term": "Hủy Hiệu Lực Cache",
+        "definition": "Quy trình xóa hoặc cập nhật bản ghi trong bộ đệm khi dữ liệu nguồn bị thay đổi."
+      },
+      {
+        "term": "Thời Gian Sống (TTL)",
+        "definition": "Khoảng thời gian một bản ghi được phép tồn tại trong cache trước khi tự động hết hạn."
+      },
+      {
+        "term": "Bản Ghi Bóng Ma (Ghost Record)",
+        "definition": "Dữ liệu cũ vẫn xuất hiện trên màn hình người dùng do cache chưa được xóa sau khi DB đã thay đổi."
+      },
+      {
+        "term": "Cache-Aside",
+        "definition": "Mô hình ứng dụng chịu trách nhiệm tự đọc/ghi cache và xóa cache khi dữ liệu cập nhật."
+      }
+    ]
+  },
+  {
+    "id": "cache-expiry-strategies",
+    "title": "Chiến Lược Hết Hạn Cache (Cache Expiry Strategies)",
+    "summary": "Sử dụng TTL ngẫu nhiên (jittered TTL) hoặc làm mới chủ động để tránh việc hàng loạt cache hết hạn cùng lúc.",
+    "explanation": [
+      "Nếu bạn đặt TTL cố định cho tất cả các bản ghi (ví dụ chính xác 3600 giây), các bản ghi được nạp cùng lúc vào buổi sáng sẽ đồng loạt hết hạn cùng lúc vào buổi trưa.",
+      "Hiện tượng này gọi là Thác Lũ Cache (Cache Avalanche): đột ngột toàn bộ cache biến mất, hàng triệu request đổ sập xuống database trong cùng một giây.",
+      "Giải pháp cực kỳ đơn giản nhưng kỳ diệu là Độ Lệch Ngẫu Nhiên (TTL Jitter): thay vì TTL = 3600s, hãy đặt TTL = 3600s + random(-300s, +300s).",
+      "Nhờ vậy, thời điểm hết hạn được rải đều mượt mà theo thời gian, triệt tiêu hoàn toàn nguy cơ sụp đổ dây chuyền."
+    ],
+    "keyTerms": [
+      {
+        "term": "Thác Lũ Cache (Cache Avalanche)",
+        "definition": "Sự cố sập hệ thống khi lượng lớn dữ liệu cache hết hạn cùng một thời điểm."
+      },
+      {
+        "term": "TTL Jitter",
+        "definition": "Kỹ thuật cộng thêm một khoảng thời gian ngẫu nhiên nhỏ vào TTL để phân tán thời điểm hết hạn của các khóa."
+      },
+      {
+        "term": "Làm Mới Chủ Động",
+        "definition": "Cơ chế ngầm tự động nạp lại dữ liệu cache trước khi nó chạm mốc hết hạn."
+      }
+    ]
+  },
+  {
+    "id": "cache-locking",
+    "title": "Khóa Bộ Đệm (Cache Locking & Request Coalescing)",
+    "summary": "Chỉ cho phép một truy vấn truy cập DB để nạp lại cache khi trượt cache, các request khác chờ kết quả này.",
+    "explanation": [
+      "Khi một khóa cache phổ biến hết hạn, 500 request đến cùng lúc. Không nhất thiết phải để cả 500 request cùng chạy truy vấn SQL nặng nề xuống DB.",
+      "Với Khóa Bộ Đệm (Cache Locking / Mutex), request đầu tiên nhận thấy cache miss sẽ tạo một khóa phân tán (ví dụ qua Redis SETNX) và đi truy vấn DB.",
+      "499 request còn lại thấy khóa đã được giữ, chúng sẽ kiên nhẫn chờ vài mili-giây và sau đó đọc lại dữ liệu mới từ cache mà request đầu tiên vừa ghi vào.",
+      "Kỹ thuật gộp truy vấn này (Request Coalescing / Singleflight) bảo vệ database tuyệt đối trước những đợt bùng nổ truy cập."
+    ],
+    "keyTerms": [
+      {
+        "term": "Khóa Bộ Đệm (Cache Locking)",
+        "definition": "Sử dụng khóa để đảm bảo chỉ có duy nhất một tiến trình được phép truy vấn nguồn và tạo lại cache."
+      },
+      {
+        "term": "Gộp Yêu Cầu (Singleflight)",
+        "definition": "Cơ chế gom các request trùng lặp đang chờ xử lý thành một lệnh gọi duy nhất xuống hạ tầng phía sau."
+      },
+      {
+        "term": "Khóa Phân Tán (Distributed Lock)",
+        "definition": "Cơ chế khóa an toàn dùng chung giữa nhiều máy chủ trong cụm."
+      }
+    ]
+  },
+  {
+    "id": "cdn-caching",
+    "title": "Bộ Đệm Mạng Phân Phối Nội Dung (CDN & Edge Caching)",
+    "summary": "Đặt tài nguyên tĩnh tại các máy chủ biên gần người dùng nhất để giảm độ trễ và giảm tải cho máy chủ gốc.",
+    "explanation": [
+      "Tốc độ ánh sáng trong sợi quang có giới hạn: một gói tin gửi từ Hà Nội đến California và quay về mất ít nhất 150-200ms chỉ riêng thời gian di chuyển mạng.",
+      "CDN (Content Delivery Network) đặt hàng ngàn máy chủ biên (Edge Server) tại khắp các thành phố trên toàn cầu. Khi người dùng cần ảnh, video, CSS hay JS, họ tải trực tiếp từ máy chủ biên gần nhất trong vài mili-giây.",
+      "Khi nội dung trên máy chủ gốc (Origin) thay đổi, ta cần phát lệnh Xóa Cache (CDN Purge) hoặc sử dụng phiên bản hóa tên tệp (ví dụ: main.a8f9c.js - Cache Busting).",
+      "Phiên bản hóa tên tệp là cách làm chuẩn nhất: đặt TTL vĩnh viễn cho tệp cũ, và khi có bản cập nhật mới, chỉ cần đổi tên tệp trong mã nguồn."
+    ],
+    "keyTerms": [
+      {
+        "term": "Máy Chủ Biên (Edge Server)",
+        "definition": "Máy chủ CDN được đặt tại các điểm hiện diện (PoP) gần với người dùng cuối nhất."
+      },
+      {
+        "term": "Máy Chủ Gốc (Origin Server)",
+        "definition": "Máy chủ chính của ứng dụng nơi chứa dữ liệu gốc thực tế."
+      },
+      {
+        "term": "Xóa Bộ Đệm CDN (CDN Purge)",
+        "definition": "Yêu cầu CDN xóa bỏ bản sao cũ tại tất cả các máy chủ biên trên toàn cầu."
+      },
+      {
+        "term": "Phá Vỡ Cache (Cache Busting)",
+        "definition": "Thay đổi tên tệp bằng hash nội dung để buộc client và CDN phải tải bản cập nhật mới."
+      }
+    ]
+  },
+  {
+    "id": "message-durability",
+    "title": "Độ Bền Vững Thông Điệp (Message Durability)",
+    "summary": "Ghi thông điệp xuống đĩa cứng an toàn trong hàng đợi để không bị mất mát khi broker khởi động lại đột ngột.",
+    "explanation": [
+      "Hàng đợi thông điệp (Message Queue) là trái tim kết nối các dịch vụ bất đồng bộ. Nhưng nếu broker lưu trữ thông điệp hoàn toàn trong RAM để lấy tốc độ, một cú sập nguồn sẽ xóa sạch toàn bộ công việc đang chờ.",
+      "Độ Bền Vững Thông Điệp (Message Durability) yêu cầu broker phải ghi thông điệp xuống đĩa cứng (Write-Ahead Log) và đảm bảo dữ liệu đã được lưu trữ vật lý trước khi phản hồi xác nhận cho bên gửi (Producer).",
+      "Ngoài ra, bản thân hàng đợi (Queue) và các trao đổi (Exchange) cũng phải được cấu hình là 'Durable' để chúng tự động phục hồi cấu trúc sau khi khởi động lại.",
+      "Đánh đổi: Ghi đĩa chậm hơn ghi RAM, nhưng loại trừ 100% rủi ro làm mất các cuộc gọi khẩn cấp, lệnh điều động hoặc giao dịch tiền bạc."
+    ],
+    "keyTerms": [
+      {
+        "term": "Hàng Đợi Bền Vững (Durable Queue)",
+        "definition": "Hàng đợi được cấu hình để tồn tại và tự phục hồi sau khi máy chủ message broker khởi động lại."
+      },
+      {
+        "term": "Nhật Ký Ghi Trước (WAL)",
+        "definition": "Kỹ thuật ghi mọi thay đổi xuống tệp log trên đĩa cứng trước khi cập nhật vào bộ nhớ."
+      },
+      {
+        "term": "Xác Nhận Thông Điệp (Message Ack)",
+        "definition": "Tín hiệu consumer gửi về thông báo rằng nó đã xử lý xong thông điệp thành công."
+      }
+    ]
+  },
+  {
+    "id": "idempotency",
+    "title": "Tính Idempotent (Idempotency)",
+    "summary": "Thực thi một thao tác nhiều lần mang lại kết quả y hệt như thực thi một lần duy nhất, cho phép an toàn thử lại.",
+    "explanation": [
+      "Trong mạng phân tán, thông điệp có thể bị gửi trùng lặp do timeout và cơ chế thử lại (At-least-once delivery).",
+      "Nếu một lệnh 'trừ 1 triệu đồng' hoặc 'ra lệnh bắt giữ' được gửi 2 lần, người dùng sẽ bị trừ 2 lần tiền hoặc cảnh sát sẽ bắt một người hai lần!",
+      "Tính Idempotent (Idempotency) đảm bảo rằng dù lệnh đó được thực thi 1 lần hay 100 lần, trạng thái cuối cùng của hệ thống vẫn giống hệt nhau.",
+      "Cách hiện thực phổ biến nhất là sử dụng Khóa Idempotency (Idempotency Key): mỗi yêu cầu mang theo một UUID duy nhất. Trước khi xử lý, dịch vụ kiểm tra xem UUID này đã được xử lý chưa; nếu rồi, nó trả về kết quả cũ mà không thực thi lại."
+    ],
+    "keyTerms": [
+      {
+        "term": "Tính Idempotent (Idempotency)",
+        "definition": "Đặc tính của một tác vụ mà khi thực hiện nhiều lần vẫn tạo ra kết quả giống như thực hiện một lần duy nhất."
+      },
+      {
+        "term": "Khóa Idempotency (Idempotency Key)",
+        "definition": "Mã định danh duy nhất gửi kèm theo yêu cầu để hệ thống nhận diện và loại trừ các thao tác trùng lặp."
+      },
+      {
+        "term": "Giao Hàng Ít Nhất Một Lần",
+        "definition": "Mô hình đảm bảo thông điệp không bao giờ bị mất nhưng có thể bị gửi trùng lặp."
+      }
+    ]
+  },
+  {
+    "id": "backpressure",
+    "title": "Áp Lực Ngược (Backpressure)",
+    "summary": "Khi consumer xử lý không kịp, cơ chế áp lực ngược thông báo cho producer giảm tốc độ gửi tin để bảo vệ hàng đợi.",
+    "explanation": [
+      "Khi tốc độ tạo thông điệp của Producer vượt xa tốc độ tiêu thụ của Consumer, hàng đợi sẽ phình to không ngừng cho đến khi cạn kiệt bộ nhớ và sập hoàn toàn.",
+      "Áp lực ngược (Backpressure) là tín hiệu phản hồi từ phía tiêu thụ ngược về phía tạo tin, yêu cầu: 'Tôi đang quá tải, hãy giảm tốc độ gửi lại!'",
+      "Có nhiều cách xử lý khi gặp áp lực ngược: Producer tạm dừng gửi (blocking/rate limiting), lưu tạm vào bộ đệm thứ cấp, hoặc chủ động từ bỏ các tác vụ không quan trọng (Load Shedding).",
+      "Hệ thống không có cơ chế áp lực ngược giống như một con đập không có cửa xả lũ — nó chắc chắn sẽ vỡ khi gặp cơn bão dữ liệu."
+    ],
+    "keyTerms": [
+      {
+        "term": "Áp Lực Ngược (Backpressure)",
+        "definition": "Cơ chế điều tiết luồng dữ liệu ngược từ bên nhận về bên gửi khi bên nhận bị quá tải."
+      },
+      {
+        "term": "Tồn Đọng Hàng Đợi (Queue Lag)",
+        "definition": "Khoảng cách hoặc số lượng thông điệp đang nằm chờ xử lý trong hàng đợi."
+      },
+      {
+        "term": "Cắt Giảm Tải (Load Shedding)",
+        "definition": "Hành động chủ động từ chối các yêu cầu có độ ưu tiên thấp để bảo vệ hệ thống cốt lõi."
+      }
+    ]
+  },
+  {
+    "id": "message-ordering",
+    "title": "Thứ Tự Thông Điệp (Message Ordering)",
+    "summary": "Đảm bảo các thông điệp liên quan được xử lý theo đúng trình tự phát sinh thông qua phân vùng theo khóa.",
+    "explanation": [
+      "Trong nghiệp vụ, thứ tự là sống còn: lệnh 'Tạo tài khoản' phải chạy trước lệnh 'Cập nhật tài khoản', lệnh 'Bắt giữ' phải chạy trước lệnh 'Thả tự do'.",
+      "Nếu bạn có nhiều worker cùng tiêu thụ từ một hàng đợi chung song song, một thông điệp gửi sau có thể vô tình hoàn thành trước thông điệp gửi trước do độ trễ mạng hoặc tải không đều.",
+      "Giải pháp là Phân Vùng Theo Khóa (Key-based Partitioning): tất cả các thông điệp của cùng một đối tượng (ví dụ cùng một ID nghi phạm) luôn được băm và đưa vào cùng một Partition duy nhất.",
+      "Mỗi partition chỉ được xử lý bởi duy nhất một worker, đảm bảo thứ tự tuần tự tuyệt đối (FIFO) cho từng đối tượng trong khi toàn hệ thống vẫn xử lý song song mạnh mẽ."
+    ],
+    "keyTerms": [
+      {
+        "term": "Thứ Tự Thông Điệp",
+        "definition": "Đảm bảo các sự kiện được đọc và xử lý theo đúng trình tự thời gian mà chúng được sinh ra."
+      },
+      {
+        "term": "Phân Vùng Hàng Đợi (Partition)",
+        "definition": "Một luồng con độc lập trong hệ thống message (như Kafka topic partition) đảm bảo thứ tự nghiêm ngặt."
+      },
+      {
+        "term": "Định Tuyến Theo Khóa",
+        "definition": "Kỹ thuật dùng hàm băm của khóa định danh để luôn đưa các thông điệp liên quan vào cùng một phân vùng."
+      }
+    ]
+  },
+  {
+    "id": "sharding",
+    "title": "Phân Mảnh Cơ Sở Dữ Liệu (Database Sharding)",
+    "summary": "Phân tán các bảng dữ liệu trên nhiều cụm database độc lập dựa trên khóa sharding để mở rộng dung lượng vô hạn.",
+    "explanation": [
+      "Sharding là hình thức phân vùng ngang cơ sở dữ liệu. Thay vì một DB 100TB, ta dùng 10 máy chủ DB mỗi máy chứa 10TB.",
+      "Lựa chọn Khóa Sharding (Shard Key) là quyết định quan trọng nhất: một khóa tốt sẽ phân bổ đều cả dung lượng lưu trữ lẫn lưu lượng truy vấn.",
+      "Nếu chọn khóa kém (như mã bưu chính hoặc ngày tháng), một vài shard sẽ bị cháy máy trong khi các shard khác ngồi chơi xơi nước.",
+      "Thách thức lớn nhất của Sharding là các truy vấn nối bảng liên shard (Cross-shard joins) và giao dịch liên shard cực kỳ tốn kém và chậm chạp."
+    ],
+    "keyTerms": [
+      {
+        "term": "Phân Mảnh (Sharding)",
+        "definition": "Kỹ thuật chia nhỏ cơ sở dữ liệu thành nhiều cơ sở dữ liệu con nằm trên các máy chủ vật lý khác nhau."
+      },
+      {
+        "term": "Khóa Sharding (Shard Key)",
+        "definition": "Trường dữ liệu được chọn để quyết định bản ghi sẽ được lưu vào phân mảnh nào."
+      },
+      {
+        "term": "Nối Bảng Liên Shard (Cross-shard Join)",
+        "definition": "Phép kết hợp dữ liệu giữa các bảng nằm ở hai máy chủ khác nhau, đòi hỏi truyền dữ liệu qua mạng."
+      }
+    ]
+  },
+  {
+    "id": "cap-theorem",
+    "title": "Định Lý CAP (The CAP Theorem)",
+    "summary": "Trong hệ thống phân tán, khi xảy ra phân vùng mạng (P), bạn buộc phải lựa chọn giữa Tính Nhất Quán (C) hoặc Tính Sẵn Sàng (A).",
+    "explanation": [
+      "Định lý CAP chỉ ra rằng một hệ thống dữ liệu phân tán chỉ có thể đồng thời thỏa mãn tối đa 2 trong 3 yếu tố: Tính Nhất Quán (Consistency), Tính Sẵn Sàng (Availability), và Khả Năng Chịu Phân Vùng Mạng (Partition Tolerance).",
+      "Tuy nhiên, mạng vật lý luôn tiềm ẩn rủi ro đứt cáp hoặc mất gói, do đó Partition Tolerance (P) là điều kiện bắt buộc không thể thương lượng.",
+      "Vì vậy, khi sự cố mạng xảy ra, bạn chỉ có 2 lựa chọn thực tế: CP hoặc AP.",
+      "Hệ thống CP (như ngân hàng): từ chối phục vụ để bảo vệ tính chính xác, không cho phép đọc/ghi dữ liệu mâu thuẫn. Hệ thống AP (như mạng xã hội): tiếp tục phục vụ với dữ liệu có thể hơi cũ, chấp nhận đối chiếu hợp nhất sau."
+    ],
+    "keyTerms": [
+      {
+        "term": "Tính Nhất Quán (Consistency - C)",
+        "definition": "Mọi lần đọc đều nhận được dữ liệu mới nhất vừa được ghi hoặc báo lỗi."
+      },
+      {
+        "term": "Tính Sẵn Sàng (Availability - A)",
+        "definition": "Mọi yêu cầu đều nhận được phản hồi không bị lỗi, nhưng không đảm bảo dữ liệu đó là mới nhất."
+      },
+      {
+        "term": "Chịu Phân Vùng Mạng (Partition Tolerance - P)",
+        "definition": "Hệ thống vẫn tiếp tục vận hành dù xảy ra mất mát kết nối giữa các node."
+      }
+    ]
+  },
+  {
+    "id": "data-integrity",
+    "title": "Toàn Vẹn Dữ Liệu & Mã Kiểm Tra (Checksums)",
+    "summary": "Phát hiện và ngăn chặn hư hỏng dữ liệu âm thầm thông qua mã kiểm tra (checksum) và kiểm tra tính toàn vẹn đầu-cuối.",
+    "explanation": [
+      "Dữ liệu khi lưu trên đĩa hoặc truyền qua mạng có thể bị lỗi âm thầm (Bit Rot, suy hao cáp quang, lỗi phần cứng bộ điều khiển đĩa) mà hệ điều hành không hề hay biết.",
+      "Nếu một tệp ảnh chứng cứ tội phạm bị lật 1 bit ngẫu nhiên, hình ảnh có thể biến dạng hoặc không còn giá trị pháp lý trước tòa.",
+      "Mã kiểm tra (Checksum / Hashing như SHA-256 hay CRC32) đóng vai trò là dấu vân tay kỹ thuật số của dữ liệu. Bên gửi tính toán checksum và gửi kèm; bên nhận tính lại và so sánh.",
+      "Nguyên lý Đầu-Cuối (End-to-End Principle): việc kiểm tra toàn vẹn ở từng chặng nhỏ là chưa đủ, ứng dụng phải tự xác thực checksum từ lúc sinh ra dữ liệu cho đến lúc ghi xuống đĩa lưu trữ an toàn."
+    ],
+    "keyTerms": [
+      {
+        "term": "Mã Kiểm Tra (Checksum)",
+        "definition": "Một giá trị băm nhỏ được tính toán từ khối dữ liệu để phát hiện các lỗi sai phát sinh trong quá trình truyền hoặc lưu trữ."
+      },
+      {
+        "term": "Lỗi Hỏng Dữ Liệu Âm Thầm (Silent Data Corruption)",
+        "definition": "Hiện tượng dữ liệu bị thay đổi sai lệch mà phần cứng hoặc hệ thống không phát ra cảnh báo lỗi."
+      },
+      {
+        "term": "Nguyên Lý Đầu-Cuối",
+        "definition": "Nguyên tắc kiến trúc cho rằng việc kiểm tra độ tin cậy và an toàn phải được thực hiện ở tầng ứng dụng cuối cùng."
+      }
+    ]
+  },
+  {
+    "id": "write-amplification",
+    "title": "Khuếch Đại Ghi (Write Amplification)",
+    "summary": "Một tác vụ ghi từ ứng dụng có thể kích hoạt nhiều tác vụ ghi xuống đĩa, làm giảm tuổi thọ và làm nghẽn hạ tầng lưu trữ.",
+    "explanation": [
+      "Hệ Số Khuếch Đại Ghi (Write Amplification Factor - WAF) là tỷ lệ giữa dung lượng dữ liệu thực tế ghi xuống đĩa cứng so với dung lượng mà ứng dụng yêu cầu ghi.",
+      "Ví dụ: ứng dụng chỉ sửa 1 dòng dữ liệu 100 bytes, nhưng cơ sở dữ liệu phải ghi vào WAL, cập nhật 5 cây B-tree chỉ mục, và ổ SSD phải xóa/ghi lại một khối flash 4KB — tổng cộng tốn 20KB ghi vật lý!",
+      "WAF quá cao làm cạn kiệt băng thông IOPS của ổ cứng, tăng độ trễ ghi và phá hủy độ bền của ổ đĩa SSD.",
+      "Các cấu trúc dữ liệu như LSM-Trees (dùng trong Cassandra, RocksDB) tối ưu hóa ghi bằng cách gom các thao tác ghi tuần tự xuống đĩa, giảm thiểu khuếch đại ghi cho các hệ thống ghi nhiều."
+    ],
+    "keyTerms": [
+      {
+        "term": "Hệ Số Khuếch Đại Ghi (WAF)",
+        "definition": "Tỷ lệ giữa lượng dữ liệu ghi vật lý xuống đĩa cứng so với lượng dữ liệu logic do ứng dụng yêu cầu."
+      },
+      {
+        "term": "Cây LSM (Log-Structured Merge-tree)",
+        "definition": "Cấu trúc dữ liệu lưu trữ tối ưu hóa cho các thao tác ghi với tốc độ cao bằng cách ghi tuần tự."
+      },
+      {
+        "term": "Chỉ Mục Dư Thừa",
+        "definition": "Tạo quá nhiều index trên bảng làm tăng vọt số lượng thao tác ghi đĩa cho mỗi lệnh INSERT/UPDATE."
+      }
+    ]
+  },
+  {
+    "id": "cascading-timeouts",
+    "title": "Timeout Dây Chuyền (Cascading Timeouts)",
+    "summary": "Khi một dịch vụ downstream chậm chạp, timeout tích lũy làm tê liệt toàn bộ chuỗi dịch vụ upstream.",
+    "explanation": [
+      "Trong kiến trúc Microservices, một request từ client có thể đi qua chuỗi: Gateway → Service A → Service B → Database.",
+      "Nếu Service B bị chậm và mất 5 giây để xử lý, trong khi Gateway đặt timeout là 3 giây, Gateway sẽ hủy kết nối và báo lỗi cho client.",
+      "Tuy nhiên, Service A và B vẫn tiếp tục chạy ngầm tiêu tốn CPU và RAM để hoàn tất công việc vô ích đó mà kết quả không ai nhận!",
+      "Giải pháp: Áp dụng Thời Hạn Lan Truyền (Deadline Propagation): Gateway gửi kèm thời hạn tối đa (ví dụ còn lại 2.8s) trong header; nếu bất kỳ dịch vụ nào thấy đã hết hạn, nó sẽ hủy ngay lập tức các tác vụ con để giải phóng tài nguyên."
+    ],
+    "keyTerms": [
+      {
+        "term": "Timeout Dây Chuyền",
+        "definition": "Hiện tượng độ trễ ở một dịch vụ sâu bên dưới kích hoạt timeout liên tiếp ở tất cả các dịch vụ gọi nó."
+      },
+      {
+        "term": "Lan Truyền Thời Hạn (Deadline Propagation)",
+        "definition": "Cơ chế truyền thời hạn còn lại của request qua các dịch vụ để tự động hủy công việc vô ích."
+      },
+      {
+        "term": "Công Việc Lãng Phí (Wasted Work)",
+        "definition": "Tài nguyên máy tính bị tiêu hao để xử lý những yêu cầu mà người dùng đã hủy hoặc timeout từ lâu."
+      }
+    ]
+  },
+  {
+    "id": "retry-strategies",
+    "title": "Chiến Lược Thử Lại & Exponential Backoff",
+    "summary": "Thử lại có độ trễ tăng theo cấp số nhân kèm độ lệch ngẫu nhiên để tránh làm nghẽn thêm dịch vụ đang chao đảo.",
+    "explanation": [
+      "Lỗi mạng tạm thời là chuyện thường ngày. Phản xạ tự nhiên là thử lại (Retry) ngay lập tức. Nhưng nếu máy chủ đang bị quá tải, 10.000 client cùng lập tức thử lại sẽ giáng một đòn chí mạng kết liễu luôn máy chủ đó.",
+      "Chiến lược Exponential Backoff: tăng thời gian chờ sau mỗi lần thất bại (ví dụ: 100ms, 200ms, 400ms, 800ms,...).",
+      "Thêm Độ Lệch Ngẫu Nhiên (Jitter): nếu tất cả client cùng thử lại ở mốc 1 giây, chúng sẽ tạo thành các đợt sóng xung kích đồng nhịp. Jitter cộng thêm một khoảng ngẫu nhiên để rải đều các cuộc gọi.",
+      "Quan trọng nhất: chỉ thử lại với các lỗi tạm thời (503 Service Unavailable, 429 Too Many Requests, timeout), tuyệt đối không thử lại với lỗi nghiệp vụ (400 Bad Request, 404 Not Found)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Exponential Backoff",
+        "definition": "Thuật toán tăng gấp đôi thời gian chờ sau mỗi lần thử lại thất bại."
+      },
+      {
+        "term": "Độ Lệch Ngẫu Nhiên (Jitter)",
+        "definition": "Thêm khoảng thời gian ngẫu nhiên vào thời gian chờ thử lại để tránh hiện tượng đồng pha."
+      },
+      {
+        "term": "Bão Thử Lại (Retry Storm)",
+        "definition": "Đợt bùng nổ lưu lượng do hàng triệu lệnh thử lại đồng thời tấn công máy chủ đang yếu."
+      }
+    ]
+  },
+  {
+    "id": "circuit-breakers",
+    "title": "Bộ Ngắt Mạch (Circuit Breakers)",
+    "summary": "Tự động ngắt kết nối đến dịch vụ đang suy yếu để dịch vụ có thời gian hồi phục và bảo vệ toàn hệ thống.",
+    "explanation": [
+      "Lấy cảm hứng từ cầu dao điện gia đình: khi có sự cố chập điện, cầu dao tự ngắt để tránh cháy toàn bộ ngôi nhà.",
+      "Bộ ngắt mạch phần mềm có 3 trạng thái:",
+      "1. Closed (Đóng): Bình thường, mọi request được đi qua.",
+      "2. Open (Ngắt): Khi tỷ lệ lỗi vượt ngưỡng (ví dụ > 50% lỗi trong 10s), cầu dao nhảy sang Open. Mọi request bị từ chối ngay lập tức (Fail Fast), trả về dữ liệu fallback mà không gọi xuống dịch vụ đang hỏng.",
+      "3. Half-Open (Nửa Mở): Sau một thời gian chờ (ví dụ 30s), cầu dao cho phép một vài request thử nghiệm đi qua. Nếu thành công, nó đóng lại bình thường; nếu vẫn lỗi, nó tiếp tục ngắt."
+    ],
+    "keyTerms": [
+      {
+        "term": "Bộ Ngắt Mạch (Circuit Breaker)",
+        "definition": "Mẫu thiết kế bảo vệ hệ thống bằng cách tự động dừng gửi yêu cầu tới các dịch vụ đang bị suy thoái."
+      },
+      {
+        "term": "Thất Bại Nhanh (Fail Fast)",
+        "definition": "Trả về lỗi hoặc dữ liệu dự phòng ngay lập tức thay vì bắt client chờ đợi timeout trong vô vọng."
+      },
+      {
+        "term": "Dữ Liệu Dự Phòng (Fallback)",
+        "definition": "Dữ liệu mặc định hoặc lấy từ cache để trả về cho người dùng khi dịch vụ chính gặp sự cố."
+      }
+    ]
+  },
+  {
+    "id": "service-discovery",
+    "title": "Phát Hiện Dịch Vụ (Service Discovery)",
+    "summary": "Tự động đăng ký và tìm kiếm địa chỉ mạng của các instance dịch vụ khi chúng co giãn linh hoạt trong môi trường đám mây.",
+    "explanation": [
+      "Trong hạ tầng đám mây hiện đại (Kubernetes, Docker), các container dịch vụ sinh ra và chết đi liên tục, địa chỉ IP thay đổi từng phút.",
+      "Gán cứng địa chỉ IP hoặc cấu hình thủ công là bất khả thi. Hệ thống cần cơ chế Phát Hiện Dịch Vụ (Service Discovery).",
+      "Quy trình: Khi một máy chủ mới khởi động, nó đăng ký IP và cổng của mình với Service Registry (như Consul, Eureka, CoreDNS). Khi tắt, nó hủy đăng ký.",
+      "Khi Service A muốn gọi Service B, nó hỏi Service Registry để lấy danh sách IP khỏe mạnh đang hoạt động và tự cân bằng tải giữa các IP đó."
+    ],
+    "keyTerms": [
+      {
+        "term": "Phát Hiện Dịch Vụ",
+        "definition": "Cơ chế tự động phát hiện và quản lý vị trí mạng của các dịch vụ trong môi trường phân tán."
+      },
+      {
+        "term": "Sổ Đăng Ký Dịch Vụ (Service Registry)",
+        "definition": "Cơ sở dữ liệu tập trung lưu trữ danh sách các instance dịch vụ đang sống và sẵn sàng phục vụ."
+      },
+      {
+        "term": "Cân Bằng Tải Phía Client",
+        "definition": "Client tự tra cứu registry và tự chọn máy chủ mục tiêu để gửi request thay vì qua LB trung gian."
+      }
+    ]
+  },
+  {
+    "id": "distributed-deadlocks",
+    "title": "Khóa Chết Phân Tán (Distributed Deadlocks)",
+    "summary": "Hai hoặc nhiều node cùng chờ đợi tài nguyên mà bên kia đang nắm giữ, dẫn đến bế tắc vô thời hạn.",
+    "explanation": [
+      "Khóa chết (Deadlock) xảy ra khi Node A đang giữ Khóa 1 và chờ Khóa 2, trong khi Node B đang giữ Khóa 2 và chờ Khóa 1. Cả hai sẽ đứng chờ nhau đến tận cùng thời gian.",
+      "Trong hệ thống phân tán, deadlock cực kỳ khó phát hiện vì các khóa nằm trên nhiều máy chủ độc lập khác nhau.",
+      "Các kỹ thuật phòng chống: Luôn yêu cầu khóa tài nguyên theo một thứ tự cố định toàn cục (Lock Ordering).",
+      "Chiến lược Timeout: mọi yêu cầu giữ khóa bắt buộc phải có thời gian sống (TTL). Nếu quá hạn không xong, khóa tự động bị thu hồi và giao dịch bị hủy bỏ (Rollback) để giải phóng hệ thống."
+    ],
+    "keyTerms": [
+      {
+        "term": "Khóa Chết (Deadlock)",
+        "definition": "Tình trạng bế tắc vĩnh viễn khi hai hay nhiều tiến trình cùng chờ đợi tài nguyên của nhau."
+      },
+      {
+        "term": "Thứ Tự Khóa Toàn Cục",
+        "definition": "Quy tắc bắt buộc mọi tiến trình phải xin cấp phát khóa theo cùng một trình tự ID tăng dần."
+      },
+      {
+        "term": "Đồ Thị Chờ (Wait-For Graph)",
+        "definition": "Đồ thị biểu diễn mối quan hệ phụ thuộc tài nguyên được thuật toán sử dụng để phát hiện chu trình bế tắc."
+      }
+    ]
+  },
+  {
+    "id": "isolation-levels",
+    "title": "Mức Độ Cô Lập Giao Dịch (Isolation Levels)",
+    "summary": "Đánh đổi giữa hiệu năng xử lý đồng thời và mức độ nghiêm ngặt trong việc ngăn ngừa hiện tượng đọc bẩn, đọc không lặp lại và bóng ma.",
+    "explanation": [
+      "Thuộc tính 'I' trong ACID đại diện cho Tính Cô Lập (Isolation): các giao dịch chạy đồng thời không được nhìn thấy dữ liệu dang dở hoặc làm sai lệch kết quả của nhau.",
+      "Có 4 mức cô lập chuẩn trong SQL (từ thấp đến cao):",
+      "1. Read Uncommitted: Cho phép đọc cả dữ liệu chưa được commit (nguy cơ Đọc Bẩn - Dirty Read).",
+      "2. Read Committed: Chỉ đọc dữ liệu đã commit (phổ biến nhất ở Postgres, Oracle).",
+      "3. Repeatable Read: Đảm bảo đọc cùng một bản ghi nhiều lần trong 1 giao dịch luôn ra kết quả y hệt (mặc định ở MySQL InnoDB).",
+      "4. Serializable: Mức cao nhất, các giao dịch chạy tuần tự tuyệt đối như chỉ có 1 người dùng, loại bỏ 100% hiện tượng bóng ma (Phantom Read) nhưng giảm hiệu năng đồng thời đáng kể."
+    ],
+    "keyTerms": [
+      {
+        "term": "Mức Độ Cô Lập",
+        "definition": "Cấp độ xác định mức độ an toàn của dữ liệu khi nhiều giao dịch cùng truy cập đồng thời."
+      },
+      {
+        "term": "Đọc Bẩn (Dirty Read)",
+        "definition": "Đọc phải dữ liệu đang được sửa bởi một giao dịch khác mà giao dịch đó sau đó bị hủy (rollback)."
+      },
+      {
+        "term": "Đọc Bóng Ma (Phantom Read)",
+        "definition": "Xuất hiện thêm các dòng dữ liệu mới chui vào kết quả khi thực hiện lại cùng một truy vấn trong cùng giao dịch."
+      }
+    ]
+  },
+  {
+    "id": "sagas",
+    "title": "Mẫu Thiết Kế Saga (Saga Pattern)",
+    "summary": "Quản lý các giao dịch phân tán trải dài qua nhiều microservices bằng chuỗi giao dịch cục bộ kèm thao tác bù trừ.",
+    "explanation": [
+      "Trong microservices, mỗi dịch vụ có database riêng. Giao dịch hai pha (2PC) kinh điển quá chậm và dễ khóa nghẽn hệ thống phân tán.",
+      "Mẫu Saga chia một giao dịch lớn thành một chuỗi các Giao Dịch Cục Bộ (Local Transactions). Mỗi dịch vụ thực hiện xong phần việc của mình và phát sự kiện cho dịch vụ kế tiếp.",
+      "Nếu một bước ở giữa bị thất bại (ví dụ tài khoản không đủ tiền), Saga sẽ kích hoạt chuỗi Thao Tác Bù Trừ (Compensating Transactions) theo chiều ngược lại để hoàn tác các bước trước đó.",
+      "Có hai cách điều phối Saga: Biên Đạo (Choreography - các dịch vụ tự lắng nghe sự kiện của nhau) và Chỉ Huy (Orchestration - một dịch vụ trung tâm ra lệnh từng bước cho các dịch vụ khác)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Mẫu Saga",
+        "definition": "Chuỗi các giao dịch cục bộ phân tán phối hợp với nhau để duy trì tính nhất quán dữ liệu mà không cần khóa tập trung."
+      },
+      {
+        "term": "Thao Tác Bù Trừ (Compensating Transaction)",
+        "definition": "Tác vụ chạy để đảo ngược ảnh hưởng của một thao tác cục bộ đã hoàn thành trước đó khi xảy ra lỗi."
+      },
+      {
+        "term": "Saga Chỉ Huy (Orchestration)",
+        "definition": "Mô hình có một bộ điều phối trung tâm quản lý trạng thái và ra lệnh cho từng bước trong quy trình."
+      }
+    ]
+  },
+  {
+    "id": "rate-limiting",
+    "title": "Giới Hạn Tốc Độ Truy Cập (Rate Limiting)",
+    "summary": "Kiểm soát số lượng request từ một client hoặc dịch vụ để ngăn chặn tấn công quá tải hoặc cạn kiệt tài nguyên.",
+    "explanation": [
+      "Hệ thống phân tán cần bảo vệ chính mình trước những vị khách thô lỗ: client bị lỗi vòng lặp vô tận, kẻ tấn công DoS, hoặc tích hợp của bên thứ ba gửi request ồ ạt.",
+      "Giới hạn tốc độ (Rate Limiter) đặt ra trần số request được phép trong một đơn vị thời gian (ví dụ: tối đa 100 requests/phút trên mỗi API Key).",
+      "Các thuật toán kinh điển: Token Bucket (cho phép bùng nổ lưu lượng ngắn), Leaky Bucket (làm mượt lưu lượng theo tốc độ cố định), Fixed Window (đơn giản nhưng có lỗi gấp đôi tải tại biên), và Sliding Window Log/Counter (chính xác tuyệt đối).",
+      "Khi vượt ngưỡng, server phản hồi mã HTTP 429 Too Many Requests kèm header 'Retry-After' hướng dẫn client thời điểm được phép thử lại."
+    ],
+    "keyTerms": [
+      {
+        "term": "Giới Hạn Tốc Độ (Rate Limiting)",
+        "definition": "Cơ chế kiểm soát lưu lượng request được phép gửi đến hệ thống trong một khoảng thời gian nhất định."
+      },
+      {
+        "term": "Thuật Toán Token Bucket",
+        "definition": "Thuật toán cấp phát token theo tốc độ đều đặn, cho phép xử lý các đợt bùng nổ ngắn khi xô còn token."
+      },
+      {
+        "term": "Mã HTTP 429",
+        "definition": "Mã trạng thái chuẩn báo hiệu người dùng đã vượt quá giới hạn tần suất yêu cầu cho phép."
+      }
+    ]
+  }
+]

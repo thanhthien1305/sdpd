@@ -1,0 +1,223 @@
+{
+  "id": "case-28",
+  "number": 28,
+  "title": "Bộ Ngắt Mạch (The Circuit Breaker)",
+  "subtitle": "Một quân cờ domino ngã đổ kéo sập toàn bộ trung tâm chỉ huy",
+  "brief": {
+    "narrative": "Hệ thống điều hành trung tâm kết nối với Dịch vụ Tra Cứu Biển Số Xe của Cục Đăng Kiểm Quốc Gia. Tối nay, trung tâm dữ liệu của Cục Đăng Kiểm bị sét đánh làm đứt đường truyền, khiến mọi lệnh gọi tra cứu biển số đều bị treo cứng 30 giây rồi mới timeout. Ứng dụng trung tâm chỉ huy không hề có Bộ Ngắt Mạch (Circuit Breaker): nó vẫn ngây thơ đẩy hàng ngàn sĩ quan đang tuần tra vào hàng chờ kết nối với Cục Đăng Kiểm. Trong vòng 2 phút, toàn bộ 1.000 luồng xử lý (threads) của hệ thống chỉ huy đều bị kẹt cứng trong trạng thái chờ Cục Đăng Kiểm trả lời! Hệ thống không còn luồng nào để xử lý các cuộc gọi báo án giết người hay cướp có vũ trang! Cả sở cảnh sát bị tê liệt vì một đối tác bên ngoài! Thám tử, hãy lắp ngay Cầu Dao Điện!",
+    "symptoms": [
+      "Dịch vụ phụ thuộc bên thứ ba (Third-party Dependency) bị sập và phản hồi chậm chạp",
+      "Hệ thống nội bộ không ngắt kết nối mà tiếp tục gửi yêu cầu vào dịch vụ hỏng",
+      "Toàn bộ tài nguyên luồng (Thread Pool) bị tiêu hao sạch sẽ chỉ để đứng chờ đối tác",
+      "Các tính năng cốt lõi hoàn toàn không liên quan đến bên thứ ba cũng bị tê liệt theo"
+    ],
+    "objective": "Bảo vệ hệ thống trước sự cố của các dịch vụ phụ thuộc bằng cách áp dụng Mẫu Thiết Kế Bộ Ngắt Mạch (Circuit Breaker Pattern) với khả năng Thất Bại Nhanh (Fail Fast) và Dữ Liệu Dự Phòng (Fallback)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "call-routing",
+        "type": "client",
+        "label": "Call Routing Service",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Call Routing Service",
+          "logs": [
+            "[09:00:15] INFO: Incoming 911 call — routing to Dispatch Service",
+            "[09:00:45] ERROR: Dispatch Service timeout after 30s",
+            "[09:01:16] ERROR: Dispatch Service timeout after 30s — call #2 lost",
+            "[09:01:50] ERROR: All outbound connections to Dispatch blocked",
+            "[09:02:00] ERROR: 14 calls in queue — no dispatch capacity available"
+          ],
+          "data": {
+            "Status": "FAILING",
+            "Pending Calls": "14 (all blocked)",
+            "Timeout to Dispatch": "30s",
+            "Calls Dropped": "9 in last 3 minutes",
+            "Circuit Breaker": "NOT IMPLEMENTED"
+          },
+          "status": "Cannot route calls because Dispatch Service is unresponsive. No fallback behavior configured."
+        }
+      },
+      {
+        "id": "dispatch-service",
+        "type": "server",
+        "label": "Dispatch Service",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Service",
+          "logs": [
+            "[09:00:01] INFO: Processing 911 call — validating address via Address Validation Service",
+            "[09:00:31] ERROR: Address Validation timeout after 30s",
+            "[09:00:31] INFO: Retrying address validation...",
+            "[09:01:01] ERROR: Address Validation timeout — retry failed",
+            "[09:01:05] WARN: Thread pool exhausted — 50/50 threads blocked on Address Validation",
+            "[09:01:05] ERROR: Cannot accept new requests — all threads occupied"
+          ],
+          "data": {
+            "Thread Pool": "50/50 (all blocked)",
+            "Blocked On": "Address Validation Service",
+            "Timeout Setting": "30s per request",
+            "Circuit Breaker": "NOT IMPLEMENTED",
+            "Fallback": "NONE — address validation required for all dispatches"
+          },
+          "status": "All threads blocked waiting for Address Validation responses that will never arrive."
+        }
+      },
+      {
+        "id": "address-validation",
+        "type": "server",
+        "label": "Address Validation",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Address Validation Service",
+          "logs": [
+            "[08:59:00] INFO: Shutting down for scheduled maintenance",
+            "[08:59:01] INFO: Service stopped — maintenance window: 09:00 - 09:30",
+            "[09:00:01] INFO: Incoming connection refused — service offline"
+          ],
+          "data": {
+            "Status": "OFFLINE (planned maintenance)",
+            "Maintenance Window": "09:00 - 09:30",
+            "Notification Sent": "Yes — email sent to ops team 24h ago",
+            "Expected Downtime": "30 minutes"
+          },
+          "status": "Intentionally offline for scheduled maintenance. Not accepting connections."
+        }
+      },
+      {
+        "id": "officer-assignment",
+        "type": "server",
+        "label": "Officer Assignment",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 320
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Assignment Service",
+          "logs": [
+            "[09:01:10] INFO: Waiting for dispatch instructions...",
+            "[09:01:40] WARN: No dispatches received in 90s — unusual",
+            "[09:02:00] ERROR: Dispatch Service connection timed out",
+            "[09:02:05] ERROR: Cannot assign officers — no dispatch data available"
+          ],
+          "data": {
+            "Status": "STARVED",
+            "Dispatches Received": "0 (last 3 min)",
+            "Officers Available": "34 (idle, waiting for assignments)",
+            "Depends On": "Dispatch Service"
+          },
+          "status": "No officers being dispatched because Dispatch Service is frozen. Officers sitting idle during active emergency calls."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-routing-dispatch",
+        "source": "call-routing",
+        "target": "dispatch-service",
+        "label": "blocked (30s timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-dispatch-address",
+        "source": "dispatch-service",
+        "target": "address-validation",
+        "label": "connection refused",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-dispatch-officer",
+        "source": "dispatch-service",
+        "target": "officer-assignment",
+        "label": "no dispatches",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao sự cố ở Cục Đăng Kiểm bên ngoài lại có thể đánh sập toàn bộ hệ thống điều hành chỉ huy nội bộ của sở cảnh sát?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Sét đánh ở Cục Đăng Kiểm đã truyền theo dây mạng làm cháy máy chủ của sở cảnh sát",
+          "correct": false,
+          "feedback": "Hạ tầng vật lý của sở cảnh sát hoàn toàn nguyên vẹn; sự cố thuần túy ở tầng phần mềm quản lý tài nguyên."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dữ liệu biển số xe chứa các ký tự đặc biệt làm hỏng bộ giải mã JSON",
+          "correct": false,
+          "feedback": "Lỗi là do timeout đường truyền mạng, không liên quan đến định dạng dữ liệu."
+        },
+        {
+          "id": "rc-4",
+          "text": "Nhân viên tổng đài đã cắm nhầm dây mạng vào máy in",
+          "correct": false,
+          "feedback": "Mạng nội bộ hoàn toàn bình thường."
+        },
+        {
+          "id": "rc-2",
+          "text": "Thiếu Bộ Ngắt Mạch (Circuit Breaker) — hệ thống tiếp tục gửi yêu cầu vào một dịch vụ đã chết, khiến toàn bộ tài nguyên luồng kết nối bị khóa nghẽn trong trạng thái chờ đợi vô ích và làm sập dây chuyền toàn bộ ứng dụng",
+          "correct": true,
+          "feedback": "Chính xác! Khi một dịch vụ phụ thuộc bị lỗi hoặc quá chậm, nếu không có cơ chế ngắt mạch để 'Thất Bại Nhanh' (Fail Fast), các luồng xử lý sẽ bị giữ chân và tích tụ dần cho đến khi cạn kiệt toàn bộ tài nguyên của hệ thống chính."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần triển khai mẫu thiết kế nào để cô lập hoàn toàn sự cố của dịch vụ bên thứ ba và bảo vệ hệ thống nội bộ?",
+      "options": [
+        {
+          "id": "fix-3",
+          "text": "Ngừng vĩnh viễn việc tra cứu biển số xe trên toàn quốc",
+          "correct": false,
+          "feedback": "Tra cứu biển số là nghiệp vụ sống còn để phát hiện xe ăn trộm và tội phạm đào tẩu."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng số lượng luồng kết nối của máy chủ chỉ huy lên 100.000 threads",
+          "correct": false,
+          "feedback": "Mở quá nhiều thread sẽ làm tràn RAM và khiến CPU tiêu tốn toàn bộ năng lực cho việc chuyển đổi ngữ cảnh, làm máy chủ sập nhanh hơn."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai Mẫu Thiết Kế Bộ Ngắt Mạch (Circuit Breaker Pattern như Resilience4j/Envoy) — khi tỷ lệ lỗi vượt ngưỡng, chuyển sang trạng thái OPEN để từ chối ngay lập tức (Fail Fast) và trả về dữ liệu dự phòng (Fallback từ Cache), định kỳ thử nghiệm trạng thái HALF-OPEN để tự động đóng mạch khi đối tác hồi phục",
+          "correct": true,
+          "feedback": "Chính xác! Khi phát hiện Cục Đăng Kiểm bị lỗi > 50%, Circuit Breaker lập tức 'nhảy cầu dao' sang trạng thái OPEN. Mọi truy vấn tra cứu biển số sẽ được phản hồi ngay lập tức trong 1ms kèm thông báo 'Tạm thời tra cứu từ cache cục bộ', giải phóng 100% tài nguyên luồng để phục vụ các cuộc gọi khẩn cấp khác!"
+        },
+        {
+          "id": "fix-4",
+          "text": "Khởi động lại toàn bộ máy chủ chỉ huy mỗi 5 phút một lần",
+          "correct": false,
+          "feedback": "Khởi động lại liên tục làm gián đoạn mọi hoạt động của lực lượng cảnh sát."
+        }
+      ]
+    }
+  },
+  "conceptId": "circuit-breakers",
+  "badge": {
+    "name": "Vệ Binh Cầu Dao Ngắt Mạch",
+    "icon": "⚡"
+  }
+}

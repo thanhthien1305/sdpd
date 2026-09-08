@@ -1,0 +1,229 @@
+{
+  "id": "case-33",
+  "number": 33,
+  "title": "Bộ Giới Hạn Tốc Độ (The Rate Limiter)",
+  "subtitle": "Một dịch vụ tích hợp bên ngoài làm tràn ngập hệ thống, nhấn chìm tất cả mọi người",
+  "brief": {
+    "narrative": "Tòa thị chính thành phố vừa ra mắt cổng dịch vụ công trực tuyến và tích hợp vào API của Sở Cảnh Sát để tra cứu lý lịch tư pháp của người dân. Tuy nhiên, lập trình viên phía tòa thị chính viết code bị lỗi vòng lặp while(true) vô tận, liên tục bắn hơn 50.000 requests mỗi giây vào hệ thống cảnh sát! Vì không có cơ chế Giới Hạn Tốc Độ (Rate Limiting), máy chủ API của cảnh sát bị nghẽn cứng hoàn toàn. Các sĩ quan ngoài đường không thể tra cứu biển số, tổng đài 911 không thể mở hồ sơ báo án, cả hệ thống an ninh thành phố sụp đổ chỉ vì một con bot bên ngoài chạy loạn! Cảnh trưởng Partition đập bàn: 'Tại sao chúng ta không chặn con bot này lại?!'. Thám tử, hãy dựng lên lá chắn phân luồng tốc độ!",
+    "symptoms": [
+      "Một khách hàng API duy nhất gửi lưu lượng khổng lồ bất thường (50.000 QPS) làm cạn kiệt tài nguyên máy chủ",
+      "Hệ thống không có cơ chế kiểm soát và điều tiết hạn mức truy cập theo API Key hay IP (No Rate Limiting)",
+      "Tất cả các dịch vụ khẩn cấp nội bộ quan trọng khác bị chết nghẹt theo lưu lượng rác bên ngoài",
+      "Máy chủ liên tục trả về lỗi sập nguồn 503 và 504"
+    ],
+    "objective": "Triển khai Bộ Giới Hạn Tốc Độ Phân Tán (Distributed Rate Limiter) sử dụng thuật toán Token Bucket / Sliding Window với Redis và phản hồi mã chuẩn HTTP 429 Too Many Requests."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "precinct-3",
+        "type": "client",
+        "label": "Precinct 3 (batch job)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Precinct 3 — Automated Background Check System",
+          "logs": [
+            "[08:00:00] INFO: Starting batch warrant check — 140,000 records queued",
+            "[08:00:01] INFO: Sending 500 requests/second to Warrant Gateway",
+            "[08:00:30] INFO: 15,000 records checked — 0 throttle errors",
+            "[08:01:00] WARN: Response times increasing — 2s average (was 200ms)",
+            "[08:02:00] WARN: Response times now 15s — but no rate limit errors received",
+            "[08:03:00] INFO: 45,000 records checked — continuing at full speed"
+          ],
+          "data": {
+            "Request Rate": "500/sec (unlimited)",
+            "Records To Process": "140,000",
+            "Rate Limit Received": "NONE — no limits enforced",
+            "Job Priority": "Background batch — not time-sensitive",
+            "Impact Awareness": "None — no feedback that other precincts are affected"
+          },
+          "status": "Batch job running at full speed with no rate limiting feedback. Unaware it's starving other precincts."
+        }
+      },
+      {
+        "id": "other-precincts",
+        "type": "client",
+        "label": "Precincts 1,2,4,5",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Precincts 1, 2, 4, 5 — Field Operations",
+          "logs": [
+            "[08:01:15] INFO: [P1] Officer Shield — warrant check for traffic stop suspect",
+            "[08:01:45] ERROR: [P1] Warrant Gateway timeout — 30s — returning NO DATA",
+            "[08:01:46] WARN: [P1] Officer Shield releasing suspect — no warrant data available",
+            "[08:02:00] ERROR: [P2] Warrant check failed — timeout",
+            "[08:02:10] ERROR: [P4] Warrant check failed — timeout",
+            "[08:02:30] ERROR: [P5] Warrant check failed — 3 consecutive timeouts"
+          ],
+          "data": {
+            "Combined Request Rate": "~20/sec (normal field operations)",
+            "Success Rate": "0% (all timing out)",
+            "Officers In Field": "340 (across 4 precincts)",
+            "Warrant Checks Failed": "127 in last 5 minutes",
+            "Safety Risk": "HIGH — suspects released without warrant data"
+          },
+          "status": "All four precincts unable to run warrant checks. Officers making stops without critical safety information."
+        }
+      },
+      {
+        "id": "warrant-gateway",
+        "type": "server",
+        "label": "Warrant Gateway API",
+        "status": "failed",
+        "position": {
+          "x": 400,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Warrant Gateway API",
+          "logs": [
+            "[08:00:00] INFO: Incoming request rate: ~20/sec (normal)",
+            "[08:00:01] WARN: Request rate spike — 520/sec",
+            "[08:00:30] WARN: Thread pool 95% utilized — 190/200 threads busy",
+            "[08:01:00] ERROR: Thread pool exhausted — 200/200 threads busy",
+            "[08:01:00] ERROR: Request queue overflow — dropping requests",
+            "[08:01:00] WARN: Rate limiting: NOT CONFIGURED"
+          ],
+          "data": {
+            "Max Throughput": "200 req/sec",
+            "Current Inbound": "520 req/sec",
+            "Rate Limiting": "NONE",
+            "Per-Client Quotas": "NONE",
+            "Priority Queues": "NONE",
+            "Precinct 3 Share": "96% of all requests",
+            "Other Precincts Share": "4% of all requests"
+          },
+          "status": "API overwhelmed. No rate limiting, no per-client quotas, no priority differentiation."
+        }
+      },
+      {
+        "id": "federal-db",
+        "type": "database",
+        "label": "Federal Warrant DB",
+        "status": "degraded",
+        "position": {
+          "x": 650,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Federal Warrant Database",
+          "logs": [
+            "[08:00:30] WARN: Query rate exceeding recommended threshold",
+            "[08:01:00] WARN: Connection pool 90% utilized",
+            "[08:01:30] ERROR: Query latency 5x normal — resource contention"
+          ],
+          "data": {
+            "Connection Pool": "180/200 (90% — mostly Precinct 3 queries)",
+            "Query Latency": "1.2s (normal: 50ms)",
+            "Recommended Rate": "100 queries/sec",
+            "Actual Rate": "500+ queries/sec"
+          },
+          "status": "Database under heavy load from unthrottled batch queries."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-p3-gateway",
+        "source": "precinct-3",
+        "target": "warrant-gateway",
+        "label": "500 req/sec (no limit)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-others-gateway",
+        "source": "other-precincts",
+        "target": "warrant-gateway",
+        "label": "20 req/sec (starved)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-gateway-db",
+        "source": "warrant-gateway",
+        "target": "federal-db",
+        "label": "overwhelmed",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao một con bot bị lỗi từ phía đối tác lại có thể đánh sập hoàn toàn hệ thống của sở cảnh sát?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Đường dây điện thoại của sở cảnh sát bị đứt",
+          "correct": true,
+          "feedback": "Sự cố xảy ra tại cổng máy chủ web API, không liên quan đến mạng điện thoại."
+        },
+        {
+          "id": "rc-1",
+          "text": "Tòa thị chính đã cố tình phát động chiến tranh mạng chống lại sở cảnh sát",
+          "correct": false,
+          "feedback": "Đây chỉ là lỗi vòng lặp code sơ đẳng của lập trình viên, không phải hành vi thù địch."
+        },
+        {
+          "id": "rc-2",
+          "text": "Thiếu Bộ Giới Hạn Tốc Độ (Rate Limiting / Throttling) — hệ thống đối xử với mọi request bình đẳng như nhau và không có hạn ngạch trần (Quota) để cô lập và ngăn chặn các nguồn lưu lượng độc hại làm cạn kiệt tài nguyên",
+          "correct": false,
+          "feedback": "Chính xác! Một hệ sinh thái phân tán an toàn bắt buộc phải bảo vệ chính mình. Nếu không có Rate Limiting đặt ra trần hạn ngạch theo từng API Key/IP, bất kỳ một client nào chạy lỗi hay bị tấn công cũng sẽ kéo sập luôn toàn bộ hệ thống."
+        },
+        {
+          "id": "rc-4",
+          "text": "Cơ sở dữ liệu của sở cảnh sát bị giới hạn chỉ chứa được 100 người dân",
+          "correct": false,
+          "feedback": "Dung lượng dữ liệu không phải nguyên nhân; nguyên nhân là tần suất cuộc gọi quá lớn."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp chuẩn công nghiệp để bảo vệ hệ thống trước các đợt lưu lượng vượt ngưỡng là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Khởi kiện lập trình viên tòa thị chính ra tòa án tối cao",
+          "correct": false,
+          "feedback": "Kiện cáo mất nhiều năm và không giải quyết được bài toán bảo vệ hệ thống kỹ thuật trong thời gian thực."
+        },
+        {
+          "id": "fix-1",
+          "text": "Triển khai Bộ Giới Hạn Tốc Độ Phân Tán (Distributed Rate Limiter) tại Cổng API Gateway áp dụng thuật toán Token Bucket hoặc Sliding Window Counter trên Redis — giới hạn mỗi đối tác tối đa 500 requests/giây, trả về ngay HTTP 429 Too Many Requests kèm header Retry-After khi vượt ngưỡng",
+          "correct": false,
+          "feedback": "Chính xác! Với Token Bucket / Sliding Window trên Redis, khi bot tòa thị chính vượt quá 500 QPS, Gateway sẽ ngay lập tức từ chối các request thừa trong 0.1ms với mã HTTP 429. Lưu lượng nội bộ của cảnh sát vẫn lưu thông bình thường, cách ly hoàn toàn sự cố đối tác!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Rút toàn bộ phích cắm mạng internet của sở cảnh sát ra khỏi tường",
+          "correct": true,
+          "feedback": "Rút mạng làm mất liên lạc của toàn bộ lực lượng cảnh sát trên toàn thành phố."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tăng dung lượng máy chủ lên gấp 100 lần để hấp thụ toàn bộ 50.000 QPS của con bot",
+          "correct": false,
+          "feedback": "Mở rộng tài nguyên vô tội vạ để phục vụ một vòng lặp code vô tận là cực kỳ tốn kém và không bền vững."
+        }
+      ]
+    }
+  },
+  "conceptId": "rate-limiting",
+  "badge": {
+    "name": "Bậc Thầy Giới Hạn Tốc Độ",
+    "icon": "🚦"
+  }
+}

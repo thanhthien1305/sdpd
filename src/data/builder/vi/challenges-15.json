@@ -1,0 +1,76 @@
+{
+  "id": "builder-15",
+  "number": 15,
+  "title": "Phát Sóng Cảnh Báo Khẩn Cấp",
+  "subtitle": "Báo động khẩn cấp toàn thành phố phải tới mọi kênh trong vài giây",
+  "objective": "Xây dựng hệ thống phát tán cảnh báo đa kênh với độ trễ cực thấp và độ tin cậy tuyệt đối.",
+  "constraints": [
+    "Độ trễ truyền tin dưới 3 giây tới hàng triệu thiết bị và màn hình công cộng",
+    "Không bị nghẽn khi hàng loạt kênh thông báo gửi xác nhận cùng lúc",
+    "Hệ thống phải có tính dự phòng cao và không có điểm lỗi đơn lẻ"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Tầng Tiếp Nhận Sẵn Sàng Tuyệt Đối",
+      "description": "Bộ cân bằng tải và API đảm bảo lệnh phát sóng được tiếp nhận tức thời.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Phát Tán Hỏa Tốc Qua Hàng Đợi",
+      "description": "Hàng đợi phân luồng thông điệp cảnh báo tới từng kênh phát sóng song song.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Thực Thi Phân Phối Đa Kênh",
+      "description": "Đội ngũ worker chịu trách nhiệm bắn thông báo tới SMS, app và loa phát thanh.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

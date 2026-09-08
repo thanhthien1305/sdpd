@@ -1,0 +1,70 @@
+{
+  "id": "builder-17",
+  "number": 17,
+  "title": "Triển Khai Chia Tách Lưu Lượng",
+  "subtitle": "Triển khai phiên bản API mới gây ra các hành vi mất ổn định diện rộng",
+  "objective": "Thiết lập kiến trúc điều tiết lưu lượng (Canary/Traffic splitting) để thử nghiệm an toàn.",
+  "constraints": [
+    "Chỉ chuyển một phần nhỏ lưu lượng (5-10%) sang phiên bản API thử nghiệm",
+    "Có khả năng hoàn tác (rollback) tức thì nếu phát hiện lỗi bất thường",
+    "Đảm bảo người dùng giữ nguyên phiên làm việc nhất quán"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "queue"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Định Tuyến Cân Bằng Tải Thông Minh",
+      "description": "Load Balancer phân chia tỉ lệ lưu lượng giữa phiên bản cũ và mới.",
+      "requiredAll": [
+        "client",
+        "loadBalancer",
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        },
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Dịch Vụ Độc Lập Song Song",
+      "description": "Các instance API chạy độc lập giúp cô lập rủi ro lỗi phần mềm.",
+      "requiredAll": [
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "cache"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Kho Dữ Liệu Tương Thích Ngược",
+      "description": "Cơ sở dữ liệu chia sẻ duy trì tính tương thích với cả hai phiên bản mã nguồn.",
+      "requiredAll": [
+        "database"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

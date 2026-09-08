@@ -1,0 +1,225 @@
+{
+  "id": "case-32",
+  "number": 32,
+  "title": "Thất Bại Trong Chuỗi Saga (The Saga Failure)",
+  "subtitle": "Quy trình lập hồ sơ tạm giam quên cách hoàn tác sai lầm của chính mình",
+  "brief": {
+    "narrative": "Quy trình khởi tố nghi phạm trải dài qua 4 microservices độc lập: 1. Đăng ký tạm giam → 2. Tịch thu và niêm phong tài sản → 3. Đặt lịch phiên tòa sơ thẩm → 4. Gán luật sư chỉ định. Hệ thống sử dụng Mẫu Thiết Kế Saga để điều phối các giao dịch phân tán. Sáng nay, quy trình chạy đến bước 4 thì gặp lỗi: tất cả luật sư chỉ định đều bận, bước 4 thất bại hoàn toàn! Nhưng lập trình viên đã 'quên' viết Thao Tác Bù Trừ (Compensating Transactions) cho các bước trước đó! Kết quả: Nghi phạm không thể khởi tố, nhưng xe hơi và nhà của anh ta vẫn bị niêm phong, và lịch hầu tòa vẫn được gửi đi! Nghi phạm bị tước đoạt tài sản bất hợp pháp mà không có vụ án nào tồn tại! Thám tử, hãy hoàn tác mớ bòng bong này!",
+    "symptoms": [
+      "Giao dịch phân tán trải dài qua nhiều microservices bị thất bại ở bước cuối cùng",
+      "Các bước trước đó đã commit thành công vào cơ sở dữ liệu riêng của từng dịch vụ",
+      "Hệ thống không kích hoạt chuỗi Giao Dịch Bù Trừ (Compensating Transactions) để hoàn tác trạng thái",
+      "Dữ liệu giữa các dịch vụ bị phân mảnh, rơi vào trạng thái mâu thuẫn nghiệp vụ nghiêm trọng"
+    ],
+    "objective": "Hoàn thiện Mẫu Thiết Kế Saga (Saga Pattern) bằng cách định nghĩa đầy đủ các Thao Tác Bù Trừ (Compensating Transactions) cho từng bước trong quy trình phân tán."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "booking-orchestrator",
+        "type": "server",
+        "label": "Booking Orchestrator",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Booking Orchestrator",
+          "logs": [
+            "[21:15:00] INFO: Starting booking saga for Suspect #7 (Arrest ID: A-2847)",
+            "[21:15:01] INFO: Step 1 — Arrest Service → CREATE arrest record → SUCCESS",
+            "[21:15:02] INFO: Step 2 — Booking Service → ASSIGN booking number → SUCCESS (BK-90441)",
+            "[21:15:03] INFO: Step 3 — Cell Assignment → ASSIGN cell → FAILED (capacity exceeded)",
+            "[21:15:03] ERROR: Step 3 failed. No compensating transactions defined.",
+            "[21:15:03] ERROR: Saga aborted — system left in inconsistent state",
+            "[21:15:03] ERROR: Manual intervention required for Arrest A-2847, Booking BK-90441"
+          ],
+          "data": {
+            "Saga Status": "FAILED — INCONSISTENT STATE",
+            "Steps Completed": "2 of 3",
+            "Steps Rolled Back": "0 of 2 (NO COMPENSATING ACTIONS DEFINED)",
+            "Orphaned Records": "Arrest A-2847, Booking BK-90441",
+            "Rollback Strategy": "NONE IMPLEMENTED"
+          },
+          "status": "Saga failed at Step 3 but has no compensating transactions to undo Steps 1 and 2."
+        }
+      },
+      {
+        "id": "arrest-service",
+        "type": "server",
+        "label": "Arrest Service",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Arrest Service",
+          "logs": [
+            "[21:15:01] INFO: Created arrest record A-2847 for Suspect #7",
+            "[21:15:01] INFO: Status: ACTIVE — awaiting booking",
+            "[21:15:04] WARN: Arrest A-2847 still in ACTIVE state — no booking completion received",
+            "[21:20:00] WARN: Arrest A-2847 stuck in ACTIVE for 5 minutes — no rollback requested"
+          ],
+          "data": {
+            "Arrest ID": "A-2847",
+            "Suspect": "#7",
+            "Status": "ACTIVE (cannot be deleted or reprocessed)",
+            "Compensating Action": "NOT DEFINED",
+            "Expected Next Step": "Booking confirmation (never arrived)"
+          },
+          "status": "Arrest record exists and is marked ACTIVE. No compensating action to void it."
+        }
+      },
+      {
+        "id": "booking-service",
+        "type": "server",
+        "label": "Booking Service",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Booking Service",
+          "logs": [
+            "[21:15:02] INFO: Assigned booking number BK-90441 to Arrest A-2847",
+            "[21:15:02] INFO: Status: ALLOCATED — awaiting cell assignment",
+            "[21:15:05] WARN: Booking BK-90441 — no cell assignment confirmation received",
+            "[21:20:00] WARN: Booking BK-90441 stuck in ALLOCATED for 5 minutes"
+          ],
+          "data": {
+            "Booking Number": "BK-90441",
+            "Linked Arrest": "A-2847",
+            "Status": "ALLOCATED (blocks re-use of this number)",
+            "Compensating Action": "NOT DEFINED",
+            "Expected Next Step": "Cell assignment (never arrived)"
+          },
+          "status": "Booking number allocated but never completed. Number cannot be reused or released."
+        }
+      },
+      {
+        "id": "cell-assignment",
+        "type": "server",
+        "label": "Cell Assignment",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 250
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cell Assignment Service",
+          "logs": [
+            "[21:15:03] INFO: Cell assignment request for Booking BK-90441",
+            "[21:15:03] ERROR: All holding cells at capacity (48/48 occupied)",
+            "[21:15:03] ERROR: Cell assignment FAILED — no available cells",
+            "[21:15:03] INFO: Note: Cell #12 was pre-reserved for BK-90441 but reservation failed on final commit"
+          ],
+          "data": {
+            "Capacity": "48/48 (includes 1 ghost reservation)",
+            "Cell #12": "Reserved for BK-90441 but physically EMPTY",
+            "Assignment Status": "FAILED",
+            "Compensating Action": "NOT DEFINED"
+          },
+          "status": "Assignment failed but a pre-reservation exists that won't be released."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-orch-arrest",
+        "source": "booking-orchestrator",
+        "target": "arrest-service",
+        "label": "Step 1: SUCCESS",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-orch-booking",
+        "source": "booking-orchestrator",
+        "target": "booking-service",
+        "label": "Step 2: SUCCESS",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-orch-cell",
+        "source": "booking-orchestrator",
+        "target": "cell-assignment",
+        "label": "Step 3: FAILED",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao tài sản của công dân vẫn bị niêm phong khi quy trình khởi tố bị hủy bỏ ở bước cuối cùng?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Bộ nhớ cache của trình duyệt web hiển thị sai thông tin tài sản",
+          "correct": false,
+          "feedback": "Dữ liệu niêm phong đã được ghi nhận thật sự trong cơ sở dữ liệu nghiệp vụ."
+        },
+        {
+          "id": "rc-1",
+          "text": "Ngân hàng đã tự động tịch thu tài sản do nghi phạm nợ tín dụng",
+          "correct": false,
+          "feedback": "Tài sản bị niêm phong bởi lệnh tự động từ dịch vụ nội bộ của sở cảnh sát."
+        },
+        {
+          "id": "rc-2",
+          "text": "Triển khai Mẫu Thiết Kế Saga không hoàn chỉnh — thiếu các Giao Dịch Bù Trừ (Compensating Transactions) để hoàn tác (Rollback) các bước đã thành công khi một bước tiếp theo bị thất bại",
+          "correct": true,
+          "feedback": "Chính xác! Trong kiến trúc microservices không thể dùng giao dịch ACID truyền thống. Saga đòi hỏi mỗi hành động phải đi kèm một hành động bù trừ ngược lại (Ví dụ: Đặt lịch tòa → Hủy lịch tòa, Niêm phong tài sản → Mở khóa tài sản). Quên viết bù trừ đồng nghĩa với việc để lại rác dữ liệu vĩnh viễn."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dịch vụ gán luật sư bị hacker ngắt kết nối mạng",
+          "correct": false,
+          "feedback": "Bước 4 thất bại do quy tắc nghiệp vụ thực tế (không có luật sư rảnh), không phải lỗi bảo mật."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần bổ sung thành phần cốt lõi nào vào Saga Orchestrator để đảm bảo tính nhất quán cuối cùng của quy trình nghiệp vụ?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Bắt buộc mọi nghi phạm phải tự thuê luật sư riêng đắt tiền",
+          "correct": false,
+          "feedback": "Người nghèo có quyền hiến định được nhà nước chỉ định luật sư bào chữa."
+        },
+        {
+          "id": "fix-1",
+          "text": "Định nghĩa đầy đủ chuỗi Giao Dịch Bù Trừ (Compensating Transactions) có tính idempotent cho từng bước — khi bước 4 thất bại, Orchestrator tự động gọi ngược lại: Hủy phiên tòa → Trả lại tài sản niêm phong → Hủy đăng ký tạm giam",
+          "correct": true,
+          "feedback": "Chính xác! Mô hình Saga hoàn chỉnh bắt buộc phải có cơ chế hoàn tác ngược theo ngữ nghĩa nghiệp vụ. Khi bất kỳ bước nào gặp lỗi, Orchestrator sẽ kích hoạt chuỗi bù trừ theo thứ tự đảo ngược, đưa toàn bộ hệ thống trở về trạng thái sạch sẽ ban đầu."
+        },
+        {
+          "id": "fix-3",
+          "text": "Gộp cả 4 microservices lại thành một cơ sở dữ liệu nguyên khối duy nhất dùng 2PC",
+          "correct": false,
+          "feedback": "Giao thức 2PC (Two-Phase Commit) quá chậm, dễ gây khóa chết và không phù hợp với kiến trúc phân tán hiện đại."
+        },
+        {
+          "id": "fix-4",
+          "text": "Bỏ qua bước 4 và tiếp tục xét xử nghi phạm mà không cần luật sư",
+          "correct": false,
+          "feedback": "Xét xử không có người bào chữa là vi phạm nghiêm trọng luật tố tụng hình sự."
+        }
+      ]
+    }
+  },
+  "conceptId": "sagas",
+  "badge": {
+    "name": "Kiến Trúc Sư Chuỗi Saga",
+    "icon": "📜"
+  }
+}

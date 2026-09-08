@@ -1,0 +1,230 @@
+{
+  "id": "case-06",
+  "number": 6,
+  "title": "Mệnh Lệnh Xung Đột (The Conflicting Orders)",
+  "subtitle": "Hai máy chủ leader, hai chỉ thị trái ngược, một sĩ quan vô cùng bối rối",
+  "brief": {
+    "narrative": "Sở cảnh sát sử dụng mô hình Multi-Leader (Đa Leader) đặt tại Đồn Bắc và Đồn Nam để tăng tốc độ ghi dữ liệu. Sĩ quan Ramirez tại Đồn Bắc phát hiện nghi phạm Rodriguez ở khu chợ và cập nhật trạng thái hồ sơ thành 'ĐANG THEO DÕI NGẦM - KHÔNG ĐƯỢC ĐỘNG VÀO'. Cùng lúc đó tại Đồn Nam, Đội trưởng Miller nhận được tin báo nóng và cập nhật trạng thái của Rodriguez thành 'BẮT GIỮ KHẨN CẤP NGAY LẬP TỨC'. Khi hai máy chủ Leader đồng bộ với nhau qua mạng, hệ thống áp dụng cơ chế Last-Write-Wins ngây thơ dựa trên đồng hồ vật lý bị lệch 40ms. Kết quả: lệnh theo dõi ngầm bị xóa sổ, và đặc nhiệm ập vào bắt giữ làm hỏng toàn bộ chuyên án ma túy 6 tháng trời!",
+    "symptoms": [
+      "Hai máy chủ Leader đồng thời tiếp nhận hai thao tác cập nhật trái ngược trên cùng một bản ghi",
+      "Cơ chế giải quyết xung đột sử dụng Last-Write-Wins (LWW) dựa trên nhãn thời gian phần cứng bị lệch",
+      "Lệnh điều tra quan trọng bị ghi đè và mất dấu hoàn toàn mà không có cảnh báo nào cho điều tra viên",
+      "Không có lịch sử phiên bản (Version Vector) để phát hiện sự sửa đổi đồng thời"
+    ],
+    "objective": "Chỉ ra rủi ro chí mạng của chiến lược Last-Write-Wins trong mô hình Multi-Leader và đề xuất cơ chế phát hiện xung đột dựa trên Version Vector hoặc CRDT."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "db-downtown",
+        "type": "database",
+        "label": "Downtown DB (Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Downtown Database (Leader)",
+          "logs": [
+            "[19:42:10] INFO: WRITE — Case #2290 assigned to Officer Park by Det. Reyes",
+            "[19:42:10] INFO: Write accepted locally, queued for replication to Harbor",
+            "[19:42:55] INFO: Received replication event from Harbor: Case #2290 assigned to Officer Chen",
+            "[19:42:55] ERROR: WRITE CONFLICT — Case #2290 has two different assignees",
+            "[19:42:55] WARN: Conflict resolution policy: LAST-WRITE-WINS (by timestamp)",
+            "[19:42:56] INFO: Harbor write timestamp 19:42:12 > Downtown write timestamp 19:42:10 — Harbor write wins",
+            "[19:42:56] WARN: Officer Park's assignment silently dropped"
+          ],
+          "data": {
+            "Role": "LEADER (multi-leader setup)",
+            "Case #2290 Assignee (local)": "Officer Park (OVERWRITTEN)",
+            "Case #2290 Assignee (after conflict resolution)": "Officer Chen",
+            "Conflict Resolution": "Last-Write-Wins (timestamp)",
+            "Replication Lag to Harbor": "45 seconds",
+            "Conflicts Today": "7"
+          },
+          "status": "Write conflict detected. LWW resolution silently dropped the Downtown assignment."
+        }
+      },
+      {
+        "id": "db-harbor",
+        "type": "database",
+        "label": "Harbor DB (Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 550,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Harbor Database (Leader)",
+          "logs": [
+            "[19:42:12] INFO: WRITE — Case #2290 assigned to Officer Chen by Sgt. Okonkwo",
+            "[19:42:12] INFO: Write accepted locally, queued for replication to Downtown",
+            "[19:42:57] INFO: Received replication event from Downtown: Case #2290 assigned to Officer Park",
+            "[19:42:57] ERROR: WRITE CONFLICT — Case #2290 has two different assignees",
+            "[19:42:57] WARN: Conflict resolution policy: LAST-WRITE-WINS (by timestamp)",
+            "[19:42:58] INFO: Harbor write timestamp 19:42:12 > Downtown write timestamp 19:42:10 — Harbor write wins"
+          ],
+          "data": {
+            "Role": "LEADER (multi-leader setup)",
+            "Case #2290 Assignee": "Officer Chen",
+            "Conflict Resolution": "Last-Write-Wins (timestamp)",
+            "Replication Lag to Downtown": "45 seconds",
+            "Conflicts Today": "7"
+          },
+          "status": "Write conflict resolved via LWW. Harbor write preserved, Downtown write discarded."
+        }
+      },
+      {
+        "id": "precinct-downtown",
+        "type": "client",
+        "label": "Downtown Precinct",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Downtown Precinct Terminal",
+          "logs": [
+            "[19:42:10] INFO: Det. Reyes assigned Case #2290 to Officer Park — confirmed",
+            "[19:42:15] INFO: Officer Park dispatched to crime scene",
+            "[19:43:00] WARN: Case #2290 assignee changed to Officer Chen (conflict resolution)",
+            "[19:43:00] ERROR: Officer Park already en route — no notification sent"
+          ],
+          "data": {
+            "Case #2290 Displayed Assignee": "Officer Chen (changed from Park)",
+            "Officer Park Status": "En route to crime scene (unaware of reassignment)",
+            "Det. Reyes Notified": "NO — silent overwrite"
+          },
+          "status": "Det. Reyes's assignment was silently overwritten by conflict resolution. No alert was raised."
+        }
+      },
+      {
+        "id": "precinct-harbor",
+        "type": "client",
+        "label": "Harbor Precinct",
+        "status": "healthy",
+        "position": {
+          "x": 550,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Harbor Precinct Terminal",
+          "logs": [
+            "[19:42:12] INFO: Sgt. Okonkwo assigned Case #2290 to Officer Chen — confirmed",
+            "[19:42:18] INFO: Officer Chen dispatched to crime scene"
+          ],
+          "data": {
+            "Case #2290 Displayed Assignee": "Officer Chen",
+            "Officer Chen Status": "En route to crime scene"
+          },
+          "status": "Harbor's assignment was preserved by LWW conflict resolution."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-dt-harbor-repl",
+        "source": "db-downtown",
+        "target": "db-harbor",
+        "label": "async replication",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-harbor-dt-repl",
+        "source": "db-harbor",
+        "target": "db-downtown",
+        "label": "async replication",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-dt-precinct",
+        "source": "db-downtown",
+        "target": "precinct-downtown",
+        "label": "reads/writes",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-harbor-precinct",
+        "source": "db-harbor",
+        "target": "precinct-harbor",
+        "label": "reads/writes",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao lệnh theo dõi ngầm quan trọng của Đồn Bắc lại bị âm thầm xóa sổ mà không ai hay biết?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Quyền truy cập của sĩ quan Ramirez đã hết hạn ngay trước khi nhấn nút lưu",
+          "correct": false,
+          "feedback": "Không phải lỗi phân quyền; cả hai thao tác cập nhật đều hợp lệ và được ghi nhận thành công trên máy chủ cục bộ mỗi bên."
+        },
+        {
+          "id": "rc-1",
+          "text": "Đường truyền cáp quang giữa hai đồn bị mất gói tin khiến bản ghi của Đồn Bắc không gửi đi được",
+          "correct": false,
+          "feedback": "Bản ghi đã được gửi đi thành công; vấn đề xảy ra tại bước giải quyết xung đột khi hai bên gặp nhau."
+        },
+        {
+          "id": "rc-4",
+          "text": "Dữ liệu trạng thái hồ sơ bị tràn bộ đệm chuỗi ký tự trong cơ sở dữ liệu",
+          "correct": false,
+          "feedback": "Trường dữ liệu là chuỗi ngắn hoàn toàn hợp lệ."
+        },
+        {
+          "id": "rc-2",
+          "text": "Chiến lược Last-Write-Wins (LWW) dựa trên đồng hồ vật lý bị lệch đã âm thầm vứt bỏ một trong hai bản ghi cập nhật đồng thời mà không hề hay biết về ngữ cảnh nghiệp vụ",
+          "correct": true,
+          "feedback": "Chính xác! Trong mô hình Multi-Leader, LWW giải quyết xung đột bằng cách mù quáng chọn bản ghi có timestamp cao hơn. Do đồng hồ Đồn Nam chạy nhanh hơn một chút, nó đã đè bẹp và xóa sạch lệnh của Đồn Bắc mà không cảnh báo cho con người."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Phương án kiến trúc nào là tốt nhất để xử lý xung đột trong các trường hợp nghiệp vụ nhạy cảm như hồ sơ tội phạm?",
+      "options": [
+        {
+          "id": "fix-2",
+          "text": "Tiếp tục dùng LWW nhưng mua đồng hồ nguyên tử đắt tiền lắp vào từng máy chủ",
+          "correct": true,
+          "feedback": "Đồng hồ nguyên tử (như Google Spanner TrueTime) giảm thiểu sai số nhưng cực kỳ tốn kém và vẫn không giải quyết được xung đột về mặt ngữ nghĩa nghiệp vụ khi hai người cùng ra lệnh trái ngược nhau trong cùng một tích tắc."
+        },
+        {
+          "id": "fix-4",
+          "text": "Gộp hai dòng trạng thái thành một chuỗi văn bản dài ghép chung với nhau",
+          "correct": false,
+          "feedback": "Ghép chuỗi 'THEO DÕI NGẦM + BẮT GIỮ NGAY' sẽ chỉ làm sĩ quan ngoài hiện trường bối rối gấp bội."
+        },
+        {
+          "id": "fix-1",
+          "text": "Sử dụng Vector Clocks để phát hiện sửa đổi đồng thời và đưa xung đột ra giao diện người dùng giải quyết (hoặc định tuyến các thao tác ghi của cùng một nghi phạm về duy nhất một Leader xác định)",
+          "correct": false,
+          "feedback": "Chính xác! Vector Clocks cho phép hệ thống nhận biết chính xác hai thao tác ghi đã diễn ra đồng thời mà không có quan hệ nhân quả trước sau. Hệ thống sẽ gắn cờ xung đột để điều tra viên xử lý, hoặc tốt hơn nữa là định tuyến toàn bộ tác vụ của cùng một nghi phạm về cùng một Leader."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấm tất cả các đồn cập nhật hồ sơ nghi phạm vào ban ngày",
+          "correct": false,
+          "feedback": "Nghiệp vụ an ninh đòi hỏi phản ứng thời gian thực từng giây, không thể trì hoãn việc cập nhật."
+        }
+      ]
+    }
+  },
+  "conceptId": "multi-leader-replication",
+  "badge": {
+    "name": "Bậc Thầy Giải Quyết Xung Đột",
+    "icon": "⚔️"
+  }
+}

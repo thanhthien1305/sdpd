@@ -1,0 +1,71 @@
+{
+  "id": "builder-10",
+  "number": 10,
+  "title": "Khởi Động Lạnh Vùng Dự Phòng",
+  "subtitle": "Vùng mới kích hoạt không thể làm ấm kịp sau sự cố chuyển đổi dự phòng (failover)",
+  "objective": "Thiết kế chiến lược làm ấm dữ liệu và định tuyến lưu lượng trơn tru cho vùng dự phòng.",
+  "constraints": [
+    "Tránh để cơ sở dữ liệu vùng mới bị sốc tải khi nhận toàn bộ lưu lượng",
+    "Đồng bộ dữ liệu và làm ấm bộ nhớ đệm trước hoặc song song với định tuyến",
+    "Đảm bảo người dùng không nhận phải lỗi timeout trong quá trình chuyển đổi"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "cache",
+    "loadBalancer",
+    "api",
+    "database",
+    "blobStorage"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Làm Ấm Bộ Nhớ Đệm Dự Phòng",
+      "description": "Duy trì hoặc nạp trước dữ liệu vào Cache trước khi chuyển đổi lưu lượng.",
+      "requiredAnyOf": [
+        "cdn",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Điều Tiết Cân Bằng Tải",
+      "description": "Cân bằng tải dịch chuyển lưu lượng dần dần sang vùng mới.",
+      "requiredAll": [
+        "api"
+      ],
+      "preferredConnections": [
+        {
+          "from": "loadBalancer",
+          "to": "api"
+        },
+        {
+          "from": "api",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Nhân Bản Dữ Liệu Nền",
+      "description": "Cơ sở dữ liệu liên tục nhân bản trạng thái để sẵn sàng phục vụ tức thì.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ]
+    }
+  ]
+}

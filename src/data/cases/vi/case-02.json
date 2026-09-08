@@ -1,0 +1,252 @@
+{
+  "id": "case-02",
+  "number": 2,
+  "title": "Đọc Dữ Liệu Cũ (The Stale Read)",
+  "subtitle": "Sĩ quan bắt giữ nhầm nghi phạm dựa trên lệnh truy nã đã bị hủy",
+  "brief": {
+    "narrative": "Sĩ quan Chen vừa bắt giữ Marcus Webb trong một chốt kiểm tra giao thông dựa trên lệnh truy nã tội hành hung. Vấn đề là: lệnh bắt đó đã được Thẩm phán Torres ký hủy cách đây 3 giờ! Luật sư của Webb đang đe dọa kiện sở cảnh sát vì tội bắt giữ người trái pháp luật. Lệnh hủy bắt giữ đã được nhập vào cơ sở dữ liệu Leader tại Trụ sở Trung tâm, nhưng xe tuần tra của sĩ quan Chen lại truy vấn máy chủ Follower của Đồn Phía Nam — nơi dường như chưa hề cập nhật. Cảnh trưởng Partition đang nổi trận lôi đình. Hệ thống của chúng ta đã phản bội chúng ta thế nào, Thám tử?",
+    "symptoms": [
+      "Lệnh bắt giữ đã được hủy 3 giờ trước trên cơ sở dữ liệu Leader",
+      "Máy chủ Follower Đồn Phía Nam vẫn hiển thị lệnh bắt đang có hiệu lực",
+      "Máy chủ Follower Đồn Phía Bắc hiển thị chính xác lệnh bắt đã bị hủy",
+      "Độ trễ nhân bản (Replication Lag) trên Follower Đồn Phía Nam đã vượt quá 4 giờ"
+    ],
+    "objective": "Xác định vì sao Follower Đồn Phía Nam lại chứa dữ liệu cũ và đề xuất giải pháp để ngăn cảnh sát hành động dựa trên thông tin lỗi thời."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "db-leader",
+        "type": "database",
+        "label": "Leader DB (Central)",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 30
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cơ Sở Dữ Liệu Leader — Trụ Sở Trung Tâm",
+          "logs": [
+            "[14:22:01] INFO: UPDATE warrants SET status='DISMISSED' WHERE id=W-4471",
+            "[14:22:01] INFO: Write acknowledged, replicating to followers...",
+            "[14:22:02] INFO: Replication to north-follower: OK (lag: 200ms)",
+            "[14:22:02] WARN: Replication to south-follower: PENDING (lag: 4h 12m)",
+            "[17:30:00] INFO: South follower replication still behind by 4+ hours"
+          ],
+          "data": {
+            "Status": "ONLINE",
+            "Warrant W-4471": "DISMISSED (updated 3h ago)",
+            "Replication Mode": "Asynchronous",
+            "North Follower Lag": "200ms",
+            "South Follower Lag": "4h 12m"
+          },
+          "status": "Leader hoạt động tốt. Follower Đồn Phía Nam bị trễ nhân bản nghiêm trọng."
+        }
+      },
+      {
+        "id": "db-north",
+        "type": "database",
+        "label": "North Follower",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "DB Follower Đồn Phía Bắc",
+          "logs": [
+            "[14:22:02] INFO: Received replication event for W-4471",
+            "[14:22:02] INFO: Applied: warrant W-4471 → DISMISSED",
+            "[17:30:00] INFO: Replication lag: 180ms"
+          ],
+          "data": {
+            "Status": "ONLINE — IN SYNC",
+            "Warrant W-4471": "DISMISSED",
+            "Replication Lag": "180ms",
+            "Last Sync": "Just now"
+          },
+          "status": "Đang đồng bộ tốt. Độ trễ nhân bản dưới 200ms."
+        }
+      },
+      {
+        "id": "db-south",
+        "type": "database",
+        "label": "South Follower",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "DB Follower Đồn Phía Nam",
+          "logs": [
+            "[13:18:00] WARN: Replication consumer falling behind",
+            "[13:45:00] WARN: Replication lag exceeding 1 hour",
+            "[14:22:02] INFO: Replication event for W-4471 QUEUED (not yet applied)",
+            "[17:30:00] ERROR: Replication lag: 4h 12m — serving stale data"
+          ],
+          "data": {
+            "Status": "ONLINE — LAGGING",
+            "Warrant W-4471": "ACTIVE ⚠️ (stale!)",
+            "Replication Lag": "4h 12m",
+            "Last Sync": "4 hours ago",
+            "Cause": "Slow disk I/O on follower"
+          },
+          "status": "Dữ liệu bị cũ nghiêm trọng! Độ trễ nhân bản vượt quá 4 giờ."
+        }
+      },
+      {
+        "id": "officer-chen",
+        "type": "client",
+        "label": "Officer Chen",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Chen's Patrol Terminal",
+          "logs": [
+            "[17:25:00] INFO: Querying warrants for Marcus Webb...",
+            "[17:25:00] INFO: Routed to south-follower (nearest)",
+            "[17:25:01] INFO: Result: Warrant W-4471 — ACTIVE",
+            "[17:25:15] INFO: Arrest initiated based on active warrant"
+          ],
+          "data": {
+            "Connected To": "South Precinct Follower",
+            "Query Result": "Warrant W-4471: ACTIVE",
+            "Actual Status": "DISMISSED (3 hours ago)"
+          },
+          "status": "Read stale data from lagging follower. Wrongful arrest."
+        }
+      },
+      {
+        "id": "judge",
+        "type": "client",
+        "label": "Judge Torres",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Judge Torres' Terminal",
+          "logs": [
+            "[14:22:00] INFO: Dismissing warrant W-4471 for Marcus Webb",
+            "[14:22:01] INFO: Write sent to Leader DB — acknowledged"
+          ],
+          "data": {
+            "Action": "Warrant W-4471 DISMISSED",
+            "Written To": "Leader DB (Central)",
+            "Time": "3 hours ago"
+          },
+          "status": "Dismissal was correctly written to the leader database."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-judge-leader",
+        "source": "judge",
+        "target": "db-leader",
+        "label": "write",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-leader-north",
+        "source": "db-leader",
+        "target": "db-north",
+        "label": "replication (fast)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-leader-south",
+        "source": "db-leader",
+        "target": "db-south",
+        "label": "replication (lagging!)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-south-chen",
+        "source": "db-south",
+        "target": "officer-chen",
+        "label": "stale read",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến xe tuần tra nhận được trạng thái lệnh bắt cũ là gì?",
+      "options": [
+        {
+          "id": "rc-3",
+          "text": "Xe tuần tra bị mất kết nối mạng và hiển thị dữ liệu được lưu tạm (cache) từ ngày hôm trước",
+          "correct": false,
+          "feedback": "Sai. Xe tuần tra kết nối mạng hoàn toàn bình thường, lỗi là do máy chủ mà nó truy vấn đang chứa dữ liệu cũ."
+        },
+        {
+          "id": "rc-4",
+          "text": "Follower Đồn Nam từ chối các thao tác ghi vì ổ đĩa đã đầy",
+          "correct": false,
+          "feedback": "Không phải do đĩa đầy; nhật ký cho thấy tiến trình nhân bản đang bị nghẽn và tụt lại phía sau luồng dữ liệu của Leader."
+        },
+        {
+          "id": "rc-2",
+          "text": "Nhân bản bất đồng bộ kèm độ trễ nhân bản (Replication Lag) nghiêm trọng trên Follower Đồn Nam khiến nó phục vụ dữ liệu đã lỗi thời (Stale Read)",
+          "correct": true,
+          "feedback": "Chính xác! Trong mô hình nhân bản bất đồng bộ, follower cập nhật chậm hơn leader. Do đường mạng hoặc tải cao, Follower Đồn Nam bị chậm hơn 4 tiếng, dẫn đến việc trả về dữ liệu cũ khiến sĩ quan bắt nhầm người."
+        },
+        {
+          "id": "rc-1",
+          "text": "Cơ sở dữ liệu Leader chưa bao giờ lưu trạng thái hủy lệnh bắt do lỗi giao dịch chưa được commit",
+          "correct": false,
+          "feedback": "Sai. Nhật ký của Leader ghi nhận rõ lệnh UPDATE đã thành công và Follower Đồn Bắc cũng đã nhận được dữ liệu này."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp kiến trúc hiệu quả nhất để đảm bảo các truy vấn kiểm tra lệnh bắt nhạy cảm luôn nhận được dữ liệu mới nhất là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Yêu cầu các sĩ quan tuần tra gọi điện thoại về tổng đài trung tâm để xác minh thủ công bằng miệng",
+          "correct": false,
+          "feedback": "Quy trình thủ công làm chậm tốc độ phản ứng khẩn cấp và không phải là giải pháp kỹ thuật có thể mở rộng."
+        },
+        {
+          "id": "fix-1",
+          "text": "Định tuyến các truy vấn đọc nhạy cảm (như lệnh bắt giữ) trực tiếp về máy chủ Leader, hoặc kiểm tra giới hạn độ trễ (staleness bound) trước khi đọc từ follower",
+          "correct": true,
+          "feedback": "Chính xác! Với các nghiệp vụ pháp lý nhạy cảm, đọc từ follower trễ là không thể chấp nhận. Định tuyến về Leader hoặc đảm bảo 'Read-your-own-writes / bounded staleness' sẽ ngăn chặn hoàn toàn việc bắt nhầm người."
+        },
+        {
+          "id": "fix-3",
+          "text": "Bỏ hết các máy chủ Follower và bắt toàn bộ xe tuần tra trên toàn thành phố truy vấn chung một máy chủ Leader duy nhất",
+          "correct": false,
+          "feedback": "Cách này sẽ tạo lại Điểm Lỗi Đơn (SPOF) và dễ làm Leader bị sập do quá tải khi có hàng ngàn xe tuần tra truy vấn cùng lúc."
+        },
+        {
+          "id": "fix-2",
+          "text": "Khởi động lại máy chủ Follower Đồn Nam mỗi giờ một lần để xóa sạch dữ liệu cũ",
+          "correct": false,
+          "feedback": "Khởi động lại không giải quyết được nguyên nhân gốc rễ và thậm chí còn làm gián đoạn dịch vụ và tăng thêm thời gian trễ nhân bản khi máy chủ khởi động lại."
+        }
+      ]
+    }
+  },
+  "conceptId": "leader-follower-replication",
+  "badge": {
+    "name": "Chuyên Viên Đồng Bộ Bản Sao",
+    "icon": "⏱️"
+  }
+}

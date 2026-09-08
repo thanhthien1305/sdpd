@@ -1,0 +1,233 @@
+[
+  {
+    "id": "case-01",
+    "number": 1,
+    "title": "Điểm Lỗi Đơn (Single Point of Failure)",
+    "subtitle": "Hồ sơ phạm nhân biến mất trên toàn bộ các đồn cảnh sát",
+    "conceptId": "replication-basics"
+  },
+  {
+    "id": "case-02",
+    "number": 2,
+    "title": "Đọc Dữ Liệu Cũ (The Stale Read)",
+    "subtitle": "Sĩ quan bắt giữ nhầm nghi phạm dựa trên lệnh truy nã đã bị hủy",
+    "conceptId": "leader-follower-replication"
+  },
+  {
+    "id": "case-03",
+    "number": 3,
+    "title": "Chứng Cứ Biến Mất (The Lost Evidence)",
+    "subtitle": "16 bức ảnh hiện trường vụ án biến mất vào hư không sau sự cố sập nguồn",
+    "conceptId": "sync-vs-async-replication"
+  },
+  {
+    "id": "case-04",
+    "number": 4,
+    "title": "Hiện Tượng Não Đôi (The Split Brain)",
+    "subtitle": "Hai đồn cảnh sát, hai sự thật, một đường mạng bị đứt",
+    "conceptId": "network-partitions"
+  },
+  {
+    "id": "case-05",
+    "number": 5,
+    "title": "Cuộc Bầu Cử Ma (The Phantom Vote)",
+    "subtitle": "Kho vũ khí bị khóa cứng khi các máy chủ tranh chấp quyền lãnh đạo",
+    "conceptId": "leader-election"
+  },
+  {
+    "id": "case-06",
+    "number": 6,
+    "title": "Mệnh Lệnh Xung Đột (The Conflicting Orders)",
+    "subtitle": "Hai máy chủ leader, hai chỉ thị trái ngược, một sĩ quan vô cùng bối rối",
+    "conceptId": "multi-leader-replication"
+  },
+  {
+    "id": "case-07",
+    "number": 7,
+    "title": "Nghịch Lý Kẻ Du Hành Thời Gian (The Time Traveler)",
+    "subtitle": "Nhãn thời gian của chứng cứ thách thức các định luật vật lý cơ bản",
+    "conceptId": "clock-synchronization"
+  },
+  {
+    "id": "case-08",
+    "number": 8,
+    "title": "Nhân Chứng Phản Bội (The Byzantine Witness)",
+    "subtitle": "Một node giám định số gửi dữ liệu dối trá cho các bên khác nhau",
+    "conceptId": "byzantine-faults"
+  },
+  {
+    "id": "case-09",
+    "number": 9,
+    "title": "Cánh Cổng Quá Tải (The Overwhelmed Gateway)",
+    "subtitle": "Tình huống khẩn cấp toàn thành phố khiến cánh cổng duy nhất sụp đổ",
+    "conceptId": "load-balancing"
+  },
+  {
+    "id": "case-10",
+    "number": 10,
+    "title": "Bầy Thú Giẫm Đạp (The Thundering Herd)",
+    "subtitle": "Mọi đồn cảnh sát đồng loạt ập vào cơ sở dữ liệu trong cùng một tích tắc",
+    "conceptId": "cache-stampede"
+  },
+  {
+    "id": "case-11",
+    "number": 11,
+    "title": "Phân Vùng Nóng (The Hot Partition)",
+    "subtitle": "Một phân mảnh bị nhấn chìm trong khi các máy khác ngồi chơi xơi nước",
+    "conceptId": "data-partitioning"
+  },
+  {
+    "id": "case-12",
+    "number": 12,
+    "title": "Giới Hạn Chiều Dọc (The Vertical Limit)",
+    "subtitle": "Máy chủ phân tích tội phạm chạm trần giới hạn phần cứng",
+    "conceptId": "horizontal-scaling"
+  },
+  {
+    "id": "case-13",
+    "number": 13,
+    "title": "Tình Huống Phiên Dính (The Sticky Situation)",
+    "subtitle": "Sự cố máy chủ quét sạch hàng trăm phiên làm việc đang hoạt động của cảnh sát",
+    "conceptId": "stateless-services"
+  },
+  {
+    "id": "case-14",
+    "number": 14,
+    "title": "Bản Ghi Bóng Ma (The Ghost Record)",
+    "subtitle": "Hồ sơ tội phạm đã xóa vẫn tiếp tục ám ảnh hệ thống",
+    "conceptId": "cache-invalidation"
+  },
+  {
+    "id": "case-15",
+    "number": 15,
+    "title": "Thác Lũ Cache (The Cache Avalanche)",
+    "subtitle": "Toàn bộ dữ liệu bộ đệm hết hạn đồng loạt, nghiền nát cơ sở dữ liệu",
+    "conceptId": "cache-expiry-strategies"
+  },
+  {
+    "id": "case-16",
+    "number": 16,
+    "title": "Đống Hỗn Loạn Cache (The Dog Pile)",
+    "subtitle": "Hàng trăm yêu cầu đồng loạt tranh giành nhau tái tạo một mục dữ liệu duy nhất",
+    "conceptId": "cache-locking"
+  },
+  {
+    "id": "case-17",
+    "number": 17,
+    "title": "Thực Đơn Lỗi Thời (The Stale Menu)",
+    "subtitle": "Mạng CDN tiếp tục phục vụ danh sách truy nã cũ nhiều giờ sau khi đã cập nhật",
+    "conceptId": "cdn-caching"
+  },
+  {
+    "id": "case-18",
+    "number": 18,
+    "title": "Bản Điều Phối Thất Lạc (The Lost Dispatch)",
+    "subtitle": "Sự cố sập máy chủ làm bốc hơi toàn bộ các cuộc gọi khẩn cấp trong hàng đợi",
+    "conceptId": "message-durability"
+  },
+  {
+    "id": "case-19",
+    "number": 19,
+    "title": "Bắt Giữ Trùng Lặp (The Double Arrest)",
+    "subtitle": "Cơ chế truyền tin trùng lặp khiến một lệnh truy nã bị thực thi hai lần",
+    "conceptId": "idempotency"
+  },
+  {
+    "id": "case-20",
+    "number": 20,
+    "title": "Đường Ống Ứ Đọng (The Backed Up Pipeline)",
+    "subtitle": "Hàng đợi điều phối tràn vỡ khi dịch vụ xử lý ngầm bị treo âm thầm",
+    "conceptId": "backpressure"
+  },
+  {
+    "id": "case-21",
+    "number": 21,
+    "title": "Xáo Trộn Thứ Tự (The Out of Order)",
+    "subtitle": "Báo cáo tội phạm đến lộn xộn khi các consumer xử lý song song làm đảo lộn trình tự",
+    "conceptId": "message-ordering"
+  },
+  {
+    "id": "case-22",
+    "number": 22,
+    "title": "Mảnh Ghép Mất Tích (The Missing Shard)",
+    "subtitle": "Toàn bộ hồ sơ tội phạm bắt đầu bằng chữ cái quy định biến mất khỏi cơ sở dữ liệu",
+    "conceptId": "sharding"
+  },
+  {
+    "id": "case-23",
+    "number": 23,
+    "title": "Hàng Nhận Dạng Bất Nhất (The Inconsistent Lineup)",
+    "subtitle": "Hai đồn cảnh sát nhìn thấy hai phiên bản khác nhau của cùng một nghi phạm trong cùng một giờ",
+    "conceptId": "cap-theorem"
+  },
+  {
+    "id": "case-24",
+    "number": 24,
+    "title": "Kho Lưu Trữ Hư Hỏng (The Corrupted Archive)",
+    "subtitle": "Bằng chứng video đến nơi bị hỏng nhưng không ai biết sự cố xảy ra ở khâu nào",
+    "conceptId": "data-integrity"
+  },
+  {
+    "id": "case-25",
+    "number": 25,
+    "title": "Kho Chứng Cứ Quá Tải (The Overloaded Vault)",
+    "subtitle": "Hệ thống ghi nhật ký chứng cứ gây ra hiện tượng khuếch đại ghi khổng lồ làm cháy ổ đĩa",
+    "conceptId": "write-amplification"
+  },
+  {
+    "id": "case-26",
+    "number": 26,
+    "title": "Bẫy Timeout Dây Chuyền (The Timeout Trap)",
+    "subtitle": "Một dịch vụ downstream chậm chạp kích hoạt hiệu ứng sụp đổ dây chuyền trên toàn hệ thống",
+    "conceptId": "cascading-timeouts"
+  },
+  {
+    "id": "case-27",
+    "number": 27,
+    "title": "Cơn Bão Thử Lại (The Retry Storm)",
+    "subtitle": "Một yêu cầu thất bại biến thành hàng triệu tiếng gõ cửa hung hãn",
+    "conceptId": "retry-strategies"
+  },
+  {
+    "id": "case-28",
+    "number": 28,
+    "title": "Bộ Ngắt Mạch (The Circuit Breaker)",
+    "subtitle": "Một quân cờ domino ngã đổ kéo sập toàn bộ trung tâm chỉ huy",
+    "conceptId": "circuit-breakers"
+  },
+  {
+    "id": "case-29",
+    "number": 29,
+    "title": "Thảm Họa Phân Giải Tên Miền (The DNS Disaster)",
+    "subtitle": "Khi một máy chủ chuyển nhà và không ai nhận được địa chỉ mới",
+    "conceptId": "service-discovery"
+  },
+  {
+    "id": "case-30",
+    "number": 30,
+    "title": "Khu Vực Khóa Chết (The Deadlock District)",
+    "subtitle": "Hai dịch vụ bị giam cầm trong thế bế tắc vĩnh cửu",
+    "conceptId": "distributed-deadlocks"
+  },
+  {
+    "id": "case-31",
+    "number": 31,
+    "title": "Bản Đọc Ảo Ảnh (The Phantom Read)",
+    "subtitle": "Thống kê tội phạm thay đổi kỳ lạ ngay giữa phiên đếm báo cáo",
+    "conceptId": "isolation-levels"
+  },
+  {
+    "id": "case-32",
+    "number": 32,
+    "title": "Thất Bại Trong Chuỗi Saga (The Saga Failure)",
+    "subtitle": "Quy trình lập hồ sơ tạm giam quên cách hoàn tác sai lầm của chính mình",
+    "conceptId": "sagas"
+  },
+  {
+    "id": "case-33",
+    "number": 33,
+    "title": "Bộ Giới Hạn Tốc Độ (The Rate Limiter)",
+    "subtitle": "Một dịch vụ tích hợp bên ngoài làm tràn ngập hệ thống, nhấn chìm tất cả mọi người",
+    "conceptId": "rate-limiting"
+  }
+]

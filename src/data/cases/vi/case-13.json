@@ -1,0 +1,244 @@
+{
+  "id": "case-13",
+  "number": 13,
+  "title": "Tình Huống Phiên Dính (The Sticky Situation)",
+  "subtitle": "Sự cố máy chủ quét sạch hàng trăm phiên làm việc đang hoạt động của cảnh sát",
+  "brief": {
+    "narrative": "Cụm 3 máy chủ ứng dụng web của sở cảnh sát đang phục vụ hàng trăm điều tra viên ghi lời khai trực tuyến. Để tiện lợi, lập trình viên đã lưu thông tin phiên đăng nhập (Session) trực tiếp trong bộ nhớ RAM của từng máy chủ và bật chế độ 'Sticky Sessions' trên Load Balancer. Lúc 15:30, máy chủ App 2 bị quá nhiệt và tự tắt khẩn cấp. Ngay lập tức, 350 sĩ quan đang kết nối vào App 2 bị văng ra khỏi hệ thống, toàn bộ biên bản lời khai đang nhập dở chưa kịp lưu bị xóa sạch! Khi các sĩ quan đăng nhập lại, Load Balancer chuyển họ sang App 1 và App 3, nhưng hai máy này không hề biết họ là ai và báo lỗi 'Phiên làm việc không tồn tại'. Cảnh trưởng Partition đòi lôi cổ kẻ thiết kế ra đối chất!",
+    "symptoms": [
+      "Máy chủ ứng dụng lưu trữ trạng thái phiên làm việc (Session State) trực tiếp trong bộ nhớ cục bộ (In-Memory)",
+      "Bộ cân bằng tải sử dụng cơ chế Sticky Sessions để gán chặt người dùng với một máy chủ duy nhất",
+      "Khi một máy chủ sập, toàn bộ người dùng trên máy đó bị mất phiên và mất dữ liệu đang làm việc",
+      "Các máy chủ còn lại không thể tiếp quản phiên làm việc của máy chủ đã chết"
+    ],
+    "objective": "Loại bỏ tính phụ thuộc trạng thái trên máy chủ ứng dụng bằng cách chuyển sang kiến trúc Phi Trạng Thái (Stateless) với kho lưu trữ phiên tập trung (Distributed Session Store như Redis)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "load-balancer",
+        "type": "server",
+        "label": "Load Balancer",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 30
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Load Balancer (Sticky Sessions)",
+          "logs": [
+            "[14:30:00] INFO: Sticky session routing enabled",
+            "[14:45:12] ERROR: Server 2 health check failed",
+            "[14:45:13] WARN: 340 sticky sessions orphaned — no failover for session state",
+            "[14:45:14] INFO: New requests routed to Server 1 and Server 3"
+          ],
+          "data": {
+            "Mode": "Sticky Sessions (cookie-based)",
+            "Server 1 Sessions": "310 (active)",
+            "Server 2 Sessions": "340 (LOST)",
+            "Server 3 Sessions": "295 (active)",
+            "Session Failover": "None — state is server-local"
+          },
+          "status": "Sticky sessions enabled. No shared session store configured."
+        }
+      },
+      {
+        "id": "server-1",
+        "type": "server",
+        "label": "Dispatch Server 1",
+        "status": "healthy",
+        "position": {
+          "x": 100,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Server 1",
+          "logs": [
+            "[14:45:15] INFO: Operating normally",
+            "[14:45:20] INFO: Receiving redirected traffic from LB"
+          ],
+          "data": {
+            "Status": "HEALTHY",
+            "Local Sessions": "310",
+            "Memory Session Store": "In-process only"
+          },
+          "status": "Healthy but sessions stored only in local memory."
+        }
+      },
+      {
+        "id": "server-2",
+        "type": "server",
+        "label": "Dispatch Server 2",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Server 2",
+          "logs": [
+            "[14:44:58] ERROR: Out of memory — process killed",
+            "[14:44:59] FATAL: Server process terminated",
+            "[14:45:00] INFO: 340 in-memory sessions destroyed"
+          ],
+          "data": {
+            "Status": "CRASHED",
+            "Local Sessions": "0 (all lost)",
+            "Crash Reason": "OOM kill"
+          },
+          "status": "Crashed. All 340 locally-stored sessions permanently lost."
+        }
+      },
+      {
+        "id": "server-3",
+        "type": "server",
+        "label": "Dispatch Server 3",
+        "status": "healthy",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Server 3",
+          "logs": [
+            "[14:45:15] INFO: Operating normally",
+            "[14:45:22] INFO: Receiving redirected traffic from LB"
+          ],
+          "data": {
+            "Status": "HEALTHY",
+            "Local Sessions": "295",
+            "Memory Session Store": "In-process only"
+          },
+          "status": "Healthy but sessions stored only in local memory."
+        }
+      },
+      {
+        "id": "officers",
+        "type": "client",
+        "label": "Officer Terminals",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Officer Terminals",
+          "logs": [
+            "[14:45:13] ERROR: 340 terminals received 'Session Expired'",
+            "[14:45:30] WARN: Officers reporting lost case notes and dispatch data"
+          ],
+          "data": {
+            "Total Officers Online": "945",
+            "Sessions Lost": "340",
+            "Unsaved Reports Lost": "~127"
+          },
+          "status": "340 officers lost all session state and must re-login."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-lb-s1",
+        "source": "load-balancer",
+        "target": "server-1",
+        "label": "sticky route",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-lb-s2",
+        "source": "load-balancer",
+        "target": "server-2",
+        "label": "sticky route",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-lb-s3",
+        "source": "load-balancer",
+        "target": "server-3",
+        "label": "sticky route",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-officers-lb",
+        "source": "officers",
+        "target": "load-balancer",
+        "label": "requests",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Khiếm khuyết kiến trúc nào đã khiến sự cố sập một máy chủ làm mất trắng phiên làm việc của hàng trăm người dùng?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Các sĩ quan đã nhập mật khẩu quá ngắn khiến phiên đăng nhập tự động hủy",
+          "correct": false,
+          "feedback": "Mật khẩu không liên quan; vấn đề là máy chủ lưu giữ phiên đã bị sập."
+        },
+        {
+          "id": "rc-2",
+          "text": "Kiến trúc có trạng thái (Stateful) với Sticky Sessions — dữ liệu phiên làm việc bị gắn chặt vào bộ nhớ RAM của từng máy chủ riêng lẻ thay vì được lưu trữ tập trung",
+          "correct": true,
+          "feedback": "Chính xác! Khi máy chủ lưu trạng thái trong RAM của chính nó, cái chết của máy chủ đồng nghĩa với cái chết của mọi phiên làm việc. Các máy chủ khác không thể chia sẻ hay tiếp quản trạng thái đó."
+        },
+        {
+          "id": "rc-3",
+          "text": "Bộ cân bằng tải bị lỗi phần mềm và tự động gửi lệnh đăng xuất tới tất cả người dùng",
+          "correct": false,
+          "feedback": "Load Balancer chỉ phát hiện máy sập và điều hướng sang máy khác; chính máy mới đã từ chối người dùng vì thiếu dữ liệu session."
+        },
+        {
+          "id": "rc-4",
+          "text": "Dây cáp mạng của các máy tính trạm cảnh sát bị lỏng đồng loạt",
+          "correct": false,
+          "feedback": "Mạng ở các đồn cảnh sát bình thường; lỗi nằm tại cụm máy chủ ứng dụng trung tâm."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần tái cấu trúc tầng ứng dụng như thế nào để bất kỳ máy chủ nào cũng có thể xử lý yêu cầu của bất kỳ người dùng nào mà không bao giờ mất session?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Sao chép toàn bộ bộ nhớ RAM của App 2 sang App 1 qua đường truyền Bluetooth",
+          "correct": false,
+          "feedback": "Đồng bộ RAM qua Bluetooth là phi thực tế và bất khả thi về mặt kỹ thuật."
+        },
+        {
+          "id": "fix-1",
+          "text": "Chuyển đổi các máy chủ ứng dụng thành Phi Trạng Thái (Stateless) và lưu trữ toàn bộ phiên làm việc tại một kho dữ liệu bộ nhớ dùng chung (như Redis Cluster) hoặc mã hóa an toàn trong JWT token",
+          "correct": false,
+          "feedback": "Chính xác! Khi ứng dụng phi trạng thái, mọi máy chủ đều như nhau. Nếu App 2 sập, Load Balancer lập tức đẩy request sang App 1; App 1 chỉ cần tra cứu session từ Redis là tiếp tục phục vụ mượt mà, người dùng không hề hay biết có sự cố vừa xảy ra!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Cài đặt nguồn điện dự phòng UPS mạnh hơn cho riêng máy chủ App 2",
+          "correct": true,
+          "feedback": "UPS chỉ chống mất điện nhưng không chống được lỗi phần mềm, kernel panic hay sự cố bảo trì khởi động lại máy."
+        },
+        {
+          "id": "fix-3",
+          "text": "Yêu cầu các sĩ quan bấm phím Ctrl+S lưu bài liên tục mỗi 3 giây một lần",
+          "correct": false,
+          "feedback": "Bắt người dùng gánh vác khiếm khuyết của hệ thống là trải nghiệm tồi tệ và không giải quyết được việc mất phiên đăng nhập."
+        }
+      ]
+    }
+  },
+  "conceptId": "stateless-services",
+  "badge": {
+    "name": "Kiến Trúc Sư Phi Trạng Thái",
+    "icon": "🔓"
+  }
+}

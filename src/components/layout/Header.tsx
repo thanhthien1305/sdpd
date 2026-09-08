@@ -114,13 +114,22 @@ export function Header() {
             {completedCases}/33 {t("header.cases")}
           </span>
         </div>
-        <button
-          onClick={() => setLocale(locale === "en" ? "pt-BR" : "en")}
-          aria-label={locale === "en" ? t("header.localeToggle.toPt") : t("header.localeToggle.toEn")}
-          className="text-xs font-mono text-noir-400 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded border border-noir-600/40 hover:border-amber-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/60"
-        >
-          {locale === "en" ? "PT" : "EN"}
-        </button>
+        <div className="flex items-center rounded border border-noir-600/40 bg-noir-900/60 p-0.5 text-xs font-mono">
+          {(['en', 'vi', 'pt-BR'] as const).map((l) => (
+            <button
+              key={l}
+              onClick={() => setLocale(l)}
+              className={`px-1.5 py-0.5 rounded text-[11px] transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-500/60 ${
+                locale === l
+                  ? "bg-amber-500/20 text-amber-400 font-bold"
+                  : "text-noir-400 hover:text-noir-200"
+              }`}
+              title={l === 'en' ? 'English' : l === 'vi' ? 'Tiếng Việt' : 'Português'}
+            >
+              {l === 'en' ? 'EN' : l === 'vi' ? 'VI' : 'PT'}
+            </button>
+          ))}
+        </div>
         <Link to="/daily">
           <Button variant="ghost" className="text-xs font-mono">
             {t("header.daily")}

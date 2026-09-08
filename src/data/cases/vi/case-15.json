@@ -1,0 +1,226 @@
+{
+  "id": "case-15",
+  "number": 15,
+  "title": "Thác Lũ Cache (The Cache Avalanche)",
+  "subtitle": "Toàn bộ dữ liệu bộ đệm hết hạn đồng loạt, nghiền nát cơ sở dữ liệu",
+  "brief": {
+    "narrative": "Để chuẩn bị cho đợt cao điểm tuần tra cuối tuần, đội ngũ kỹ thuật đã chạy script nạp sẵn thông tin của 50.000 hồ sơ tội phạm vào cụm Redis lúc 18:00 thứ Sáu. Để nhất quán, lập trình viên đặt cấu hình TTL mặc định cho tất cả các bản ghi là chính xác 24 giờ. Đúng 18:00:00 thứ Bảy, toàn bộ 50.000 bản ghi đồng thời chạm mốc hết hạn và bị xóa sạch khỏi Redis trong cùng một tích tắc! Đúng lúc này, các cuộc gọi khẩn cấp dồn dập ập đến. Không còn một mẩu cache nào che chắn, hàng trăm ngàn truy vấn SQL ập thẳng xuống cụm MySQL như một trận thác lũ tuyết lở (Cache Avalanche). Database sụp đổ hoàn toàn trong 2 giây. Thám tử, hãy ngăn chặn trận tuyết lở này!",
+    "symptoms": [
+      "Hàng chục ngàn khóa cache được tạo cùng lúc với cùng một giá trị TTL cố định",
+      "Toàn bộ bộ nhớ đệm bị xóa rỗng đồng thời tại một thời điểm chính xác",
+      "Tỷ lệ trúng cache (Hit Rate) rơi tự do từ 98% xuống đúng 0% trong 1 giây",
+      "Cơ sở dữ liệu chính bị tê liệt hoàn toàn do đợt sóng truy vấn khổng lồ ập tới cùng lúc"
+    ],
+    "objective": "Triệt tiêu hiện tượng Thác Lũ Cache (Cache Avalanche) bằng kỹ thuật thêm độ lệch ngẫu nhiên vào thời gian sống (TTL Jitter)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "redis-cache",
+        "type": "server",
+        "label": "Redis Cache",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Redis Cache Cluster",
+          "logs": [
+            "[00:00:00] INFO: TTL expiry triggered for batch-loaded keys",
+            "[00:00:01] WARN: 2,847,000 keys expired simultaneously",
+            "[00:00:02] INFO: Cache hit rate dropped from 99.2% to 0.1%",
+            "[00:00:03] WARN: All incoming requests are cache MISSes"
+          ],
+          "data": {
+            "Status": "EMPTY (mass expiry)",
+            "Keys Before Midnight": "2,847,000",
+            "Keys After Midnight": "312",
+            "Hit Rate": "0.1% (was 99.2%)",
+            "TTL Policy": "Uniform 7 days for all keys",
+            "Cache Warm Job": "Saturdays 00:00 — loads all keys with same TTL"
+          },
+          "status": "All keys expired at once due to identical TTL. Cache is effectively empty."
+        }
+      },
+      {
+        "id": "crime-db",
+        "type": "database",
+        "label": "Crime Database",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 220
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Crime Database",
+          "logs": [
+            "[00:00:02] WARN: Connection pool at 100% (500/500)",
+            "[00:00:03] ERROR: Connection pool exhausted — rejecting new connections",
+            "[00:00:05] ERROR: 47,000 queries queued, avg response time > 30s",
+            "[00:00:10] FATAL: Query timeout cascade — system unresponsive"
+          ],
+          "data": {
+            "Status": "OVERWHELMED",
+            "Connection Pool": "500/500 (exhausted)",
+            "Queued Queries": "47,000+",
+            "Normal Query Rate": "~400/sec",
+            "Current Query Rate": "~47,000/sec",
+            "CPU": "100%"
+          },
+          "status": "Database crushed by thundering herd of cache-miss queries."
+        }
+      },
+      {
+        "id": "api-services",
+        "type": "server",
+        "label": "API Services",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "API Service Fleet",
+          "logs": [
+            "[00:00:03] ERROR: Cache MISS — falling through to database",
+            "[00:00:04] ERROR: Database connection timeout",
+            "[00:00:05] ERROR: 503 Service Unavailable returned to clients"
+          ],
+          "data": {
+            "Status": "FAILING",
+            "Cache Miss Rate": "99.9%",
+            "Error Rate": "87%"
+          },
+          "status": "All requests miss cache and overwhelm database."
+        }
+      },
+      {
+        "id": "dispatch",
+        "type": "client",
+        "label": "Dispatch Center",
+        "status": "failed",
+        "position": {
+          "x": 550,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Central Dispatch",
+          "logs": [
+            "[00:00:10] ERROR: Unable to retrieve case data",
+            "[00:00:15] ERROR: Dispatch system unresponsive"
+          ],
+          "data": {
+            "Status": "OFFLINE",
+            "Pending Dispatches": "34",
+            "Occurrence": "3rd consecutive Saturday"
+          },
+          "status": "Dispatch down due to upstream failure cascade."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-api-cache",
+        "source": "api-services",
+        "target": "redis-cache",
+        "label": "cache miss",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "api-services",
+        "target": "crime-db",
+        "label": "fallback queries",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-cache-db",
+        "source": "redis-cache",
+        "target": "crime-db",
+        "label": "cache rebuild",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-dispatch-api",
+        "source": "dispatch",
+        "target": "api-services",
+        "label": "requests",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi dẫn đến trận tuyết lở làm sập cơ sở dữ liệu lúc 18:00 thứ Bảy là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Máy chủ Redis bị cháy thanh RAM vật lý",
+          "correct": false,
+          "feedback": "Phần cứng Redis hoàn toàn bình thường; nó chỉ đang thực hiện đúng lệnh xóa các khóa đã hết hạn TTL."
+        },
+        {
+          "id": "rc-2",
+          "text": "Thác Lũ Cache (Cache Avalanche) — lượng lớn các khóa cache được tạo đồng thời với cùng một giá trị TTL cố định, dẫn đến việc chúng đồng loạt hết hạn tại cùng một thời điểm",
+          "correct": true,
+          "feedback": "Chính xác! Khi toàn bộ cache cùng bốc hơi trong một tích tắc, toàn bộ lưu lượng của hệ thống bị dồn thẳng xuống database mà không còn bất kỳ tầng đệm nào giảm xóc, gây ra hiện tượng sụp đổ dây chuyền."
+        },
+        {
+          "id": "rc-3",
+          "text": "Tội phạm mạng đã tấn công từ chối dịch vụ vào cổng MySQL",
+          "correct": false,
+          "feedback": "Lưu lượng truy cập hoàn toàn là các request hợp lệ từ các đồn cảnh sát trong ca trực."
+        },
+        {
+          "id": "rc-4",
+          "text": "Cơ sở dữ liệu MySQL tự động khóa lại để thực hiện bảo trì định kỳ",
+          "correct": false,
+          "feedback": "Không có lịch bảo trì nào được lên lịch vào 18h tối thứ Bảy."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Kỹ thuật đơn giản nhưng hiệu quả nhất để giải quyết dứt điểm hiện tượng Thác Lũ Cache là gì?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Áp dụng Độ Lệch Ngẫu Nhiên cho TTL (TTL Jitter) — thay vì đặt TTL cố định, hãy cộng thêm một khoảng thời gian ngẫu nhiên nhỏ (ví dụ: TTL = 24h + random(-2h, +2h)) để phân tán thời điểm hết hạn",
+          "correct": true,
+          "feedback": "Chính xác! Bằng cách thêm Jitter ngẫu nhiên, 50.000 khóa sẽ hết hạn rải rác trong suốt nhiều giờ thay vì cùng một giây. Tầng đệm luôn giữ được tỷ lệ hit rate cao và database không bao giờ bị sốc tải."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tắt hoàn toàn tính năng TTL và không bao giờ cho phép dữ liệu cache hết hạn",
+          "correct": false,
+          "feedback": "Không có TTL sẽ khiến bộ nhớ RAM của Redis bị đầy ắp theo thời gian và gây ra hiện tượng tràn bộ nhớ hoặc lưu dữ liệu sai lệch mãi mãi."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tăng gấp đôi số lượng máy chủ MySQL để chịu đựng đợt tuyết lở mỗi ngày",
+          "correct": false,
+          "feedback": "Đầu tư hạ tầng thừa thãi để đối phó với một đợt tăng đột biến trong 1 giây là cực kỳ lãng phí và không giải quyết được gốc rễ bài toán."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấm cảnh sát tra cứu hồ sơ tội phạm vào các mốc giờ chẵn",
+          "correct": false,
+          "feedback": "Không thể cấm cảnh sát thực thi công vụ bảo vệ an ninh."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-expiry-strategies",
+  "badge": {
+    "name": "Kỹ Sư Điều Hòa TTL",
+    "icon": "🏔️"
+  }
+}

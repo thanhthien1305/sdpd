@@ -61,10 +61,17 @@ describe('useGameState store', () => {
     });
   });
 
+  describe('setLocale', () => {
+    it('switches locale to vi and persists in state', () => {
+      useGameState.getState().setLocale('vi');
+      expect(useGameState.getState().locale).toBe('vi');
+    });
+  });
+
   describe('resetProgress', () => {
     it('preserves locale and guideOpen but clears progress', () => {
       useGameState.setState({
-        locale: 'pt-BR',
+        locale: 'vi',
         guideOpen: true,
         progress: { 'case-01': completedProgress('case-01') },
         completedCases: 1,
@@ -74,7 +81,7 @@ describe('useGameState store', () => {
       useGameState.getState().resetProgress();
       const state = useGameState.getState();
 
-      expect(state.locale).toBe('pt-BR');
+      expect(state.locale).toBe('vi');
       expect(state.guideOpen).toBe(true);
       expect(state.progress).toEqual({});
       expect(state.completedCases).toBe(0);

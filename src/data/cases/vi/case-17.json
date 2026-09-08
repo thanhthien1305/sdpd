@@ -1,0 +1,220 @@
+{
+  "id": "case-17",
+  "number": 17,
+  "title": "Thực Đơn Lỗi Thời (The Stale Menu)",
+  "subtitle": "Mạng CDN tiếp tục phục vụ danh sách truy nã cũ nhiều giờ sau khi đã cập nhật",
+  "brief": {
+    "narrative": "Trang web công cộng của Sở Cảnh Sát sử dụng Mạng Phân Phối Nội Dung (CDN) toàn cầu để người dân có thể tra cứu danh sách '10 Tên Cội Phạm Nguy Hiểm Nhất' với độ trễ cực thấp. Lúc 09:00 sáng, tên tội phạm số 1 đã bị bắt giữ. Đội ngũ kỹ thuật lập tức cập nhật trang web gốc (Origin) gỡ ảnh hắn xuống và thay bằng kẻ nguy hiểm tiếp theo. Nhưng suốt 6 giờ sau đó, hàng triệu người dân trên khắp cả nước truy cập vào trang web vẫn nhìn thấy bức ảnh của tên tội phạm đã bị bắt! Tổng đài nhận hàng ngàn cuộc gọi báo tin giả vì người dân tưởng hắn vẫn đang lẩn trốn. Hóa ra CDN được cấu hình TTL 24 giờ và không hề có cơ chế xóa bộ đệm tự động! Hãy giải quyết, Thám tử!",
+    "symptoms": [
+      "Máy chủ gốc (Origin) đã cập nhật nội dung mới thành công",
+      "Các máy chủ biên CDN (Edge Servers) vẫn tiếp tục phục vụ nội dung cũ cho người dùng",
+      "Quy trình cập nhật nội dung không tích hợp bước Xóa Bộ Đệm CDN (CDN Cache Purge / Invalidation)",
+      "Người dân nhận thông tin truy nã sai lệch gây hỗn loạn trong công tác điều tra"
+    ],
+    "objective": "Thiết lập quy trình Xóa Bộ Đệm CDN tự động (Cache Purging) hoặc áp dụng kỹ thuật Phá Vỡ Cache bằng tên tệp phiên bản hóa (Cache Busting)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "origin-server",
+        "type": "server",
+        "label": "Origin Server",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Gốc (Origin)",
+          "logs": [
+            "[06:02:00] INFO: Most Wanted list updated — fugitive #MW-2241 removed",
+            "[06:02:01] INFO: New content deployed successfully",
+            "[06:02:02] WARN: No CDN purge/invalidation triggered",
+            "[12:00:00] INFO: Origin serving correct updated list"
+          ],
+          "data": {
+            "Content Version": "v2024-1547 (updated 06:02 today)",
+            "Fugitive #MW-2241": "REMOVED (captured)",
+            "CDN Purge API": "Not integrated",
+            "Cache-Control Header": "max-age=86400 (24 hours)"
+          },
+          "status": "ĐÃ CẬP NHẬT — Danh sách mới đã được lưu lúc 09:00 sáng."
+        }
+      },
+      {
+        "id": "cdn-edge-north",
+        "type": "server",
+        "label": "CDN Edge (North)",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 220
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "CDN Edge Node — North District",
+          "logs": [
+            "[Yesterday 08:00] INFO: Cached Most Wanted page (TTL: 24h)",
+            "[Today 12:00] INFO: Serving cached version — TTL remaining: 20h",
+            "[Today 12:00] INFO: No purge request received"
+          ],
+          "data": {
+            "Cached Version": "v2024-1546 (STALE — yesterday)",
+            "Fugitive #MW-2241": "STILL SHOWING (should be removed)",
+            "Cache TTL Remaining": "20 hours",
+            "Purge Endpoint": "Available but never called"
+          },
+          "status": "Serving stale content. Cache won't refresh for 20 more hours."
+        }
+      },
+      {
+        "id": "cdn-edge-south",
+        "type": "server",
+        "label": "CDN Edge (South)",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 220
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "CDN Edge Node — South District",
+          "logs": [
+            "[Yesterday 09:30] INFO: Cached Most Wanted page (TTL: 24h)",
+            "[Today 12:00] INFO: Serving cached version — TTL remaining: 21.5h"
+          ],
+          "data": {
+            "Cached Version": "v2024-1546 (STALE — yesterday)",
+            "Fugitive #MW-2241": "STILL SHOWING",
+            "Cache TTL Remaining": "21.5 hours"
+          },
+          "status": "Serving stale content with no invalidation mechanism."
+        }
+      },
+      {
+        "id": "citizens",
+        "type": "client",
+        "label": "Citizens",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 380
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Public Citizens",
+          "logs": [
+            "[12:00:00] INFO: Citizen reports seeing captured fugitive on Most Wanted",
+            "[12:05:00] INFO: 47 false tips received for fugitive #MW-2241"
+          ],
+          "data": {
+            "Tips for Captured Fugitive": "47 (all wasted)",
+            "Content Seen": "Yesterday's stale version",
+            "Served By": "CDN edge nodes (not origin)"
+          },
+          "status": "Citizens seeing outdated Most Wanted list from CDN cache."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cdn-north-origin",
+        "source": "cdn-edge-north",
+        "target": "origin-server",
+        "label": "no revalidation",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-cdn-south-origin",
+        "source": "cdn-edge-south",
+        "target": "origin-server",
+        "label": "no revalidation",
+        "animated": false,
+        "style": "normal"
+      },
+      {
+        "id": "e-citizens-north",
+        "source": "citizens",
+        "target": "cdn-edge-north",
+        "label": "stale content",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-citizens-south",
+        "source": "citizens",
+        "target": "cdn-edge-south",
+        "label": "stale content",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao người dân vẫn tiếp tục nhìn thấy danh sách tội phạm cũ dù máy chủ gốc đã cập nhật từ sáng?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Tên tội phạm đã hack vào CDN để giữ lại hình ảnh của mình",
+          "correct": false,
+          "feedback": "Không có sự tấn công mạng; đây thuần túy là thiếu sót trong quy trình quản lý vòng đời cache."
+        },
+        {
+          "id": "rc-1",
+          "text": "Máy chủ gốc bị lỗi đường truyền không gửi được dữ liệu ra mạng internet",
+          "correct": false,
+          "feedback": "Máy chủ gốc hoạt động tốt và trả về nội dung mới nếu truy cập trực tiếp."
+        },
+        {
+          "id": "rc-2",
+          "text": "Máy chủ biên CDN lưu cache nội dung với TTL dài (24h) và quy trình cập nhật nội dung thiếu bước gọi API Xóa Bộ Đệm (Purge/Invalidate) trên CDN",
+          "correct": true,
+          "feedback": "Chính xác! CDN hoạt động như một tấm khiên đứng trước máy chủ gốc. Nếu không chủ động phát lệnh xóa cache (Cache Purge) tới CDN, các máy chủ biên sẽ tiếp tục phục vụ bản sao cũ cho đến khi hết hạn TTL."
+        },
+        {
+          "id": "rc-3",
+          "text": "Trình duyệt của tất cả người dân trên toàn quốc bị nhiễm mã độc đồng loạt",
+          "correct": false,
+          "feedback": "Vấn đề nằm ở tầng mạng phân phối CDN, không phải thiết bị người dùng."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cách thức xử lý chuẩn xác nhất để nội dung mới xuất hiện ngay lập tức trên CDN là gì?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Tích hợp lệnh gọi API Xóa Bộ Đệm CDN (Purge/Invalidate) vào quy trình cập nhật nội dung, hoặc sử dụng cơ chế Phá Vỡ Cache bằng URL phiên bản hóa (ví dụ: most-wanted.v2.json)",
+          "correct": false,
+          "feedback": "Chính xác! Gọi API Purge sẽ buộc các máy chủ biên CDN xóa ngay bản sao cũ và tải nội dung mới từ Origin. Với tài nguyên tĩnh (JS/CSS/Ảnh), đổi tên file theo hash nội dung là giải pháp tối ưu nhất."
+        },
+        {
+          "id": "fix-2",
+          "text": "Đặt TTL của CDN về 0 giây cho tất cả các yêu cầu",
+          "correct": true,
+          "feedback": "Đặt TTL = 0 làm mất hoàn toàn tác dụng của CDN, biến nó thành proxy thừa thãi và khiến mọi truy cập đổ thẳng vào làm sập máy chủ gốc."
+        },
+        {
+          "id": "fix-3",
+          "text": "Chờ đợi hết 24 giờ để cache tự động biến mất một cách tự nhiên",
+          "correct": false,
+          "feedback": "Trong nghiệp vụ an ninh khẩn cấp, không thể để thông tin sai lệch tồn tại suốt 24 giờ."
+        },
+        {
+          "id": "fix-4",
+          "text": "Hủy hợp đồng với nhà cung cấp CDN và quay về dùng một máy chủ duy nhất",
+          "correct": false,
+          "feedback": "Bỏ CDN sẽ khiến trang web sập ngay lập tức khi có hàng triệu lượt truy cập từ người dân."
+        }
+      ]
+    }
+  },
+  "conceptId": "cdn-caching",
+  "badge": {
+    "name": "Chuyên Viên Điều Phối CDN",
+    "icon": "🌐"
+  }
+}

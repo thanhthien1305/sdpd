@@ -9,10 +9,12 @@ import { useGameState } from './useGameState';
 // body (diagram, diagnosis, brief) is lazy-loaded per case via useCase().
 import caseIndexEn from '../data/case-index.json';
 import caseIndexPtBR from '../data/case-index.pt-BR.json';
+import caseIndexVi from '../data/case-index.vi.json';
 
 // Concepts
 import conceptsEn from '../data/concepts.json';
 import conceptsPtBR from '../data/concepts-pt-BR.json';
+import conceptsVi from '../data/concepts-vi.json';
 
 export interface CaseIndexEntry {
   id: string;
@@ -27,16 +29,19 @@ export interface CaseIndexEntry {
 const loaders: Record<string, Record<string, () => Promise<{ default: Case }>>> = {
   en: import.meta.glob<{ default: Case }>('../data/cases/case-*.json'),
   'pt-BR': import.meta.glob<{ default: Case }>('../data/cases/pt-BR/case-*.json'),
+  vi: import.meta.glob<{ default: Case }>('../data/cases/vi/case-*.json'),
 };
 
 const caseIndexByLocale: Record<string, CaseIndexEntry[]> = {
   en: caseIndexEn,
   'pt-BR': caseIndexPtBR,
+  vi: caseIndexVi,
 };
 
 const conceptsByLocale: Record<string, Concept[]> = {
   en: conceptsEn as Concept[],
   'pt-BR': conceptsPtBR as Concept[],
+  vi: conceptsVi as Concept[],
 };
 
 function findLoader(locale: string, caseId: string) {

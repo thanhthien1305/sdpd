@@ -1,0 +1,213 @@
+{
+  "id": "case-01",
+  "number": 1,
+  "title": "Điểm Lỗi Đơn (Single Point of Failure)",
+  "subtitle": "Hồ sơ phạm nhân biến mất trên toàn bộ các đồn cảnh sát",
+  "brief": {
+    "narrative": "Hiện tại là 2 giờ sáng và tổng đài điều phối đang tràn ngập các cuộc gọi khẩn. Mọi đồn cảnh sát ở thành phố Distributia đều báo cáo cùng một sự cố: các sĩ quan không thể tra cứu hồ sơ tội phạm. Không có tiền án, không có lệnh bắt giữ, không có hồ sơ vụ án đang thụ lý. Cơ Sở Dữ Liệu Hồ Sơ Tội Phạm Trung Tâm — máy chủ duy nhất — vừa sập hoàn toàn. Một sĩ quan tuần tra vừa chặn một kẻ tình nghi có 3 lệnh truy nã nguy hiểm nhưng buộc phải thả hắn đi vì hệ thống trắng trơn. Cảnh trưởng Partition muốn có câu trả lời ngay lập tức, Thám tử.",
+    "symptoms": [
+      "Cả 3 đồn cảnh sát đều mất toàn bộ quyền truy cập vào hệ thống hồ sơ tội phạm",
+      "Máy chủ cơ sở dữ liệu trung tâm phát cảnh báo hỏng phần cứng ổ đĩa",
+      "Không có bất kỳ hệ thống sao lưu dự phòng nào phản hồi",
+      "Các sĩ quan ngoài hiện trường không thể xác minh lệnh bắt hay tiền án"
+    ],
+    "objective": "Xác định nguyên nhân vì sao sự cố của một máy chủ duy nhất lại làm sập toàn bộ hệ thống hồ sơ, và đề xuất giải pháp để ngăn chặn thảm họa này tái diễn."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "db-central",
+        "type": "database",
+        "label": "Central Records DB",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cơ Sở Dữ Liệu Trung Tâm",
+          "logs": [
+            "[02:01:33] WARN: Disk I/O latency exceeding thresholds",
+            "[02:01:47] ERROR: Disk failure detected on /dev/sda1",
+            "[02:01:48] FATAL: Unable to read data files",
+            "[02:01:48] FATAL: Database process terminated",
+            "[02:01:49] INFO: No failover configured"
+          ],
+          "data": {
+            "Status": "OFFLINE",
+            "Uptime": "0s (crashed)",
+            "Records": "2.4M records (inaccessible)",
+            "Replicas": "None configured",
+            "Last Backup": "72 hours ago"
+          },
+          "status": "Lỗi phần cứng — hỏng ổ đĩa. Không có cấu hình nhân bản (replication) hay chuyển đổi dự phòng (failover)."
+        }
+      },
+      {
+        "id": "precinct-north",
+        "type": "client",
+        "label": "North Precinct",
+        "status": "failed",
+        "position": {
+          "x": 100,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Đầu Cuối Đồn Phía Bắc",
+          "logs": [
+            "[02:02:01] ERROR: Connection to records DB refused",
+            "[02:02:01] ERROR: Query timeout after 5000ms",
+            "[02:02:15] WARN: All record lookups failing"
+          ],
+          "data": {
+            "Status": "NO DATABASE CONNECTION",
+            "Pending Queries": "47",
+            "Officers Active": "12"
+          },
+          "status": "Không thể kết nối đến cơ sở dữ liệu trung tâm. Không có hệ thống dự phòng."
+        }
+      },
+      {
+        "id": "precinct-south",
+        "type": "client",
+        "label": "South Precinct",
+        "status": "failed",
+        "position": {
+          "x": 350,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Đầu Cuối Đồn Phía Nam",
+          "logs": [
+            "[02:02:03] ERROR: Connection to records DB refused",
+            "[02:02:04] ERROR: Query timeout after 5000ms"
+          ],
+          "data": {
+            "Status": "NO DATABASE CONNECTION",
+            "Pending Queries": "23",
+            "Officers Active": "8"
+          },
+          "status": "Không thể kết nối đến cơ sở dữ liệu trung tâm. Không có hệ thống dự phòng."
+        }
+      },
+      {
+        "id": "precinct-east",
+        "type": "client",
+        "label": "East Precinct",
+        "status": "failed",
+        "position": {
+          "x": 600,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Đầu Cuối Đồn Phía Đông",
+          "logs": [
+            "[02:02:05] ERROR: Connection to records DB refused",
+            "[02:02:06] ERROR: Query timeout after 5000ms"
+          ],
+          "data": {
+            "Status": "NO DATABASE CONNECTION",
+            "Pending Queries": "31",
+            "Officers Active": "10"
+          },
+          "status": "Không thể kết nối đến cơ sở dữ liệu trung tâm. Không có hệ thống dự phòng."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-db-north",
+        "source": "db-central",
+        "target": "precinct-north",
+        "label": "queries",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-db-south",
+        "source": "db-central",
+        "target": "precinct-south",
+        "label": "queries",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-db-east",
+        "source": "db-central",
+        "target": "precinct-east",
+        "label": "queries",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ dẫn đến sự cố sập toàn bộ hệ thống là gì?",
+      "options": [
+        {
+          "id": "rc-4",
+          "text": "Quá nhiều truy vấn đồng thời từ các đồn đã làm quá tải máy chủ cơ sở dữ liệu dùng chung duy nhất",
+          "correct": false,
+          "feedback": "Nhật ký ghi nhận hỏng đĩa cứng vật lý, không phải nghẽn hiệu năng do quá tải. Truy vấn thất bại vì máy chủ đã chết hoàn toàn."
+        },
+        {
+          "id": "rc-2",
+          "text": "Máy chủ cơ sở dữ liệu duy nhất là một Điểm Lỗi Đơn (SPOF) — khi nó sập, không có bản sao (replica) nào tiếp quản để xử lý truy vấn",
+          "correct": true,
+          "feedback": "Chính xác! Toàn bộ hệ thống phụ thuộc vào một máy chủ DB duy nhất mà không có replica. Khi ổ đĩa hỏng, mọi đồn đều mất liên lạc. Đây là bài học kinh điển về Điểm Lỗi Đơn (Single Point of Failure - SPOF)."
+        },
+        {
+          "id": "rc-1",
+          "text": "Một sự cố phân vùng mạng đang ngăn cản các đồn cảnh sát kết nối với cơ sở dữ liệu trung tâm",
+          "correct": false,
+          "feedback": "Không chính xác. Nhật ký (logs) ghi rõ lỗi phần cứng đĩa (hardware crash), không phải lỗi mạng. Mọi đồn đều bị ảnh hưởng vì tất cả cùng phụ thuộc vào một máy chủ duy nhất."
+        },
+        {
+          "id": "rc-3",
+          "text": "Cơ sở dữ liệu đã vượt quá dung lượng lưu trữ tối đa và từ chối nhận thêm truy vấn cũng như thao tác ghi",
+          "correct": false,
+          "feedback": "Nhật ký chỉ ra lỗi vật lý của đĩa cứng, không phải hết dung lượng. Nhưng ngay cả khi hết dung lượng, vấn đề kiến trúc cốt lõi vẫn là chỉ có một máy chủ duy nhất gánh toàn bộ hệ thống."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp tốt nhất để ngăn chặn sự cố này tái diễn trong tương lai là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Nâng cấp phần cứng đĩa với cơ chế dự phòng RAID trên máy chủ hiện tại để chống hỏng đĩa",
+          "correct": false,
+          "feedback": "RAID chỉ bảo vệ trước hỏng hóc 1 ổ đĩa trên một máy, nhưng vô dụng nếu cả máy chủ bị chập nguồn, cháy bo mạch hay sập hệ điều hành. Dự phòng thực sự đòi hỏi các máy chủ vật lý tách biệt — đó là những gì nhân bản mang lại."
+        },
+        {
+          "id": "fix-3",
+          "text": "Trang bị cho mỗi đồn cảnh sát một bản sao cơ sở dữ liệu độc lập và đầy đủ có thể hoạt động ngoại tuyến",
+          "correct": false,
+          "feedback": "Dù loại bỏ được SPOF, việc lưu các bản sao độc lập hoàn toàn tại mỗi đồn sẽ biến thành cơn ác mộng về tính nhất quán dữ liệu (Data Consistency). Làm sao để đồng bộ hàng triệu bản ghi giữa các đồn? Mô hình nhân bản Leader-Follower mới là giải pháp chuẩn mực."
+        },
+        {
+          "id": "fix-1",
+          "text": "Bổ sung cơ chế nhân bản cơ sở dữ liệu (Replication) — duy trì ít nhất một bản sao (replica) sẵn sàng tiếp quản khi máy chủ chính (primary) gặp sự cố",
+          "correct": true,
+          "feedback": "Chính xác! Nhân bản dữ liệu tạo các bản sao độc lập trên các máy chủ vật lý riêng biệt. Nếu primary sập, replica sẽ được tự động nâng cấp để phục vụ thay thế, loại trừ hoàn toàn điểm lỗi đơn."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng tần suất sao lưu dữ liệu từ 72 giờ lên tự động sao lưu mỗi giờ một lần",
+          "correct": false,
+          "feedback": "Sao lưu thường xuyên hơn giúp giảm mất mát dữ liệu, nhưng không giải quyết được bài toán Tính Sẵn Sàng (Availability). Phục hồi từ bản backup mất rất nhiều thời gian — bạn cần một bản sao hoạt động trực tiếp (live replica) để tiếp quản ngay tức thì."
+        }
+      ]
+    }
+  },
+  "conceptId": "replication-basics",
+  "badge": {
+    "name": "Chuyên Viên Khắc Phục SPOF",
+    "icon": "🛡️"
+  }
+}

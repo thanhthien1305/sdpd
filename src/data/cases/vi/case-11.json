@@ -1,0 +1,261 @@
+{
+  "id": "case-11",
+  "number": 11,
+  "title": "Phân Vùng Nóng (The Hot Partition)",
+  "subtitle": "Một phân mảnh bị nhấn chìm trong khi các máy khác ngồi chơi xơi nước",
+  "brief": {
+    "narrative": "Cơ sở dữ liệu tội phạm thành phố được chia thành 4 phân mảnh (shard) theo chữ cái đầu của họ nghi phạm: A-F, G-L, M-R, S-Z. Tối nay, hệ thống tra cứu đột ngột bị nghẽn nghiêm trọng. Điều tra viên phát hiện Shard 3 (chứa các chữ M-R) đang bốc khói với 99% CPU và hàng ngàn truy vấn bị timeout, trong khi 3 shard còn lại CPU chỉ lẹt đẹt 5%. Hóa ra tại thành phố Distributia, các họ 'Miller', 'Moore', 'Murphy', 'Martin' chiếm hơn 60% dân số! Khóa phân vùng chia theo dải chữ cái ngây thơ đã dồn toàn bộ gánh nặng lên một máy chủ duy nhất. Thám tử, hãy tái cấu trúc phân vùng này!",
+    "symptoms": [
+      "Shard 3 (M-R) bị quá tải 99% CPU và hàng đợi kết nối bị tràn",
+      "Các shard 1, 2 và 4 hoạt động bình thường với mức sử dụng tài nguyên cực thấp",
+      "Hệ thống phân vùng dữ liệu theo dải chữ cái đầu tiên của họ tội phạm",
+      "Phần lớn dân số trong thành phố có họ rơi vào dải ký tự của Shard 3"
+    ],
+    "objective": "Khắc phục hiện tượng Phân Vùng Nóng (Hot Partition) do phân bổ dữ liệu bị lệch bằng cách chuyển sang phân vùng theo hàm băm hoặc khóa kết hợp."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "shard-1",
+        "type": "database",
+        "label": "Shard 1 (A-F)",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Mảnh 1 (Họ A-F)",
+          "logs": [
+            "[09:00:00] INFO: Normal operations",
+            "[09:15:00] INFO: Query rate: 12/sec, response time: 30ms"
+          ],
+          "data": {
+            "Range": "A-F surnames",
+            "Records": "180,000",
+            "CPU": "12%",
+            "Storage": "15%",
+            "Response Time": "30ms",
+            "Status": "IDLE — significantly underutilized"
+          },
+          "status": "RẢNH RỖI — CPU 4%, lưu trữ 8% dữ liệu."
+        }
+      },
+      {
+        "id": "shard-2",
+        "type": "database",
+        "label": "Shard 2 (G-L)",
+        "status": "healthy",
+        "position": {
+          "x": 280,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Mảnh 2 (Họ G-L)",
+          "logs": [
+            "[09:00:00] INFO: Normal operations",
+            "[09:15:00] INFO: Query rate: 15/sec, response time: 35ms"
+          ],
+          "data": {
+            "Range": "G-L surnames",
+            "Records": "195,000",
+            "CPU": "14%",
+            "Storage": "16%",
+            "Response Time": "35ms",
+            "Status": "IDLE — significantly underutilized"
+          },
+          "status": "RẢNH RỖI — CPU 5%, lưu trữ 6% dữ liệu."
+        }
+      },
+      {
+        "id": "shard-3",
+        "type": "database",
+        "label": "Shard 3 (M-R)",
+        "status": "healthy",
+        "position": {
+          "x": 480,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Mảnh 3 (Họ M-R)",
+          "logs": [
+            "[09:00:00] INFO: Normal operations",
+            "[09:15:00] INFO: Query rate: 18/sec, response time: 40ms"
+          ],
+          "data": {
+            "Range": "M-R surnames",
+            "Records": "210,000",
+            "CPU": "15%",
+            "Storage": "17%",
+            "Response Time": "40ms",
+            "Status": "IDLE — significantly underutilized"
+          },
+          "status": "PHÂN VÙNG NÓNG — CPU 99%, lưu trữ 78% tổng dữ liệu, hàng ngàn truy vấn bị nghẽn."
+        }
+      },
+      {
+        "id": "shard-4",
+        "type": "database",
+        "label": "Shard 4 (S-Z)",
+        "status": "failed",
+        "position": {
+          "x": 680,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Mảnh 4 (Họ S-Z)",
+          "logs": [
+            "[09:00:00] WARN: Record count growing rapidly — celebrity crime wave",
+            "[09:05:00] WARN: CPU: 78%, climbing fast",
+            "[09:10:00] ERROR: CPU: 95%, response time: 12,000ms",
+            "[09:12:00] ERROR: Storage: 98% — approaching disk full",
+            "[09:14:00] ERROR: CPU: 100%, connection pool exhausted",
+            "[09:15:00] ERROR: Response time: 45,000ms — effectively unresponsive",
+            "[09:15:01] ERROR: 50,000 celebrity crime reports all on this shard"
+          ],
+          "data": {
+            "Range": "S-Z surnames",
+            "Records": "460,000 (2.5x other shards)",
+            "Celebrity Reports (this week)": "50,000",
+            "CPU": "100%",
+            "Storage": "98%",
+            "Response Time": "45,000ms",
+            "Connection Pool": "500/500 (EXHAUSTED)",
+            "Status": "HOT PARTITION — overwhelmed"
+          },
+          "status": "RẢNH RỖI — CPU 6%, lưu trữ 8% dữ liệu."
+        }
+      },
+      {
+        "id": "router",
+        "type": "server",
+        "label": "Shard Router",
+        "status": "healthy",
+        "position": {
+          "x": 380,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Database Shard Router",
+          "logs": [
+            "[09:00:00] INFO: Routing by first letter of suspect surname",
+            "[09:10:00] WARN: 89% of traffic routed to Shard 4 (S-Z)",
+            "[09:12:00] WARN: Shards 1-3 receiving 3-5% traffic each",
+            "[09:14:00] ERROR: Shard 4 responses timing out — cannot reroute (fixed partitioning)"
+          ],
+          "data": {
+            "Routing Strategy": "First letter of surname → shard",
+            "Traffic Distribution": "Shard 1: 3%, Shard 2: 4%, Shard 3: 4%, Shard 4: 89%",
+            "Can Rebalance": "NO — fixed range partitioning",
+            "Rerouting Available": "NO — data is physically on Shard 4"
+          },
+          "status": "Router is working correctly per its rules, but the rules create a hot partition. Cannot rebalance."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-router-s1",
+        "source": "router",
+        "target": "shard-1",
+        "label": "3% traffic",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-s2",
+        "source": "router",
+        "target": "shard-2",
+        "label": "4% traffic",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-s3",
+        "source": "router",
+        "target": "shard-3",
+        "label": "4% traffic",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-s4",
+        "source": "router",
+        "target": "shard-4",
+        "label": "89% traffic",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Vì sao Shard 3 bị quá tải nghiêm trọng trong khi các shard khác hoàn toàn rảnh rỗi?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Shard 3 bị lỗi phần cứng bo mạch chủ làm giảm hiệu năng xử lý",
+          "correct": false,
+          "feedback": "Phần cứng của Shard 3 hoàn toàn bình thường; nguyên nhân là lượng dữ liệu và truy vấn đổ vào nó quá lớn so với các máy khác."
+        },
+        {
+          "id": "rc-3",
+          "text": "Các đồn cảnh sát chỉ gửi hồ sơ của những người có họ bắt đầu bằng M-R",
+          "correct": false,
+          "feedback": "Cảnh sát bắt giữ tội phạm ngẫu nhiên; chính cách chia shard theo chữ cái đã tập trung tải vào một chỗ."
+        },
+        {
+          "id": "rc-2",
+          "text": "Khóa phân vùng theo dải chữ cái (Range-based partitioning) dẫn đến sự phân bố dữ liệu bị lệch nghiêm trọng (Hot Partition) do sự phân bổ không đều của các họ trong thực tế",
+          "correct": true,
+          "feedback": "Chính xác! Phân vùng theo dải tự nhiên thường bị ảnh hưởng bởi phân phối thực tế (như các họ phổ biến). Kết quả là Shard 3 phải gánh hơn 60% dữ liệu và truy vấn của cả thành phố."
+        },
+        {
+          "id": "rc-4",
+          "text": "Hệ điều hành trên Shard 3 bị nhiễm phần mềm đào tiền ảo",
+          "correct": false,
+          "feedback": "Không có mã độc; toàn bộ CPU được tiêu thụ bởi các truy vấn SQL tra cứu họ tên."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Chiến lược phân vùng nào sẽ phân bổ đều tải trọng và lưu trữ trên toàn bộ các shard?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Gộp 4 shard lại thành một cơ sở dữ liệu duy nhất không phân mảnh",
+          "correct": false,
+          "feedback": "Gộp lại sẽ khiến cơ sở dữ liệu vượt quá ngưỡng dung lượng vật lý của một máy chủ duy nhất."
+        },
+        {
+          "id": "fix-1",
+          "text": "Chuyển sang phân vùng theo hàm băm (Hash-based partitioning) dựa trên mã định danh duy nhất (ví dụ: hash(criminal_id)), hoặc dùng Băm Nhất Quán (Consistent Hashing)",
+          "correct": true,
+          "feedback": "Chính xác! Hàm băm mật mã hoặc băm đồng nhất sẽ phân tán ngẫu nhiên và đồng đều tuyệt đối các bản ghi trên tất cả các shard, triệt tiêu hoàn toàn hiện tượng phân vùng nóng do họ tên."
+        },
+        {
+          "id": "fix-2",
+          "text": "Mua một chiếc máy tính khổng lồ để thay thế riêng cho Shard 3",
+          "correct": false,
+          "feedback": "Đây chỉ là giải pháp chắp vá tạm thời; khi dân số tăng, chiếc máy đó sẽ lại tiếp tục quá tải."
+        },
+        {
+          "id": "fix-3",
+          "text": "Đổi tên tất cả các nghi phạm có họ M-R thành họ bắt đầu bằng chữ A",
+          "correct": false,
+          "feedback": "Sửa đổi thông tin nhân thân của công dân là hành vi phạm pháp nghiêm trọng."
+        }
+      ]
+    }
+  },
+  "conceptId": "data-partitioning",
+  "badge": {
+    "name": "Chuyên Gia Cân Bằng Shard",
+    "icon": "🔪"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "id": "builder-09",
+  "number": 9,
+  "title": "Cơn Bão Cập Nhật Phân Nhánh (Fan-Out)",
+  "subtitle": "Một báo cáo sự cố kích hoạt hàng loạt cập nhật thứ cấp làm nghẽn hệ thống",
+  "objective": "Chuyển đổi kiến trúc cập nhật đồng bộ sang mô hình hướng sự kiện (fan-out bất đồng bộ).",
+  "constraints": [
+    "Không để các tác vụ thứ cấp làm chậm quá trình phản hồi báo cáo chính",
+    "Đảm bảo từng hệ thống nhận tin (thông báo, phân tích, hồ sơ) xử lý độc lập",
+    "Xử lý lỗi cách ly để một nhánh thất bại không ảnh hưởng các nhánh khác"
+  ],
+  "availableComponents": [
+    "client",
+    "loadBalancer",
+    "api",
+    "queue",
+    "worker",
+    "database",
+    "blobStorage",
+    "cache"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Mô Hình Xuất Bản / Đăng Ký (Pub/Sub)",
+      "description": "Sử dụng hàng đợi hoặc hệ thống pub/sub để phát tán sự kiện tới nhiều bên nhận.",
+      "requiredAll": [
+        "api",
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        }
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Worker Chuyên Biệt Theo Nhánh",
+      "description": "Các nhóm worker riêng biệt tiêu thụ thông điệp cho từng tác vụ chuyên biệt.",
+      "requiredAll": [
+        "client",
+        "loadBalancer"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "loadBalancer"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Lưu Trữ Bền Vững Độc Lập",
+      "description": "Mỗi nhánh lưu kết quả vào kho dữ liệu phù hợp mà không can thiệp lẫn nhau.",
+      "requiredAnyOf": [
+        "database",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    }
+  ]
+}

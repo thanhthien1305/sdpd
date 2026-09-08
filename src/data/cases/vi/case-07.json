@@ -1,0 +1,233 @@
+{
+  "id": "case-07",
+  "number": 7,
+  "title": "Nghịch Lý Kẻ Du Hành Thời Gian (The Time Traveler)",
+  "subtitle": "Nhãn thời gian của chứng cứ thách thức các định luật vật lý cơ bản",
+  "brief": {
+    "narrative": "Trong một phiên tòa xử tội phạm công nghệ cao, luật sư biện hộ vừa tung ra đòn chí mạng khiến công tố viên đứng hình: Báo cáo kỹ thuật số của sở cảnh sát cho thấy nghi phạm đã 'TẨU THOÁT KHỎI TÒA NHÀ' lúc 04:15:22.100, nhưng camera an ninh lại ghi nhận anh ta 'BƯỚC VÀO TÒA NHÀ' lúc 04:15:22.450 (350 mili-giây sau đó)! Luật sư khẳng định: 'Thân chủ tôi không thể tẩu thoát trước khi bước vào, trừ khi anh ta là kẻ du hành thời gian! Toàn bộ bằng chứng của cảnh sát đã bị làm giả!'. Thẩm phán yêu cầu sở cảnh sát giải trình trong 24 giờ. Thám tử, hãy tìm ra thủ phạm đã bẻ cong thời gian!",
+    "symptoms": [
+      "Sự kiện xảy ra sau lại mang nhãn thời gian (timestamp) sớm hơn sự kiện xảy ra trước",
+      "Máy chủ camera an ninh và máy chủ cảm biến cửa ra vào đặt ở hai tầng khác nhau",
+      "Máy chủ cảm biến cửa bị lệch đồng hồ (Clock Drift) lùi lại gần 500 mili-giây do dịch vụ NTP bị lỗi",
+      "Hệ thống dựa hoàn toàn vào nhãn thời gian vật lý để sắp xếp thứ tự diễn biến vụ án"
+    ],
+    "objective": "Vạch trần sai số của đồng hồ vật lý máy tính và áp dụng cơ chế Đánh Số Thứ Tự Logic (Lamport Timestamps / Sequence Numbers) để bảo toàn trình tự nhân quả của chứng cứ."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "collection-server",
+        "type": "server",
+        "label": "Evidence Collection",
+        "status": "degraded",
+        "position": {
+          "x": 100,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Evidence Collection Server",
+          "logs": [
+            "[22:15:00] INFO: Evidence #E-9934 (blood sample) collected by Officer Tanaka",
+            "[22:15:00] INFO: Timestamp assigned: 22:15:00 (local clock)",
+            "[22:15:01] INFO: Sent to Forensic Lab for analysis",
+            "[22:15:02] WARN: NTP sync status: FAILED (last sync 3 days ago)",
+            "[22:15:02] INFO: Local clock source: hardware RTC (drifting)"
+          ],
+          "data": {
+            "Server Clock": "22:15:00",
+            "Actual UTC Time": "22:12:00",
+            "Clock Drift": "+3 minutes ahead of UTC",
+            "NTP Status": "FAILED — last sync 72 hours ago",
+            "NTP Server": "ntp.distributia.gov (unreachable)",
+            "Evidence #E-9934 Timestamp": "22:15:00 (local)"
+          },
+          "status": "Clock is 3 minutes AHEAD of UTC. NTP sync broken for 3 days."
+        }
+      },
+      {
+        "id": "lab-server",
+        "type": "server",
+        "label": "Forensic Lab Server",
+        "status": "degraded",
+        "position": {
+          "x": 550,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Forensic Lab Analysis Server",
+          "logs": [
+            "[22:07:01] INFO: Received Evidence #E-9934 for analysis",
+            "[22:10:00] INFO: Analysis complete for Evidence #E-9934",
+            "[22:10:00] INFO: Timestamp assigned: 22:10:00 (local clock)",
+            "[22:10:01] WARN: NTP sync status: FAILED (last sync 3 days ago)"
+          ],
+          "data": {
+            "Server Clock": "22:10:00",
+            "Actual UTC Time": "22:15:00",
+            "Clock Drift": "-5 minutes behind UTC",
+            "NTP Status": "FAILED — last sync 72 hours ago",
+            "Evidence #E-9934 Analysis Timestamp": "22:10:00 (local)",
+            "Total Clock Skew vs Collection Server": "8 minutes"
+          },
+          "status": "Clock is 5 minutes BEHIND UTC. Combined skew of 8 minutes vs Collection server."
+        }
+      },
+      {
+        "id": "evidence-db",
+        "type": "database",
+        "label": "Evidence Database",
+        "status": "degraded",
+        "position": {
+          "x": 325,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Central Evidence Database",
+          "logs": [
+            "[22:15:01] INFO: INSERT Evidence #E-9934 — collected at 22:15:00",
+            "[22:15:05] INFO: UPDATE Evidence #E-9934 — analysis complete at 22:10:00",
+            "[22:15:05] WARN: TEMPORAL ANOMALY — analysis (22:10:00) before collection (22:15:00)",
+            "[22:15:05] WARN: 147 records with temporal anomalies in the last 72 hours"
+          ],
+          "data": {
+            "Evidence #E-9934 Collected": "22:15:00",
+            "Evidence #E-9934 Analyzed": "22:10:00",
+            "Time Paradox": "Analysis appears 5 minutes BEFORE collection",
+            "Records With Anomalies": "147 (last 72 hours)",
+            "Cases Potentially Affected": "23"
+          },
+          "status": "Temporal anomalies detected in evidence records due to clock skew between source servers."
+        }
+      },
+      {
+        "id": "ntp-server",
+        "type": "server",
+        "label": "NTP Server",
+        "status": "failed",
+        "position": {
+          "x": 325,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "NTP Time Server (ntp.distributia.gov)",
+          "logs": [
+            "[3 days ago] INFO: Serving time to 12 clients",
+            "[3 days ago] ERROR: Network interface failure",
+            "[3 days ago] FATAL: NTP service unreachable",
+            "[3 days ago] WARN: No alerting configured for NTP outage"
+          ],
+          "data": {
+            "Status": "OFFLINE",
+            "Downtime": "72 hours",
+            "Clients Affected": "12 servers",
+            "Alert Sent": "NONE — no monitoring configured"
+          },
+          "status": "NTP server offline for 72 hours. No alerting configured for this critical service."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-collect-db",
+        "source": "collection-server",
+        "target": "evidence-db",
+        "label": "timestamps",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-lab-db",
+        "source": "lab-server",
+        "target": "evidence-db",
+        "label": "timestamps",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-ntp-collect",
+        "source": "ntp-server",
+        "target": "collection-server",
+        "label": "time sync",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-ntp-lab",
+        "source": "ntp-server",
+        "target": "lab-server",
+        "label": "time sync",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Điều gì đã gây ra nghịch lý thời gian tai hại trên bảng chứng cứ?",
+      "options": [
+        {
+          "id": "rc-2",
+          "text": "Sự trôi đồng hồ vật lý (Clock Drift) giữa các máy chủ độc lập khiến việc so sánh thời gian thực để xác định thứ tự nhân quả trở nên sai lệch hoàn toàn",
+          "correct": true,
+          "feedback": "Chính xác! Đồng hồ vật lý trên các máy tính luôn bị trôi do nhiệt độ và phần cứng. Không thể dựa vào timestamp thực giữa hai máy chủ khác nhau để khẳng định sự kiện nào diễn ra trước một cách tuyệt đối."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dữ liệu video của camera an ninh bị tua nhanh gấp đôi tốc độ bình thường",
+          "correct": false,
+          "feedback": "Video phát ở tốc độ chuẩn 30fps hoàn toàn bình thường."
+        },
+        {
+          "id": "rc-1",
+          "text": "Kẻ tấn công đã dùng phần mềm độc hại can thiệp và sửa đổi cơ sở dữ liệu chứng cứ",
+          "correct": false,
+          "feedback": "Không có sự can thiệp từ tin tặc; nhật ký hệ điều hành cho thấy dịch vụ đồng bộ giờ NTP trên máy chủ tầng hầm đã mất kết nối nhiều tuần qua."
+        },
+        {
+          "id": "rc-4",
+          "text": "Đường truyền mạng của cảm biến cửa có tốc độ nhanh hơn tốc độ ánh sáng",
+          "correct": false,
+          "feedback": "Các định luật vật lý không bị vi phạm; chỉ có đồng hồ máy tính là chạy sai."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp kỹ thuật chuẩn mực để theo dõi chính xác trình tự diễn biến các sự kiện trong hệ thống phân tán là gì?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Thay thế toàn bộ camera và cảm biến bằng thiết bị analog thế hệ cũ",
+          "correct": false,
+          "feedback": "Đây là bước lùi về công nghệ và không giải quyết được bài toán tích hợp hệ thống."
+        },
+        {
+          "id": "fix-1",
+          "text": "Sử dụng Đồng Hồ Logic (Lamport Timestamps) hoặc bộ đếm thứ tự tăng dần đơn điệu (Monotonic Sequence Numbers) để phản ánh chính xác quan hệ nhân quả (Causality) giữa các sự kiện",
+          "correct": false,
+          "feedback": "Chính xác! Đồng hồ logic Lamport không quan tâm đến giờ hiển thị trên tường là mấy giờ; nó đảm bảo rằng nếu sự kiện B xảy ra sau sự kiện A, số thứ tự logic của B bắt buộc phải lớn hơn A. Điều này khôi phục hoàn toàn tính chân lý trước tòa án."
+        },
+        {
+          "id": "fix-2",
+          "text": "Chạy lệnh ntpdate thủ công bằng tay mỗi sáng trên tất cả các máy chủ",
+          "correct": true,
+          "feedback": "Chạy thủ công không đảm bảo tính liên tục và giữa các lần chạy đồng hồ vẫn có thể bị trôi vài chục mili-giây, đủ để làm đảo lộn thứ tự sự kiện."
+        },
+        {
+          "id": "fix-3",
+          "text": "Làm tròn tất cả các nhãn thời gian về phút gần nhất để che giấu phần mili-giây sai lệch",
+          "correct": false,
+          "feedback": "Làm tròn làm mất độ chi tiết của chứng cứ và khiến hàng loạt sự kiện khác nhau trông như diễn ra cùng một lúc."
+        }
+      ]
+    }
+  },
+  "conceptId": "clock-synchronization",
+  "badge": {
+    "name": "Thanh Tra Thời Gian Phân Tán",
+    "icon": "⏰"
+  }
+}

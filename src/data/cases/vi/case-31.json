@@ -1,0 +1,221 @@
+{
+  "id": "case-31",
+  "number": 31,
+  "title": "Bản Đọc Ảo Ảnh (The Phantom Read)",
+  "subtitle": "Thống kê tội phạm thay đổi kỳ lạ ngay giữa phiên đếm báo cáo",
+  "brief": {
+    "narrative": "Cuối năm tài chính, Trưởng ban Thanh tra đang thực hiện phiên kiểm toán ngân sách chống tội phạm đặc biệt. Báo cáo yêu cầu tính tổng số tiền phạt thu được từ các vụ án ma túy trong năm. Lúc 23:55, giao dịch kiểm toán chạy câu lệnh SUM lần thứ nhất và ra kết quả $14.200.000. Ba phút sau, trong khi phiên kiểm toán vẫn đang mở để lập biên bản đối soát, một đồn cảnh sát vừa commit thêm 3 vụ án mới vào hệ thống. Khi giao dịch kiểm toán chạy lại câu lệnh SUM lần hai để in báo cáo chính thức, con số đột ngột nhảy lên $14.280.000! Con số biến đổi ngay trong cùng một giao dịch kiểm toán khiến các con số thống kê mâu thuẫn nhau trên cùng một trang giấy! Thanh tra nghi ngờ có hành vi gian lận sổ sách kế toán. Thám tử, hãy vạch trần ảo ảnh này!",
+    "symptoms": [
+      "Trong cùng một giao dịch cơ sở dữ liệu, hai lần thực thi cùng một truy vấn trả về số lượng bản ghi khác nhau",
+      "Mức độ cô lập giao dịch (Transaction Isolation Level) đang đặt ở mức Read Committed",
+      "Các giao dịch khác đồng thời chèn thêm (INSERT) các dòng dữ liệu mới và commit thành công",
+      "Báo cáo kiểm toán tài chính bị sai lệch số liệu đối soát nội bộ"
+    ],
+    "objective": "Hiểu rõ các Mức Độ Cô Lập Giao Dịch (ACID Isolation Levels) và nâng cấp lên Repeatable Read hoặc Serializable để ngăn chặn Hiện Tượng Đọc Ảo Ảnh (Phantom Read)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "stats-service",
+        "type": "server",
+        "label": "Statistics Report Service",
+        "status": "degraded",
+        "position": {
+          "x": 350,
+          "y": 50
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Statistics Report Service",
+          "logs": [
+            "[10:00:01] INFO: Starting quarterly report — Transaction isolation: READ COMMITTED",
+            "[10:00:01] INFO: Query 1 — SELECT COUNT(*) FROM crimes WHERE type='violent' → 1,247",
+            "[10:00:02] INFO: Query 2 — SELECT COUNT(*) FROM crimes WHERE type='property' → 3,891",
+            "[10:00:03] INFO: Query 3 — SELECT COUNT(*) FROM cases WHERE status='resolved' → 4,102",
+            "[10:00:04] INFO: Query 4 — SELECT COUNT(*) FROM crimes (total) → 5,185",
+            "[10:00:04] WARN: Data inconsistency — violent(1,247) + property(3,891) = 5,138, but total = 5,185",
+            "[10:00:04] INFO: Report generated — but 47 crimes appeared between Query 1 and Query 4"
+          ],
+          "data": {
+            "Isolation Level": "READ COMMITTED",
+            "Transaction Duration": "3.2 seconds",
+            "Queries Per Report": "12",
+            "Snapshot Consistency": "NONE — each query sees latest committed data",
+            "Data Changed During Tx": "47 new crimes, 13 case updates"
+          },
+          "status": "Report assembles data from different points in time. Each query is correct individually, but the combined result is inconsistent."
+        }
+      },
+      {
+        "id": "crime-intake",
+        "type": "server",
+        "label": "Crime Intake Service",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Crime Intake Service",
+          "logs": [
+            "[10:00:01] INFO: INSERT crime #8291 — type=violent — COMMITTED",
+            "[10:00:02] INFO: INSERT crime #8292 — type=property — COMMITTED",
+            "[10:00:02] INFO: INSERT crime #8293 — type=violent — COMMITTED",
+            "[10:00:03] INFO: INSERT crimes #8294-#8338 — batch import from precinct 7 — COMMITTED",
+            "[10:00:04] INFO: INSERT crime #8339 — type=property — COMMITTED"
+          ],
+          "data": {
+            "Inserts During Report Window": "47 new crime records",
+            "Commit Rate": "~15 commits/second",
+            "Status": "Operating normally — unaware of concurrent report"
+          },
+          "status": "Actively inserting new crime reports. Each insert is immediately visible to READ COMMITTED transactions."
+        }
+      },
+      {
+        "id": "case-resolution",
+        "type": "server",
+        "label": "Case Resolution Service",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Case Resolution Service",
+          "logs": [
+            "[10:00:01] INFO: UPDATE case #4411 — status='resolved' — COMMITTED",
+            "[10:00:02] INFO: UPDATE case #4415 — status='resolved' — COMMITTED",
+            "[10:00:03] INFO: UPDATE cases #4420-#4432 — batch resolution — COMMITTED"
+          ],
+          "data": {
+            "Updates During Report Window": "13 case status changes",
+            "Status": "Operating normally",
+            "Commit Rate": "~4 commits/second"
+          },
+          "status": "Actively updating case statuses. Changes are visible to subsequent queries in the report transaction."
+        }
+      },
+      {
+        "id": "crime-db",
+        "type": "database",
+        "label": "Crime Database",
+        "status": "healthy",
+        "position": {
+          "x": 350,
+          "y": 350
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Crime Statistics Database",
+          "logs": [
+            "[10:00:01] INFO: Report transaction started — isolation=READ_COMMITTED",
+            "[10:00:01] INFO: Concurrent write transactions active: 8",
+            "[10:00:04] INFO: Report transaction completed — 12 queries executed",
+            "[10:00:04] INFO: During report tx: 47 inserts, 13 updates committed by other transactions"
+          ],
+          "data": {
+            "Isolation Level": "READ COMMITTED (default)",
+            "MVCC": "Enabled but each statement sees latest snapshot",
+            "Concurrent Transactions": "8 active writers during report",
+            "Snapshot Isolation": "NOT ENABLED"
+          },
+          "status": "Database is healthy. READ COMMITTED provides per-statement consistency but not per-transaction consistency."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-stats-db",
+        "source": "stats-service",
+        "target": "crime-db",
+        "label": "12 queries (3.2s)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-intake-db",
+        "source": "crime-intake",
+        "target": "crime-db",
+        "label": "47 inserts",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-resolution-db",
+        "source": "case-resolution",
+        "target": "crime-db",
+        "label": "13 updates",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Hiện tượng xuất hiện thêm các dòng dữ liệu mới chui vào kết quả của một giao dịch đang mở được gọi là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Lỗi tính toán sai số dấu phẩy động trong bộ xử lý CPU",
+          "correct": false,
+          "feedback": "Phép cộng số nguyên hoàn toàn chính xác; vấn đề là số lượng dòng dữ liệu đã bị thay đổi giữa hai lần đọc."
+        },
+        {
+          "id": "rc-2",
+          "text": "Hiện Tượng Đọc Ảo Ảnh (Phantom Read) ở mức cô lập Read Committed — mức cô lập này cho phép nhìn thấy các bản ghi mới được commit bởi các giao dịch khác chèn vào phạm vi truy vấn",
+          "correct": true,
+          "feedback": "Chính xác! Ở mức cô lập Read Committed, mỗi câu lệnh SELECT đọc một bản snapshot mới của dữ liệu đã commit. Nếu có giao dịch khác INSERT thêm dòng mới và commit, câu SELECT thứ hai trong cùng giao dịch sẽ nhìn thấy những dòng 'bóng ma' này."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hacker đã can thiệp vào máy chủ để chuyển tiền vào tài khoản riêng",
+          "correct": false,
+          "feedback": "Số tiền tăng lên là từ các vụ phạt thực tế hợp pháp vừa được cảnh sát nhập vào."
+        },
+        {
+          "id": "rc-4",
+          "text": "Mực máy in bị nhòe làm biến dạng con số trên trang giấy",
+          "correct": false,
+          "feedback": "Dữ liệu truy vấn trực tiếp từ cơ sở dữ liệu đã bị biến đổi số liệu."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần thiết lập mức độ cô lập giao dịch (Transaction Isolation Level) như thế nào để đảm bảo báo cáo kiểm toán luôn có cái nhìn đóng băng bất biến?",
+      "options": [
+        {
+          "id": "fix-4",
+          "text": "Sử dụng máy tính bấm tay để cộng thủ công từng dòng",
+          "correct": false,
+          "feedback": "Cộng tay hàng trăm ngàn dòng dữ liệu là phi thực tế và dễ mắc sai sót con người."
+        },
+        {
+          "id": "fix-1",
+          "text": "Nâng mức cô lập giao dịch lên Repeatable Read (hoặc Snapshot Isolation / Serializable) cho phiên kiểm toán — đảm bảo giao dịch luôn nhìn thấy cùng một bản snapshot dữ liệu cố định tại thời điểm bắt đầu giao dịch",
+          "correct": false,
+          "feedback": "Chính xác! Với Repeatable Read (sử dụng MVCC trong Postgres/MySQL), toàn bộ giao dịch kiểm toán sẽ đọc từ một bản chụp trạng thái (Snapshot) duy nhất tại thời điểm bắt đầu. Dù các đồn có INSERT thêm hàng ngàn bản ghi, báo cáo kiểm toán vẫn hoàn toàn bất biến và chính xác 100%!"
+        },
+        {
+          "id": "fix-2",
+          "text": "Hạ mức cô lập xuống Read Uncommitted để đọc luôn cả dữ liệu chưa commit",
+          "correct": false,
+          "feedback": "Hạ xuống Read Uncommitted sẽ gây ra thêm lỗi Đọc Bẩn (Dirty Read), làm số liệu sai lệch trầm trọng hơn."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấm tất cả các đồn cảnh sát không được bắt giữ tội phạm trong tuần lễ kiểm toán",
+          "correct": true,
+          "feedback": "Không thể dừng công tác trị an xã hội chỉ để phục vụ việc làm báo cáo kế toán."
+        }
+      ]
+    }
+  },
+  "conceptId": "isolation-levels",
+  "badge": {
+    "name": "Chuyên Gia Cô Lập Giao Dịch",
+    "icon": "🔬"
+  }
+}

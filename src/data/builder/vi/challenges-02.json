@@ -1,0 +1,81 @@
+{
+  "id": "builder-02",
+  "number": 2,
+  "title": "Dịch Vụ Đa Phương Tiện Bằng Chứng",
+  "subtitle": "Tệp dữ liệu lớn và metadata cũ kỹ làm gián đoạn việc truy xuất bằng chứng",
+  "objective": "Chọn đúng loại lưu trữ cho các tệp lớn và thiết lập luồng cập nhật metadata chính xác.",
+  "constraints": [
+    "Sử dụng hệ thống lưu trữ phù hợp cho các tệp nhị phân lớn",
+    "Truyền tải cập nhật metadata qua cơ chế xử lý bất đồng bộ",
+    "Giảm thiểu các đường dẫn đọc dữ liệu lỗi thời"
+  ],
+  "availableComponents": [
+    "client",
+    "cdn",
+    "loadBalancer",
+    "api",
+    "cache",
+    "database",
+    "blobStorage",
+    "queue",
+    "worker"
+  ],
+  "concepts": [
+    {
+      "id": "c1",
+      "title": "Lựa Chọn Lưu Trữ Đúng Đắn",
+      "description": "Khuyến khích sử dụng Blob Storage (lưu trữ đối tượng) cho các tệp media.",
+      "requiredAll": [
+        "api",
+        "blobStorage"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "blobStorage"
+        }
+      ],
+      "discouragedComponents": [
+        "database"
+      ]
+    },
+    {
+      "id": "c2",
+      "title": "Đường Ống Metadata Bất Đồng Bộ",
+      "description": "Hàng đợi (Queue) + Worker giúp tách rời cập nhật metadata khỏi luồng yêu cầu trực tiếp.",
+      "requiredAll": [
+        "queue",
+        "worker"
+      ],
+      "preferredConnections": [
+        {
+          "from": "api",
+          "to": "queue"
+        },
+        {
+          "from": "queue",
+          "to": "worker"
+        },
+        {
+          "from": "worker",
+          "to": "database"
+        }
+      ]
+    },
+    {
+      "id": "c3",
+      "title": "Phân Phối Tốc Độ Cao",
+      "description": "CDN hoặc Cache hỗ trợ phân phối nhanh các bằng chứng thường xuyên được truy cập.",
+      "requiredAnyOf": [
+        "cdn",
+        "cache"
+      ],
+      "preferredConnections": [
+        {
+          "from": "client",
+          "to": "cdn"
+        }
+      ]
+    }
+  ]
+}
