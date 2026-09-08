@@ -1,0 +1,186 @@
+{
+  "id": "case-43",
+  "number": 43,
+  "title": "The Elephant in the Queue",
+  "subtitle": "A 4-hour audio transcription blocks thousands of critical 30-second 911 dispatch alerts",
+  "brief": {
+    "narrative": "The precinct dispatch center deployed an AI-powered voice transcription service that transcribes officer radio communications and 911 emergency calls. All inbound audio tasks are published into a single message queue topic partition (`audio-transcription-events`). At 19:00:00, Detective Briggs uploads a massive 4-hour continuous surveillance wiretap audio file for criminal gang voiceprint matching. Because the topic partition enforces strict First-In, First-Out (FIFO) ordering and consumer offsets commit sequentially upon task completion, Worker 1 begins processing the 4-hour file. Starting at 19:01:00, over 1,400 life-or-death 30-second emergency 911 caller audio clips queue up directly behind the wiretap job. Trapped behind the elephant task at the head of the line (Head-of-Line Blocking), none of the emergency alerts can be dispatched or processed. Even though five other worker nodes in the pool are sitting at 0% CPU utilization, the partition offset cannot advance, leaving emergency callers without immediate transcription or automated dispatch assistance for hours.",
+    "symptoms": [
+      "911 emergency call audio transcription latency spiked from 3 seconds to over 3.5 hours",
+      "Over 1,400 urgent 30-second emergency clips queued up behind a single 4-hour wiretap job",
+      "Consumer lag on partition `audio-transcription-events-0` increasing linearly with time",
+      "Five worker nodes in the transcription pool are completely idle (0% CPU) due to partition-level FIFO lock"
+    ],
+    "objective": "Diagnose Head-of-Line (HoL) blocking on FIFO message partitions and implement queue segregation and decoupled concurrency to separate elephant jobs from latency-sensitive tasks."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audio-ingest",
+        "type": "client",
+        "label": "Dispatch & Detective Ingest",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Audio Task Ingest Sources",
+          "logs": [
+            "[19:00:00] INGEST: Detective Briggs uploaded 4-hour wiretap audio (file size: 2.1GB)",
+            "[19:00:01] PUBLISH: Sent to partition `audio-transcription-events-0` at offset 10420",
+            "[19:01:15] INGEST: 911 Panic Call #4811 (duration: 25s, priority: EMERGENCY)",
+            "[19:01:15] PUBLISH: Sent to same partition at offset 10421",
+            "[19:05:00] WARN: 1,420 emergency calls queued behind offset 10420"
+          ],
+          "data": {
+            "Elephant Task": "Wiretap #901 (4 hours execution time)",
+            "Mouse Tasks": "1,420 calls (avg 25s each)",
+            "Queue Topic": "audio-transcription-events (Single Partition)"
+          },
+          "status": "Mixed workloads of vastly different durations dumped into the same FIFO stream."
+        }
+      },
+      {
+        "id": "fifo-queue",
+        "type": "server",
+        "label": "FIFO Topic Partition (Offset 10420)",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Broker Topic Partition",
+          "logs": [
+            "[19:00:02] CONSUMER: Worker 1 fetched offset 10420 (Wiretap - 4h job)",
+            "[19:00:05] INFO: Offset 10420 actively processing...",
+            "[19:05:00] WARN: Partition commit paused until offset 10420 completes",
+            "[19:30:00] CRITICAL: Consumer lag = 1,420 messages; head of line completely blocked",
+            "[19:30:01] WARN: Offsets 10421-11840 cannot be consumed due to strict FIFO ordering"
+          ],
+          "data": {
+            "Current Active Offset": "10420 (Wiretap 4h)",
+            "Pending Messages Behind Head": "1,420",
+            "Consumer Offset Advancement": "STALLED (Waiting for Worker 1)",
+            "Head-of-Line Blocking": "ACTIVE"
+          },
+          "status": "The single heavy job at the head of the partition blocks all subsequent messages."
+        }
+      },
+      {
+        "id": "transcription-pool",
+        "type": "server",
+        "label": "AI Transcription Worker Pool",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Worker Pool Cluster (6 Nodes)",
+          "logs": [
+            "[19:00:05] Worker 1 (Assigned partition 0): 100% CPU (Whisper AI model transcribing wiretap)",
+            "[19:05:00] Worker 2: IDLE (0% CPU - no partitions assigned)",
+            "[19:05:00] Worker 3: IDLE (0% CPU - no partitions assigned)",
+            "[19:05:00] Worker 4: IDLE (0% CPU - no partitions assigned)",
+            "[19:05:00] Worker 5: IDLE (0% CPU - no partitions assigned)",
+            "[19:05:00] Worker 6: IDLE (0% CPU - no partitions assigned)"
+          ],
+          "data": {
+            "Active Worker": "Worker 1 (Tied to 4h job)",
+            "Idle Workers": "5 nodes (100% capacity wasted)",
+            "Worker Concurrency Model": "1 Consumer per Partition"
+          },
+          "status": "5 out of 6 worker nodes are completely starved of work due to single partition lock."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ingest-queue",
+        "source": "audio-ingest",
+        "target": "fifo-queue",
+        "label": "mixed audio [HoL Blocked]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-queue-workers",
+        "source": "fifo-queue",
+        "target": "transcription-pool",
+        "label": "stuck on offset 10420",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the architectural root cause of 1,400 emergency 911 calls being blocked for hours?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Head-of-Line (HoL) blocking on a single FIFO message partition: mixing a 4-hour batch job with low-latency emergency calls forced consumer offset commits to stall until the massive job finished, trapping all subsequent tasks",
+          "correct": true,
+          "feedback": "Correct! In partition-based message brokers (like Kafka or RabbitMQ FIFO queues), messages within a partition are consumed strictly in sequence, and consumer offsets represent the latest processed record. Placing a massive 4-hour 'elephant' task in the same partition ahead of quick 30-second 'mouse' tasks creates Head-of-Line (HoL) blocking: downstream workers cannot skip ahead to process or commit subsequent messages until the elephant finishes, leaving idle worker nodes starved while critical emergency calls sit frozen."
+        },
+        {
+          "id": "rc-2",
+          "text": "The AI speech-to-text neural network crashed due to an out-of-memory exception when parsing the wiretap audio container",
+          "correct": false,
+          "feedback": "Worker 1 did not crash; its CPU is running at 100% actively transcribing the audio. The problem is that the single job takes 4 hours, during which no other messages in that partition can be read."
+        },
+        {
+          "id": "rc-3",
+          "text": "The message broker ran out of disk inodes, preventing new offsets from being written to the commit log",
+          "correct": false,
+          "feedback": "New messages were successfully published and appended to offsets 10421 through 11840. The failure is consumption-side Head-of-Line blocking, not broker disk exhaustion."
+        },
+        {
+          "id": "rc-4",
+          "text": "The dispatch audio recording equipment encoded the 911 calls with an invalid sample rate that rejected consumer deserialization",
+          "correct": false,
+          "feedback": "The emergency audio files are perfectly valid. The consumer worker has not even touched the emergency calls yet because it is blocked on the wiretap at offset 10420."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the ingestion and queuing architecture be refactored to ensure emergency calls are never delayed by long-running batch jobs?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement Queue Segregation: classify audio tasks at ingress by estimated duration, routing batch wiretaps to a low-priority background queue and short 911 calls to a dedicated high-priority queue with independent worker concurrency",
+          "correct": true,
+          "feedback": "Correct! Segregating queues by task SLA and duration (Elephant vs Mouse queues) completely eliminates Head-of-Line blocking. Urgent 911 calls enter a dedicated high-priority queue consumed by dedicated low-latency workers (achieving 3-second turnaround), while long batch wiretaps process on separate background workers without impacting emergency response."
+        },
+        {
+          "id": "fix-2",
+          "text": "Increase the message broker timeout to 24 hours so that consumer health checks do not trigger rebalances during long jobs",
+          "correct": false,
+          "feedback": "Increasing consumer timeouts only allows the single worker to hold the lock longer without disconnecting; it does nothing to unblock the 1,400 emergency calls waiting behind it."
+        },
+        {
+          "id": "fix-3",
+          "text": "Truncate all investigative wiretap audio files to 30 seconds to force them to match the length of emergency calls",
+          "correct": false,
+          "feedback": "Truncating surveillance audio would discard 3 hours and 59 minutes of crucial court evidence, destroying criminal prosecution cases."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configure the consumer to commit the offset of the 4-hour wiretap before starting processing and drop the message if an error occurs",
+          "correct": false,
+          "feedback": "Committing offsets before processing risks silent data loss if the worker crashes, and does not solve the resource starvation on the worker pool."
+        }
+      ]
+    }
+  },
+  "conceptId": "head-of-line-blocking",
+  "badge": {
+    "name": "Queue Warden",
+    "icon": "🚦"
+  }
+}

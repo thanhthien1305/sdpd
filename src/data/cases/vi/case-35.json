@@ -1,0 +1,229 @@
+{
+  "id": "case-35",
+  "number": 35,
+  "title": "Thủ Lĩnh Xác Sống",
+  "subtitle": "Leader cũ thức dậy sau ngưng trệ GC và ghi đè trạng thái mới nhất",
+  "brief": {
+    "narrative": "Hệ thống Điều Phối Cứu Hộ Khẩn Cấp của SDPD sử dụng khóa phân tán trên cụm ZooKeeper để đảm bảo chỉ có duy nhất một máy chủ Leader được quyền phát lệnh điều xe tuần tra. Máy chủ Coordinator A đang nắm giữ vai trò Leader với hợp đồng thuê (lease) có thời hạn 5 giây. Đúng 08:00:00, một tác vụ cấp phát bộ nhớ khổng lồ đã kích hoạt đợt ngưng trệ dọn rác bộ nhớ (JVM Stop-The-World Garbage Collection) kéo dài tới 15 giây trên Coordinator A. Mọi luồng xử lý của ứng dụng, bao gồm cả luồng gửi nhịp tim (heartbeat), đều bị đóng băng hoàn toàn. Đúng 08:00:05, ZooKeeper không nhận được tín hiệu nhịp tim nên kết luận Coordinator A đã chết và hủy bỏ lease. Đến 08:00:06, Coordinator B được bầu làm Leader mới, nhận lease và lập tức điều động Đội Đặc Nhiệm SWAT 4 tới hiện trường một vụ cướp có vũ trang (Lệnh Điều Động #9402). Nhưng đúng 08:00:15, đợt ngưng trệ GC của Coordinator A kết thúc. Hoàn toàn không biết 15 giây đã trôi qua và mình đã bị phế truất, Coordinator A tiếp tục chạy dòng lệnh dang dở trước đó — gửi lệnh điều động cũ #9398 cho Đội SWAT 4 xuống Cụm Lưu Trữ. Hệ thống lưu trữ mù quáng chấp nhận lệnh ghi và đè bẹp Lệnh #9402. Đội SWAT 4 bị điều hướng sai sang một vụ báo động giả, bỏ trống hiện trường vụ cướp nguy hiểm.",
+    "symptoms": [
+      "Lệnh điều động khẩn cấp #9402 (SWAT ngăn chặn cướp) bị thay thế một cách bí ẩn bởi Lệnh cũ #9398 trong cơ sở dữ liệu",
+      "Nhật ký ZooKeeper ghi nhận lease của Coordinator A hết hạn lúc 08:00:05 và Coordinator B được bầu lúc 08:00:06",
+      "Chỉ số JVM trên Coordinator A phát hiện đợt ngưng trệ Stop-The-World kéo dài 14.8 giây từ 08:00:01 đến 08:00:15",
+      "Các đơn vị tác chiến hiện trường nhận hai mệnh lệnh hoàn toàn mâu thuẫn nhau qua bộ đàm chỉ trong vài giây"
+    ],
+    "objective": "Xác định cơ chế khiến một Leader cũ sau khi đóng băng có thể phá hủy tính toàn vẹn dữ liệu, và áp dụng quy tắc xác thực ghi để ngăn chặn Leader xác sống ghi đè dữ liệu mới."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "zk-lock",
+        "type": "server",
+        "label": "Dịch Vụ Khóa ZooKeeper",
+        "status": "healthy",
+        "position": {
+          "x": 360,
+          "y": 40
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Đồng Thuận ZooKeeper",
+          "logs": [
+            "[07:59:55] INFO: Coordinator A mượn lease Leader /locks/dispatch (TTL: 5s)",
+            "[08:00:00] INFO: Coordinator A gia hạn lease thành công (TTL: 5s)",
+            "[08:00:05] WARN: Mất nhịp tim từ Coordinator A — lease chính thức hết hạn!",
+            "[08:00:06] INFO: Coordinator B yêu cầu lease — được bầu làm Leader mới!",
+            "[08:00:15] WARN: Nhận nhịp tim từ Coordinator A — TỪ CHỐI (lease đã thuộc về B)"
+          ],
+          "data": {
+            "Leader Hiện Tại": "Coordinator B",
+            "Khóa Hợp Lệ": "Coordinator B (/locks/dispatch)",
+            "Thời Gian Thuê (TTL)": "5.000ms",
+            "Trạng Thái Leader Cũ": "Đã Hết Hạn / Phế Truất"
+          },
+          "status": "ZooKeeper đã hủy lease của A và bầu B làm Leader mới hoàn toàn chuẩn xác."
+        }
+      },
+      {
+        "id": "coordinator-a",
+        "type": "server",
+        "label": "Coordinator A (Leader Cũ)",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 140
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Điều Phối A",
+          "logs": [
+            "[08:00:00] INFO: Đang chuẩn bị lệnh điều xe #9398 cho Đội SWAT 4",
+            "[08:00:01] WARN: JVM GC: Bắt đầu ngưng trệ toàn phần Stop-The-World để cấp phát RAM",
+            "[08:00:01-08:00:15] [ĐÓNG BĂNG — TOÀN BỘ CÁC LUỒNG BỊ DỪNG TRONG 14.800ms]",
+            "[08:00:15] INFO: GC hoàn tất. Tiếp tục thực thi mà không kiểm tra lại tính hợp lệ của lease",
+            "[08:00:15] INFO: Ghi lệnh #9398 xuống cơ sở dữ liệu... THÀNH CÔNG!"
+          ],
+          "data": {
+            "Thời Gian Ngưng Trệ GC": "14.800ms (Stop-The-World)",
+            "Trạng Thái Nhận Thức": "Tưởng mình vẫn là Leader hợp pháp",
+            "Tình Trạng Hợp Đồng Thuê": "ĐÃ HẾT HẠN (không hề hay biết)",
+            "Hành Động Phát Ra": "Ghi lệnh lỗi thời #9398 vào lúc 08:00:15"
+          },
+          "status": "Tỉnh dậy sau 15 giây đóng băng GC. Biến thành Leader xác sống và gửi lệnh ghi đè sai lệch."
+        }
+      },
+      {
+        "id": "coordinator-b",
+        "type": "server",
+        "label": "Coordinator B (Leader Mới)",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Điều Phối B",
+          "logs": [
+            "[08:00:06] INFO: Nhận lease Leader /locks/dispatch từ ZooKeeper",
+            "[08:00:07] INFO: Xử lý lệnh điều động khẩn cấp #9402 cho Đội SWAT 4 (Vụ Cướp Vũ Trang)",
+            "[08:00:08] INFO: Ghi lệnh #9402 xuống cơ sở dữ liệu... THÀNH CÔNG!",
+            "[08:00:16] ERROR: Trạng thái Đội 4 bị chuyển ngược về tuần tra thông thường do DB bị ghi đè"
+          ],
+          "data": {
+            "Tư Cách Lãnh Đạo": "Leader Hợp Pháp Duy Nhất",
+            "Thời Điểm Nhận Quyền": "08:00:06",
+            "Lệnh Đã Xuất Bản": "#9402 (Mức Ưu Tiên 1 - Cướp Vũ Trang)",
+            "Sức Khỏe": "Khỏe mạnh, 0 giây ngưng trệ"
+          },
+          "status": "Leader hợp pháp. Đã điều động SWAT 4 nhưng lệnh bị đè bẹp bởi máy chủ cũ."
+        }
+      },
+      {
+        "id": "dispatch-storage",
+        "type": "database",
+        "label": "Cơ Sở Dữ Liệu Điều Phối",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Bộ Lưu Trữ Lệnh Điều Động",
+          "logs": [
+            "[08:00:08] INFO: Nhận lệnh GHI điều động #9402 từ Coordinator B -> ĐÃ COMMIT",
+            "[08:00:15] INFO: Nhận lệnh GHI điều động #9398 từ Coordinator A -> ĐÃ COMMIT",
+            "[08:00:15] WARN: Bản ghi xe số 4 bị ghi đè! Không có cơ chế kiểm tra token hoặc epoch!",
+            "[08:00:16] ERROR: Phát hiện mâu thuẫn dữ liệu: lệnh mới hơn đã bị đè bẹp bởi lệnh cũ hơn"
+          ],
+          "data": {
+            "Lệnh Đang Lưu Hiện Tại": "Lệnh #9398 (LỖI THỜI từ Coordinator A)",
+            "Lệnh Bị Ghi Đè Mất": "Lệnh #9402 (MỚI NHẤT từ Coordinator B)",
+            "Kiểm Tra Phiên Epoch": "KHÔNG CÓ / ĐANG TẮT",
+            "Bắt Buộc Fencing Token": "CHƯA KÍCH HOẠT"
+          },
+          "status": "Chấp nhận lệnh ghi bừa bãi từ bất kỳ máy chủ nào mà không xác minh epoch."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ca-zk",
+        "source": "coordinator-a",
+        "target": "zk-lock",
+        "label": "hết hạn thuê (08:00:05)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-cb-zk",
+        "source": "coordinator-b",
+        "target": "zk-lock",
+        "label": "lease hợp lệ (08:00:06)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-cb-storage",
+        "source": "coordinator-b",
+        "target": "dispatch-storage",
+        "label": "ghi lệnh #9402 (08:00:08)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-ca-storage",
+        "source": "coordinator-a",
+        "target": "dispatch-storage",
+        "label": "lệnh cũ #9398 (08:00:15) [GHI ĐÈ]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ khiến tầng lưu trữ chấp nhận lệnh ghi lỗi thời và xóa sổ mệnh lệnh của Leader mới là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Tầng lưu trữ chấp nhận lệnh ghi từ Leader bị phế truất vì các yêu cầu thiếu Thẻ Phân Định (Fencing Tokens) tăng đơn điệu được kiểm tra tại tầng dữ liệu",
+          "correct": true,
+          "feedback": "Chính xác! Trong hệ thống phân tán, một máy chủ không thể tự biết liệu hợp đồng thuê (lease) của mình đã hết hạn trong lúc nó bị đóng băng hay chưa (ví dụ: ngưng trệ GC Stop-The-World hoặc nghẽn mạng). Chỉ xin khóa hay lease là chưa đủ: tầng lưu trữ bắt buộc phải kiểm tra Fencing Token (số thế hệ epoch tăng dần). Do tầng lưu trữ không kiểm tra token, lệnh ghi lỗi thời của Coordinator A vẫn được chấp nhận dù Coordinator B đã ghi với epoch cao hơn."
+        },
+        {
+          "id": "rc-2",
+          "text": "Cụm ZooKeeper bị lỗi phân não (split-brain) và cấp khóa đồng thời cho cả hai Coordinator A và B tại thời điểm 08:00:15",
+          "correct": false,
+          "feedback": "ZooKeeper đã hoạt động hoàn hảo. Khóa của Coordinator A đã bị hủy lúc 08:00:05 và ZooKeeper chỉ cấp quyền độc quyền cho Coordinator B. Khi A thức dậy lúc 08:00:15, ZooKeeper đã từ chối nhịp tim của A. Sự cố xảy ra vì A gửi lệnh thẳng xuống database mà không hỏi lại ZooKeeper."
+        },
+        {
+          "id": "rc-3",
+          "text": "Coordinator B bị lệch đồng hồ hệ thống (clock drift), dẫn đến việc đóng dấu thời gian cho lệnh #9402 nằm trong quá khứ",
+          "correct": false,
+          "feedback": "Đồng hồ của Coordinator B hoàn toàn chính xác. Nguyên nhân sự cố không phải do đồng hồ, mà là do việc Coordinator A bị ngưng trệ 15 giây và tầng lưu trữ chấp nhận ghi dữ liệu mà không có cơ chế chặn lọc epoch."
+        },
+        {
+          "id": "rc-4",
+          "text": "Switch mạng giữa Coordinator A và B bị rớt gói tin multicast trong quá trình đồng thuận",
+          "correct": false,
+          "feedback": "ZooKeeper không dùng gói tin multicast mạng mà dùng giao thức đồng thuận TCP (ZAB). Hạ tầng mạng hoàn toàn bình thường; sự cố ngưng trệ là do máy ảo Java dọn dẹp bộ nhớ."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Giải pháp kiến trúc chuẩn xác nhất để ngăn chặn các Leader cũ bị ngưng trệ làm hỏng dữ liệu lưu trữ là gì?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Cấp phát Thẻ Phân Định (Fencing Token) tăng đơn điệu theo từng lượt khóa, và bắt buộc tầng lưu trữ từ chối bất kỳ lệnh ghi nào mang token thấp hơn token cao nhất từng thấy",
+          "correct": true,
+          "feedback": "Chính xác! Fencing Token là giải pháp chuẩn mực để tiêu diệt 'Leader xác sống': ZooKeeper cấp một số thứ tự tăng đơn điệu kèm theo lease (ví dụ: Token 34 cho A, Token 35 cho B). Khi B ghi, storage ghi nhận token cao nhất hiện tại là 35. Khi A tỉnh dậy và cố ghi với Token 34, storage kiểm tra thấy 34 < 35 và lập tức ném lỗi từ chối, bảo vệ an toàn tuyệt đối cho dữ liệu mới."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng thời gian timeout lease của ZooKeeper từ 5 giây lên 30 phút để Coordinator A không bao giờ bị mất lease trong lúc chạy GC",
+          "correct": false,
+          "feedback": "Tăng thời gian lease sẽ phá hủy tính sẵn sàng của hệ thống. Nếu Leader thực sự chết hay mất điện, toàn bộ sở cảnh sát sẽ bị tê liệt suốt 30 phút mà không thể bầu người kế nhiệm. Ngoài ra, một đợt đóng băng GC hoàn toàn có thể kéo dài hơn bất kỳ mức timeout nào."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấu hình Coordinator A chủ động ping thăm dò Coordinator B qua mạng trước khi thực hiện bất kỳ lệnh ghi nào xuống database",
+          "correct": false,
+          "feedback": "Kiểm tra ngang hàng (peer-to-peer) không đảm bảo an toàn. Coordinator B có thể phản hồi chậm hoặc Coordinator A lại tiếp tục bị ngưng trệ giữa lúc ping và lúc ghi. Cơ chế Fencing Token được kiểm tra ngay tại đích đến (storage layer) là bắt buộc."
+        },
+        {
+          "id": "fix-4",
+          "text": "Viết lại toàn bộ mã nguồn của các máy chủ điều phối từ Java sang C++ để loại bỏ hoàn toàn hiện tượng ngưng trệ thu gom rác",
+          "correct": false,
+          "feedback": "Dù C++ không có GC, các sự cố ngưng trệ trong hệ thống phân tán vẫn có thể xảy ra do phân trang bộ nhớ ảo của OS (paging), thiếu thốn CPU hoặc máy ảo hypervisor bị tạm dừng. Hệ thống phân tán bắt buộc phải chống chịu được hiện tượng ngưng trệ bất kể ngôn ngữ lập trình nào."
+        }
+      ]
+    }
+  },
+  "conceptId": "fencing-tokens",
+  "badge": {
+    "name": "Khắc Tinh Xác Sống",
+    "icon": "🧟"
+  }
+}

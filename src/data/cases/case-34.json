@@ -1,0 +1,255 @@
+{
+  "id": "case-34",
+  "number": 34,
+  "title": "The Phantom Queries",
+  "subtitle": "Non-existent records bypass the cache and hammer the primary database",
+  "brief": {
+    "narrative": "At 03:00 AM, an unauthorized automated botnet begins probing the SDPD Public Incident Lookup portal. The botnet scripts fire over 3,000 requests per second with random UUIDs and negative integer IDs that do not exist anywhere in the city database. Because these phantom keys do not exist in the Redis cache, every single request registers as a Cache Miss. The application servers dutifully query the primary PostgreSQL database to fetch the missing records. The database engine executes millions of futile index lookups and table scans trying to find non-existent rows. Within minutes, database CPU hits 100%, disk read IOPS are completely saturated, and all 150 connection pool slots are locked up. Real field detectives running emergency suspect lookups are hit with 504 Gateway Timeouts. The cache sits virtually untouched with low memory usage while the database underneath is crushed.",
+    "symptoms": [
+      "Primary database CPU sustained at 100% with connection pool exhaustion (150/150 connections busy)",
+      "Redis cache hit ratio plummeted from 94% to under 6%",
+      "Field detectives reporting 504 Gateway Timeouts on critical warrant and suspect lookups",
+      "API access logs reveal millions of queries for non-existent IDs like -9999 and random hashes"
+    ],
+    "objective": "Diagnose why non-existent keys bypass cache protection, and implement a strategy to filter out invalid queries before they reach the database."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "botnet-crawler",
+        "type": "client",
+        "label": "Automated Scraper Botnet",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Scraper Botnet Ingress",
+          "logs": [
+            "[03:00:01] INFO: Crawler initiated 3,200 req/sec to /api/v1/incidents/{id}",
+            "[03:00:05] INFO: Target IDs: random UUIDs, negative IDs (-1, -404, -9999)",
+            "[03:00:30] WARN: Response status 404 NOT FOUND received for 99.8% of queries",
+            "[03:01:00] INFO: Increasing concurrency to 5,000 workers"
+          ],
+          "data": {
+            "Request Rate": "3,200 req/sec",
+            "Target ID Pattern": "Random non-existent hashes & negative IDs",
+            "Expected Existence Rate": "0%",
+            "Protocol": "HTTP/2 REST"
+          },
+          "status": "Flooding system with queries for records that never existed."
+        }
+      },
+      {
+        "id": "field-units",
+        "type": "client",
+        "label": "Field Detective Units",
+        "status": "failed",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Field Mobile Terminals",
+          "logs": [
+            "[03:01:10] INFO: Unit 12 checking warrant for suspect arrest #88219",
+            "[03:01:40] ERROR: Request timed out after 30,000ms (HTTP 504 Gateway Timeout)",
+            "[03:02:00] ERROR: Unit 7 emergency search failed — no response from API",
+            "[03:02:15] WARN: Officers unable to confirm felony warrants on scene"
+          ],
+          "data": {
+            "Active Officers": "180 units in field",
+            "Lookup Latency": "30,000ms+ (timeout)",
+            "Success Rate": "0% during incident",
+            "Public Safety Risk": "CRITICAL"
+          },
+          "status": "Officers unable to verify suspects due to API failure."
+        }
+      },
+      {
+        "id": "lookup-api",
+        "type": "server",
+        "label": "Incident Lookup API",
+        "status": "degraded",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Lookup API Gateway Cluster",
+          "logs": [
+            "[03:00:02] INFO: Inbound throughput: 3,400 req/sec",
+            "[03:00:05] WARN: Cache MISS on Redis: 3,180 req/sec",
+            "[03:00:10] WARN: Forwarding cache misses directly to primary PostgreSQL cluster",
+            "[03:00:45] ERROR: Database connection pool exhausted: 150/150 in use, 1,420 waiting",
+            "[03:01:00] ERROR: Dropping incoming requests with HTTP 504"
+          ],
+          "data": {
+            "Inbound Traffic": "3,400 req/sec",
+            "Redis Cache Hits": "6.2% (down from 94%)",
+            "DB Forwarded Queries": "3,189 req/sec",
+            "Pool Wait Queue": "1,420 pending requests"
+          },
+          "status": "Cache misses are directly passed through to the database, exhausting connection pools."
+        }
+      },
+      {
+        "id": "redis-cache",
+        "type": "server",
+        "label": "Redis Cache Cluster",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Redis Memory Cluster",
+          "logs": [
+            "[03:00:00] INFO: Memory utilization: 12.4 GB / 64 GB (19.3%)",
+            "[03:00:05] INFO: Key lookups: 3,400/sec",
+            "[03:00:06] INFO: Key misses: 3,180/sec — queried keys not in index",
+            "[03:00:30] INFO: Memory stable, CPU 15% — Redis is completely healthy"
+          ],
+          "data": {
+            "Memory Used": "12.4 GB (64 GB max)",
+            "CPU Utilization": "15%",
+            "Evictions": "0 keys evicted",
+            "Null Values Cached": "0 (null caching disabled)"
+          },
+          "status": "Redis is idle and healthy, but receives lookups for keys that were never cached."
+        }
+      },
+      {
+        "id": "primary-db",
+        "type": "database",
+        "label": "Primary PostgreSQL DB",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Primary PostgreSQL Instance",
+          "logs": [
+            "[03:00:10] WARN: Active query spike: 3,100 SELECT ... WHERE incident_id = $1",
+            "[03:00:25] ERROR: B-tree index scans return 0 rows for 99.8% of queries",
+            "[03:00:40] ERROR: Disk read IOPS saturated (10,000 / 10,000 IOPS)",
+            "[03:00:55] ERROR: CPU 100% — connection pool slots exhausted (150/150)"
+          ],
+          "data": {
+            "CPU Usage": "100%",
+            "Disk IOPS": "10,000 (100% max capacity)",
+            "Active Connections": "150/150 (exhausted)",
+            "Average Query Duration": "4,200ms (normal: 3ms)"
+          },
+          "status": "Crushed by queries for non-existent records bypassing the cache layer."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-bot-api",
+        "source": "botnet-crawler",
+        "target": "lookup-api",
+        "label": "3,200 req/sec (phantom IDs)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-officers-api",
+        "source": "field-units",
+        "target": "lookup-api",
+        "label": "real queries (timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-redis",
+        "source": "lookup-api",
+        "target": "redis-cache",
+        "label": "94% cache miss",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-api-db",
+        "source": "lookup-api",
+        "target": "primary-db",
+        "label": "3,100 queries/sec (crushing DB)",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the system failure under the botnet queries?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Cache Penetration: The botnet is querying IDs that do not exist, completely bypassing Redis cache hits and routing thousands of futile queries directly into the primary database",
+          "correct": true,
+          "feedback": "Correct! This is the classic Cache Penetration problem. When queries target keys that exist neither in the cache nor in the database, every request is a cache miss that hits the database. Because the database returns nothing, the cache is never populated with an answer, so subsequent queries for the same invalid keys hit the database again and again until the database connection pool collapses."
+        },
+        {
+          "id": "rc-2",
+          "text": "Cache Eviction: Redis has run out of memory and is aggressively evicting incident records under its LRU policy",
+          "correct": false,
+          "feedback": "Inspection of Redis shows it is only using 12.4 GB out of 64 GB available (under 20%), with zero evictions. Redis is completely healthy and has plenty of RAM; the issue is that the requested keys simply never existed."
+        },
+        {
+          "id": "rc-3",
+          "text": "Index Corruption: The incident ID column on the PostgreSQL database has lost its index, causing full sequential table scans",
+          "correct": false,
+          "feedback": "The database logs confirm B-tree index scans are active. The problem is that searching an index 3,000 times per second for non-existent keys across millions of rows still consumes massive disk IOPS and CPU."
+        },
+        {
+          "id": "rc-4",
+          "text": "Network Partition: A split-brain network failure has severed communication between the API gateway and the Redis cluster",
+          "correct": false,
+          "feedback": "The API is communicating with Redis without any network drops. Redis is responding with key misses in under 1ms; the problem is that the application forwards every miss to the database."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the architecture be updated to protect the database against cache penetration?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement a Bloom Filter before the database to reject non-existent IDs with zero DB queries, and cache empty/null results with a short TTL",
+          "correct": true,
+          "feedback": "Correct! A Bloom filter is an extremely fast, space-efficient probabilistic data structure that can tell you if an ID definitely does NOT exist. If the Bloom filter says no, the request is rejected immediately without touching Redis or PostgreSQL. For borderline cases, caching null values with a short TTL (e.g., 60s) ensures repeated lookups for recently queried missing keys are absorbed by Redis rather than hitting the database."
+        },
+        {
+          "id": "fix-2",
+          "text": "Scale Redis horizontally by adding 10 replica nodes to increase read throughput",
+          "correct": false,
+          "feedback": "Adding Redis replicas will not help. Redis is already handling the traffic easily at 15% CPU. The problem is that Redis does not have the keys, so adding more replicas just means more nodes reporting cache misses."
+        },
+        {
+          "id": "fix-3",
+          "text": "Increase the PostgreSQL database connection pool from 150 to 3,000 connections",
+          "correct": false,
+          "feedback": "Increasing the connection pool will make the problem worse. 3,000 concurrent database queries will cause catastrophic CPU context-switching and thrash disk IOPS even harder, leading to kernel panic."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configure the API Gateway to return HTTP 200 with mock incident data whenever a query times out",
+          "correct": false,
+          "feedback": "Returning fake mock data to police officers during active suspect investigations creates severe legal liabilities and safety hazards, while leaving the underlying database overload completely unaddressed."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-penetration",
+  "badge": {
+    "name": "Phantom Hunter",
+    "icon": "🛡️"
+  }
+}

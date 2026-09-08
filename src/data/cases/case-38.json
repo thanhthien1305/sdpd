@@ -1,0 +1,222 @@
+{
+  "id": "case-38",
+  "number": 38,
+  "title": "The Teleporting Warrant",
+  "subtitle": "Async cross-region replication causes users to see stale data immediately after saving",
+  "brief": {
+    "narrative": "To reduce read latency for coast-to-coast operations, the SDPD deployed a multi-region database topology: US-East hosts the primary read/write PostgreSQL cluster, while US-West hosts an asynchronous read replica. Geo-DNS routes all read traffic to the nearest geographic region. Detective Vance at the Los Angeles precinct creates an urgent felony warrant (W-991) for an armed suspect seen boarding a flight. The write request is routed cross-country to the US-East primary database and successfully commits in 120ms at 11:00:00.100. The web frontend immediately redirects Vance's browser to `/warrants/W-991` to display the signed document. Because Vance is in California, Geo-DNS routes his GET request to the local US-West read replica. However, trans-continental network congestion has caused US-West replication lag to spike to 850ms. At 11:00:00.250, the US-West replica has not yet received or replayed warrant W-991. The replica returns '404 NOT FOUND: Warrant does not exist'. Believing his submission was wiped out by a software bug, Vance panics and re-submits the form 5 times, creating multiple duplicate warrant numbers and conflicting court filings.",
+    "symptoms": [
+      "Detectives report: 'I just clicked save, but the screen redirected to a 404 Not Found page!'",
+      "Duplicate warrant filings surged by 350% across western precincts",
+      "US-East primary DB shows warrant W-991 committed at 11:00:00.100",
+      "US-West replica replication lag metric spiked from 50ms to 850ms during peak cross-country congestion"
+    ],
+    "objective": "Diagnose the read-after-write consistency violation caused by asynchronous replication lag, and enforce monotonic read consistency so users always observe their own edits."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "det-vance",
+        "type": "client",
+        "label": "Detective Vance (LA Precinct)",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Detective Vance Workstation (West Coast)",
+          "logs": [
+            "[11:00:00.000] INFO: POST /api/warrants -> payload: Suspect W-991",
+            "[11:00:00.120] INFO: POST responded HTTP 201 Created (Redirect: /warrants/W-991)",
+            "[11:00:00.250] ERROR: GET /warrants/W-991 responded HTTP 404 Not Found!",
+            "[11:00:00.500] WARN: User clicked 'Submit Warrant' 5 duplicate times"
+          ],
+          "data": {
+            "Client Location": "Los Angeles, CA (West Coast)",
+            "Observed State": "Saved successfully, then immediately vanished",
+            "Duplicate Submissions": "5 duplicate warrants created"
+          },
+          "status": "Experiencing inconsistent state: saw 404 immediately after receiving 201 Created."
+        }
+      },
+      {
+        "id": "geo-dns",
+        "type": "server",
+        "label": "Geo-DNS & Routing Layer",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Global Traffic Router",
+          "logs": [
+            "[11:00:00.010] INFO: Routing write POST /warrants to US-East Primary",
+            "[11:00:00.240] INFO: Routing read GET /warrants/W-991 to nearest region: US-West Replica",
+            "[11:00:00.245] INFO: Session awareness: NONE (stateless round-robin)"
+          ],
+          "data": {
+            "Write Routing": "Always US-East Primary",
+            "Read Routing": "Nearest Region (US-West for Vance)",
+            "Read-Your-Writes Pinning": "DISABLED"
+          },
+          "status": "Routinely directed read to lagging local replica without session awareness."
+        }
+      },
+      {
+        "id": "primary-east",
+        "type": "database",
+        "label": "US-East Primary DB",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Primary (Virginia)",
+          "logs": [
+            "[11:00:00.100] INFO: INSERT INTO warrants (id, suspect) VALUES ('W-991', 'Vance') -> COMMITTED",
+            "[11:00:00.105] INFO: WAL sequence LSN 0/14A9820 generated",
+            "[11:00:00.110] INFO: Transmitting WAL stream to US-West replica"
+          ],
+          "data": {
+            "Region": "US-East (Virginia)",
+            "Current LSN": "0/14A9820",
+            "Warrant W-991 Status": "EXISTS & COMMITTED"
+          },
+          "status": "Primary committed warrant W-991 on disk at 11:00:00.100."
+        }
+      },
+      {
+        "id": "replica-west",
+        "type": "database",
+        "label": "US-West Read Replica",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Read Replica (Oregon)",
+          "logs": [
+            "[11:00:00.200] WARN: Cross-country fiber latency spike (trans-continental RTT: 180ms)",
+            "[11:00:00.245] INFO: Incoming query: SELECT * FROM warrants WHERE id = 'W-991'",
+            "[11:00:00.250] WARN: Row not found (Replay LSN is 0/14A8100 — lagging behind primary)",
+            "[11:00:00.950] INFO: Received & replayed WAL LSN 0/14A9820 — W-991 now exists (850ms lag)"
+          ],
+          "data": {
+            "Region": "US-West (Oregon)",
+            "Replication Mode": "Asynchronous Streaming",
+            "Current Lag": "850ms (normal: 40ms)",
+            "LSN at 11:00:00.250": "0/14A8100 (Older than write)"
+          },
+          "status": "Lagging by 850ms. Answered query before replaying the primary's write."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-vance-router",
+        "source": "det-vance",
+        "target": "geo-dns",
+        "label": "POST then GET",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-east",
+        "source": "geo-dns",
+        "target": "primary-east",
+        "label": "POST write (commit at .100)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-west",
+        "source": "geo-dns",
+        "target": "replica-west",
+        "label": "GET read at .250 (404 NOT FOUND)",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-east-west",
+        "source": "primary-east",
+        "target": "replica-west",
+        "label": "async replication (850ms lag)",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Why did Detective Vance receive a 404 error immediately after successfully creating warrant W-991?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Lack of Read-Your-Own-Writes Consistency: Geo-DNS routed the subsequent read request to a nearby asynchronous replica that was lagging behind the primary and had not yet replayed the write",
+          "correct": true,
+          "feedback": "Correct! This is a classic Read-After-Write (or Read-Your-Own-Writes) consistency violation. In an asynchronous replication topology, there is an unavoidable replication lag between primary and replicas. When a user submits a write, it commits to the primary; but if the subsequent read is routed to a replica that is lagging by 850ms, the replica has not yet replayed the transaction, resulting in a false 404 or stale data."
+        },
+        {
+          "id": "rc-2",
+          "text": "The US-East primary database crashed due to a power outage right after committing warrant W-991",
+          "correct": false,
+          "feedback": "The US-East primary was completely healthy and committed warrant W-991 at 11:00:00.100. The data was never lost on the primary; it simply had not arrived at the replica yet."
+        },
+        {
+          "id": "rc-3",
+          "text": "Detective Vance's browser cache held an HTTP 304 response from a previous search session",
+          "correct": false,
+          "feedback": "Warrant W-991 was a brand new ID that was just created. The browser did not have any cached response for it; the 404 came directly from the US-West replica."
+        },
+        {
+          "id": "rc-4",
+          "text": "The PostgreSQL write-ahead log (WAL) on the primary was corrupted by disk sector failures",
+          "correct": false,
+          "feedback": "The WAL was valid and uncorrupted. The replica successfully replayed LSN 0/14A9820 and restored W-991 at 11:00:00.950, exactly 850ms after the write."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the application architecture be updated to guarantee users always see their own recent writes?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement Read-Your-Own-Writes consistency by tracking a write timestamp or LSN in a session token, routing the author's reads to the primary for N seconds following any write",
+          "correct": true,
+          "feedback": "Correct! Read-Your-Own-Writes (RYOW) consistency guarantees that an actor will always observe their own updates. This is typically achieved by setting a session cookie with the timestamp of the last write or the transaction's Log Sequence Number (LSN). For the next 3–5 seconds after a write (or until the replica's replayed LSN surpasses the write LSN), the routing layer pins that user's reads to the primary. Other users whose edits are not impacted continue reading from local replicas."
+        },
+        {
+          "id": "fix-2",
+          "text": "Permanently decommission all read replicas and route 100% of global read traffic across the continent to US-East",
+          "correct": false,
+          "feedback": "Decommissioning replicas eliminates horizontal read scaling and forces every West Coast user to suffer 180ms cross-country latency on every page click, degrading application responsiveness."
+        },
+        {
+          "id": "fix-3",
+          "text": "Add a 5-second sleep (`setTimeout`) on the frontend UI before executing the redirect to the warrant page",
+          "correct": false,
+          "feedback": "Artificially sleeping on the frontend creates an awful user experience, and does not guarantee correctness: during high network congestion, replication lag could easily exceed 5 seconds."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configure PostgreSQL synchronous replication across the country so writes block until US-West confirms receipt",
+          "correct": false,
+          "feedback": "Synchronous replication across wide-area networks (WAN) severely degrades write availability and throughput. If cross-country fiber is cut, all writes citywide would freeze completely."
+        }
+      ]
+    }
+  },
+  "conceptId": "read-your-own-writes",
+  "badge": {
+    "name": "Quantum Inspector",
+    "icon": "🌐"
+  }
+}

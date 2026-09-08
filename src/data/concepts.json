@@ -559,5 +559,243 @@
       { "term": "HTTP 429", "definition": "The 'Too Many Requests' status code indicating rate limiting." },
       { "term": "Throttling", "definition": "Slowing down or rejecting requests that exceed the allowed rate." }
     ]
+  },
+  {
+    "id": "cache-penetration",
+    "title": "Cache Penetration & Bloom Filters",
+    "summary": "Protect the database from massive cache misses caused by non-existent keys using Bloom filters and null caching.",
+    "explanation": [
+      "Cache penetration occurs when queries target keys that exist neither in the cache nor in the database. Every request bypasses the cache entirely and hits the storage layer directly.",
+      "Malicious attackers or broken scrapers exploit this by sending high volumes of random or negative IDs, exhausting database connection pools and disk IOPS.",
+      "A Bloom filter is a space-efficient probabilistic data structure placed in front of the cache. It tells you with 100% certainty if an element does NOT exist, rejecting invalid queries with zero database lookups.",
+      "Another complementary defense is caching empty/null results with a short TTL (e.g., 60 seconds) so repeated queries for recently checked missing keys don't repeatedly hit the database."
+    ],
+    "keyTerms": [
+      { "term": "Cache Penetration", "definition": "Queries for non-existent data bypassing the cache and hitting the database directly." },
+      { "term": "Bloom Filter", "definition": "A space-efficient probabilistic data structure that tests set membership with false positives possible, but zero false negatives." },
+      { "term": "Null Caching", "definition": "Storing a placeholder or null value in the cache with a short TTL when a database query returns no results." },
+      { "term": "False Positive", "definition": "A Bloom filter reporting an element exists when it actually does not (never happens in reverse)." }
+    ]
+  },
+  {
+    "id": "fencing-tokens",
+    "title": "Fencing Tokens & Leader Pauses",
+    "summary": "Prevent deposed leaders waking from GC pauses from corrupting shared storage using monotonic epoch numbers.",
+    "explanation": [
+      "In distributed leader-follower systems, a leader holds a lease or heartbeat with a consensus service (like ZooKeeper or etcd). If the leader pauses (e.g., a 15-second Stop-The-World garbage collection or network delay), its lease expires.",
+      "The cluster assumes the leader died and elects a new leader. However, the old leader is not actually dead — it eventually unfreezes. Unaware it was dethroned, it continues executing its remaining instructions.",
+      "If this 'zombie' leader attempts to write to shared storage, it can silently overwrite newer writes committed by the newly elected leader, corrupting cluster state.",
+      "Fencing tokens solve this: every time a leader is elected, the lock server issues a monotonically increasing token (e.g., Token 34, then 35). The storage service tracks the highest token seen and rejects any write presenting a lower or equal token."
+    ],
+    "keyTerms": [
+      { "term": "Fencing Token", "definition": "A monotonically increasing number granted with a lock/lease that storage verifies before accepting writes." },
+      { "term": "GC Pause", "definition": "A Stop-The-World event where all application threads freeze while the runtime reclaims memory." },
+      { "term": "Zombie Leader", "definition": "A deposed leader node that unfreezes and attempts to execute writes after its lease has already expired." },
+      { "term": "Split-Brain Write", "definition": "Concurrent conflicting writes caused by multiple nodes simultaneously believing they are the legitimate leader." }
+    ]
+  },
+  {
+    "id": "consistent-hashing-vnodes",
+    "title": "Consistent Hashing & Virtual Nodes",
+    "summary": "Distribute keys uniformly across clusters and prevent cascading failover crashes using virtual nodes on the hash ring.",
+    "explanation": [
+      "Consistent hashing maps both servers and data keys onto a circular hash ring (e.g., 0 to 2^32 - 1). A key is assigned to the first server found moving clockwise on the ring.",
+      "In naive consistent hashing, each physical machine has only one position on the ring. If one node fails, 100% of its key space falls entirely onto its immediate clockwise neighbor.",
+      "Doubling the load on a single neighbor often causes that neighbor to exhaust its memory and crash too, triggering a catastrophic domino collapse across the entire ring.",
+      "Virtual nodes (vnodes) solve this by assigning each physical server hundreds of virtual points scattered across the ring. When a physical node crashes, its keys are evenly distributed across ALL surviving nodes rather than crushing just one."
+    ],
+    "keyTerms": [
+      { "term": "Consistent Hashing", "definition": "A hashing scheme where adding or removing a node only requires remapping K/N keys on average." },
+      { "term": "Virtual Node (Vnode)", "definition": "A logical token on the hash ring representing a fraction of a physical machine's capacity." },
+      { "term": "Hash Ring", "definition": "A circular identifier space where keys and nodes are hashed into positions from 0 to 2^32 - 1." },
+      { "term": "Cascading Failure", "definition": "A failure scenario where the death of one node overburdens its neighbors, causing sequential failures." }
+    ]
+  },
+  {
+    "id": "transactional-outbox",
+    "title": "Transactional Outbox Pattern",
+    "summary": "Guarantee reliable event publishing after database updates without dual-write inconsistencies.",
+    "explanation": [
+      "In microservices and event-driven architectures, services frequently need to update a database and publish an event to a message broker (like Kafka or RabbitMQ).",
+      "A naive dual-write (updating DB, then publishing event) cannot guarantee atomicity. If the application crashes or network blips between the DB commit and the event publish, the message is lost forever.",
+      "The Transactional Outbox pattern stores outgoing messages into a dedicated 'outbox' table within the SAME local database transaction that updates the business entities.",
+      "A separate background worker or Change Data Capture (CDC) tool (like Debezium) tails the database transaction log and guarantees at-least-once delivery to the message broker."
+    ],
+    "keyTerms": [
+      { "term": "Transactional Outbox", "definition": "Persisting domain state and integration events in the same ACID database transaction." },
+      { "term": "Dual Write", "definition": "Attempting to update two independent storage systems without distributed transactions, risking data divergence." },
+      { "term": "Change Data Capture (CDC)", "definition": "Reading changes directly from database write-ahead transaction logs to stream events reliably." },
+      { "term": "At-Least-Once Delivery", "definition": "A guarantee that messages are delivered one or more times, requiring consumers to be idempotent." }
+    ]
+  },
+  {
+    "id": "read-your-own-writes",
+    "title": "Read-Your-Own-Writes Consistency",
+    "summary": "Ensure users always see their own recent updates immediately, even when reading from asynchronous replicas.",
+    "explanation": [
+      "Modern web architectures route writes to a primary database and reads to geographically distributed read replicas to scale read throughput.",
+      "Because replication is asynchronous, replicas lag behind the primary by hundreds of milliseconds or even seconds.",
+      "If a user updates their profile and the subsequent page reload reads from a lagging replica, they will see their old profile data. Users assume their edit was lost and submit duplicate changes.",
+      "Read-your-own-writes (RYOW) consistency guarantees that a user always observes their own updates. Systems achieve this by routing reads to the primary for N seconds after any write, or tracking the user's latest transaction LSN in a session token."
+    ],
+    "keyTerms": [
+      { "term": "Read-Your-Own-Writes", "definition": "A consistency model guaranteeing that an actor immediately sees updates made by themselves." },
+      { "term": "Replication Lag", "definition": "The time difference between when data commits on the primary and when it is replayed on a replica." },
+      { "term": "Monotonic Reads", "definition": "A guarantee that once a user reads a particular value, they will never subsequently read an older value." },
+      { "term": "Session Token", "definition": "A client token recording the log sequence number (LSN) or timestamp of the user's most recent write." }
+    ]
+  },
+  {
+    "id": "connection-pool-leaks",
+    "title": "Connection Pool Leaks & Starvation",
+    "summary": "Detect and prevent leaked database connections that freeze applications while database hardware sits idle.",
+    "explanation": [
+      "Database connections are heavy OS sockets requiring authentication and memory. Applications maintain connection pools (e.g., HikariCP, pgpool) to reuse connections efficiently.",
+      "A connection pool leak happens when code acquires a connection from the pool but fails to close/release it back — often due to unhandled exceptions or missing `finally` blocks.",
+      "As leaked sockets accumulate, the pool becomes exhausted. New incoming requests queue up and eventually fail with gateway timeouts, even though the database CPU is at 2% idle.",
+      "Prevent leaks by enforcing RAII / try-with-resources patterns, configuring strict acquisition timeouts (`connectionTimeout`), setting `maxLifetime`, and enabling connection leak threshold logging."
+    ],
+    "keyTerms": [
+      { "term": "Connection Pool", "definition": "A cache of open database connections maintained for reuse by concurrent application threads." },
+      { "term": "Connection Leak", "definition": "A bug where a checked-out database connection is never returned to the pool after use." },
+      { "term": "Pool Starvation", "definition": "The state where all pool connections are occupied or leaked, causing all subsequent queries to block." },
+      { "term": "Leak Detection Threshold", "definition": "A pool configuration that logs a warning stack trace if a connection is held longer than a specified duration." }
+    ]
+  },
+  {
+    "id": "crdt-offline-sync",
+    "title": "Conflict-Free Replicated Data Types (CRDTs)",
+    "summary": "Seamlessly merge concurrent offline edits across distributed clients without central locking or clock drift corruption.",
+    "explanation": [
+      "Mobile and edge applications often operate offline in dead zones, allowing users to modify data locally and sync changes when connectivity returns.",
+      "Naive conflict resolution relies on 'Last-Write-Wins' (LWW) using client device wall-clock timestamps. Because client clocks drift, a drifted clock can silently overwrite and destroy legitimate concurrent edits.",
+      "Conflict-Free Replicated Data Types (CRDTs) are mathematically designed data structures that can be replicated across multiple nodes and merged concurrently without central coordination.",
+      "Whether using State-based CRDTs (CvRDT) or Operation-based CRDTs (CmRDT), all replicas are mathematically guaranteed to converge to the identical state once all updates are received."
+    ],
+    "keyTerms": [
+      { "term": "CRDT", "definition": "Conflict-Free Replicated Data Type — data structures that converge automatically without coordination." },
+      { "term": "Clock Skew / Drift", "definition": "Differences in physical time between unsynchronized computer clocks across client devices." },
+      { "term": "Last-Write-Wins (LWW)", "definition": "A conflict resolution strategy choosing the version with the highest timestamp, vulnerable to clock skew." },
+      { "term": "Strong Eventual Consistency", "definition": "The guarantee that any two replicas that have received the same set of updates have identical states." }
+    ]
+  },
+  {
+    "id": "lsm-write-stalls",
+    "title": "LSM-Tree Write Stalls & Tiered Compaction",
+    "summary": "Prevent catastrophic database throughput collapses when write ingestion outpaces background storage compaction.",
+    "explanation": [
+      "Log-Structured Merge-tree (LSM-tree) storage engines (e.g., RocksDB, Cassandra, ScyllaDB) provide high write throughput by appending writes to an in-memory buffer (Memtable) and a sequential Write-Ahead Log (WAL).",
+      "When the Memtable fills up, it is flushed to disk as an immutable SSTable file in Level 0 (L0). Background worker threads continuously merge and compact smaller SSTables into deeper levels to remove tombstones and deduplicate keys.",
+      "If incoming write throughput exceeds disk I/O capacity, background compaction falls behind. L0 SSTables accumulate rapidly, increasing read amplification exponentially.",
+      "To prevent unbounded disk bloat and read degradation, the database triggers a 'Write Stall' — artificially throttling or completely blocking incoming client writes until background compaction catches up."
+    ],
+    "keyTerms": [
+      { "term": "LSM-Tree", "definition": "A storage architecture optimized for fast writes by buffering in memory and writing sequentially to immutable disk SSTables." },
+      { "term": "Compaction", "definition": "A background maintenance process that merges multiple SSTables, discards deleted records (tombstones), and sorts keys." },
+      { "term": "Write Stall", "definition": "A self-preservation mechanism where a storage engine halts client writes when compaction queues exceed safety thresholds." },
+      { "term": "Tiered Compaction", "definition": "A compaction strategy that batches SSTables of similar sizes together, ideal for heavy write and append-only time-series workloads." }
+    ]
+  },
+  {
+    "id": "hedged-requests-tail-latency",
+    "title": "Hedged Requests & Tail Latency Amplification",
+    "summary": "Eliminate high p99 tail latency in scatter-gather distributed architectures by sending speculative duplicate requests to backup replicas.",
+    "explanation": [
+      "In distributed databases and microservices, a single client query often scatters across dozens of shards or partitions (scatter-gather) and waits for all of them to respond before returning results.",
+      "Tail latency amplifies dramatically across fan-out: if each shard has a 1% chance of experiencing a 200ms latency spike (p99), a query fanning out to 50 shards has a (1 - 0.99^50) ≈ 40% probability of being slow.",
+      "Transient spikes are typically caused by background GC pauses, CPU context switching, or noisy neighbors on a single host, rather than systemic overload.",
+      "Hedged requests solve this: after sending a request to replica A, the client starts a timer at the expected 95th percentile latency (e.g., 15ms). If replica A has not responded by then, the client sends a duplicate 'hedged' request to replica B and takes whichever result arrives first, canceling the slower one."
+    ],
+    "keyTerms": [
+      { "term": "Hedged Request", "definition": "A speculative duplicate request sent to an alternate replica when the primary request exceeds a latency threshold." },
+      { "term": "Tail Latency Amplification", "definition": "The statistical phenomenon where fan-out systems compound the probability of hitting high-percentile latency spikes." },
+      { "term": "Scatter-Gather", "definition": "An architectural pattern where a coordinator broadcasts sub-queries to multiple nodes and aggregates their responses." },
+      { "term": "Straggler Node", "definition": "A single slow replica or worker whose delayed response bottlenecks the completion of an entire parallel job." }
+    ]
+  },
+  {
+    "id": "head-of-line-blocking",
+    "title": "Head-of-Line (HoL) Blocking & Segregated Queues",
+    "summary": "Prevent long-running elephant jobs from paralyzing thousands of fast tasks in FIFO partitions using priority queue separation.",
+    "explanation": [
+      "Message brokers like Kafka and RabbitMQ enforce FIFO (First-In, First-Out) ordering within individual topic partitions or queues.",
+      "If a massive 'elephant' task (e.g., a 4-hour audio transcription) is placed at the front of a FIFO partition, all subsequent 'mouse' tasks (e.g., 30-second emergency alerts) behind it are completely stuck until the elephant finishes.",
+      "This condition is known as Head-of-Line (HoL) blocking. Even if downstream worker pools have available CPU, the partition cannot advance its consumer offset without committing the elephant task.",
+      "The architectural solution is queue segregation: classify jobs by expected duration at ingest, routing long-running batch jobs to a dedicated low-priority background queue and short interactive jobs to high-priority queues."
+    ],
+    "keyTerms": [
+      { "term": "Head-of-Line (HoL) Blocking", "definition": "A performance bottleneck where a single slow or stalled request at the front of a queue blocks all subsequent items." },
+      { "term": "Elephant vs Mouse Tasks", "definition": "Disproportionately massive resource-intensive workloads versus lightweight, latency-sensitive transactions." },
+      { "term": "Queue Segregation", "definition": "Partitioning workloads across separate dedicated queues based on SLA, duration, or resource requirements." },
+      { "term": "Consumer Offset", "definition": "The sequential index within a message partition indicating the current position processed by a consumer group." }
+    ]
+  },
+  {
+    "id": "jwt-revocation-blacklist",
+    "title": "Stateless JWT Revocation & Distributed Blocklists",
+    "summary": "Close the security window of compromised stateless tokens using short expiration windows, token rotation, and distributed revocation caches.",
+    "explanation": [
+      "JSON Web Tokens (JWTs) are popular because they are stateless: resource servers verify signatures locally using a public key without querying a centralized database on every request.",
+      "However, statelessness creates a dangerous revocation vulnerability: if a user changes their password, logs out, or has their account compromised, existing issued JWTs remain completely valid until their `exp` timestamp expires.",
+      "Setting long lifetimes (e.g., 24 hours) leaves a wide window for malicious actors to exploit stolen tokens even after administrative suspension.",
+      "Best-practice architecture employs a dual strategy: keep JWT access tokens extremely short-lived (e.g., 5 to 15 minutes) paired with rotating refresh tokens, and maintain a fast in-memory distributed blocklist (e.g., Redis with Bloom filters) for instant emergency revocations."
+    ],
+    "keyTerms": [
+      { "term": "Stateless JWT", "definition": "A self-contained signed credential verifying identity and permissions without requiring database lookup." },
+      { "term": "Token Revocation Blocklist", "definition": "A distributed in-memory cache storing revoked token identifiers (jti) until their natural expiration." },
+      { "term": "Refresh Token Rotation", "definition": "A pattern where each refresh token can only be used once to obtain a new pair, immediately invalidating compromised token families." },
+      { "term": "Token Expiration Window", "definition": "The duration during which a signed credential remains trusted before mandatory re-authentication." }
+    ]
+  },
+  {
+    "id": "ephemeral-port-exhaustion",
+    "title": "TIME_WAIT Ephemeral Port Exhaustion",
+    "summary": "Prevent microservice outbound connection collapse caused by unpooled short-lived TCP sockets stuck in TIME_WAIT.",
+    "explanation": [
+      "When a client or microservice initiates an outbound TCP connection, the OS assigns a temporary local source port (ephemeral port) from a range (typically 32,768 to 60,999, ~28,000 available ports).",
+      "Each unique connection is identified by a 4-tuple: (Source IP, Source Port, Destination IP, Destination Port). When connecting to a single upstream load balancer, the available connections are strictly capped by the number of free ephemeral source ports.",
+      "When an HTTP connection closes, TCP enters the `TIME_WAIT` state for 2 * MSL (Maximum Segment Lifetime, typically 60 to 120 seconds) to ensure stray packets in flight do not corrupt subsequent connections.",
+      "If an application generates thousands of short-lived HTTP requests per second without connection reuse, ephemeral ports deplete faster than `TIME_WAIT` sockets can clear, triggering instant `EADDRNOTAVAIL` socket allocation failures."
+    ],
+    "keyTerms": [
+      { "term": "Ephemeral Port", "definition": "A temporary short-lived port assigned by the OS kernel for outbound client-side TCP connections." },
+      { "term": "TIME_WAIT State", "definition": "A mandatory TCP state held after closing a connection to guarantee delayed in-flight packets are safely discarded." },
+      { "term": "HTTP Keep-Alive", "definition": "An HTTP header and protocol feature allowing a single underlying TCP connection to process multiple consecutive requests." },
+      { "term": "TCP 4-Tuple", "definition": "The combination of Source IP, Source Port, Destination IP, and Destination Port uniquely identifying an active socket." }
+    ]
+  },
+  {
+    "id": "multi-leader-conflicts",
+    "title": "Multi-Leader Replication Conflicts & Geo-Pinning",
+    "summary": "Avoid irreconcilable cross-continent data drift in active-active datacenters using causal ordering and geographic entity pinning.",
+    "explanation": [
+      "In multi-region global applications, multi-leader (active-active) replication allows each regional datacenter to accept local writes with sub-millisecond response times.",
+      "Because changes replicate asynchronously across the ocean, two users in different regions can modify the exact same entity concurrently without either region knowing.",
+      "When the cross-region replication streams meet, a write conflict occurs. Naive strategies like Last-Write-Wins (LWW) based on NTP timestamps discard valid user data and silently corrupt database state due to physical clock drift.",
+      "Production multi-leader architectures avoid conflicts through conflict avoidance (Geo-pinning / Master-per-Entity routing where all writes for a given user go to one region) or deterministic convergence using Vector Clocks and operational transformation."
+    ],
+    "keyTerms": [
+      { "term": "Multi-Leader Replication", "definition": "A database topology where multiple distinct nodes can independently accept write requests and replicate to peers." },
+      { "term": "Concurrent Write Conflict", "definition": "A state where two nodes accept differing writes for the same record before receiving each other's updates." },
+      { "term": "Geo-Pinning (Home Region)", "definition": "Routing all write operations for a specific customer or tenant to a designated primary regional datacenter." },
+      { "term": "Vector Clock", "definition": "An array of logical clocks used in distributed systems to detect causal ordering and identify concurrent conflicts." }
+    ]
+  },
+  {
+    "id": "keyset-vs-offset-pagination",
+    "title": "Keyset / Cursor Pagination vs Deep Offset Thrashing",
+    "summary": "Avoid O(N) database full-table thrashing on deep pages by replacing OFFSET with seekable indexed cursor tuples.",
+    "explanation": [
+      "Traditional pagination uses SQL queries like `SELECT * FROM orders ORDER BY created_at DESC LIMIT 50 OFFSET 5000000`.",
+      "Databases cannot jump directly to row 5,000,000. The engine must scan the table or index, traverse 5,000,050 rows in memory/disk, sort them, discard the first 5,000,000, and return only the last 50.",
+      "As page numbers grow, query latency degrades linearly ($O(N)$), causing massive disk I/O, cache eviction, and connection pool exhaustion.",
+      "Keyset pagination (cursor-based) eliminates offset thrashing by using the previous page's last record as an index seek anchor: `WHERE (created_at, id) < (:last_created_at, :last_id) ORDER BY created_at DESC, id DESC LIMIT 50`. This operates in constant $O(1)$ time regardless of page depth."
+    ],
+    "keyTerms": [
+      { "term": "OFFSET Thrashing", "definition": "Performance collapse caused by scanning and discarding millions of records to satisfy large offset queries." },
+      { "term": "Keyset Pagination (Cursor)", "definition": "A pagination technique that seeks directly to the next page using indexed column values from the previous record." },
+      { "term": "Index Seek vs Scan", "definition": "B-Tree traversal directly to a target record (Seek) versus reading across thousands of intermediate pages (Scan)." },
+      { "term": "Tie-Breaker Column", "definition": "A unique secondary column (such as primary key ID) added to sorting clauses to ensure deterministic pagination." }
+    ]
   }
 ]

@@ -1,0 +1,215 @@
+{
+  "id": "case-42",
+  "number": 42,
+  "title": "The 50th Shard Ambush",
+  "subtitle": "Scatter-gather biometric query amplifies p99 tail latency across 50 database partitions",
+  "brief": {
+    "narrative": "A heavily armed bank robber speeds toward the interstate while tactical interceptors pursue. Dispatch operators use the department's automated facial recognition search engine to identify the suspect across 50 regional database shards in parallel. Each individual shard is extremely fast: median query latency is 8ms, and 99% of queries finish in under 20ms. However, 1% of the time, an individual shard suffers a transient 300ms latency spike due to background JVM garbage collection pauses or noisy-neighbor I/O jitter. Because the central query coordinator must scatter the search across all 50 shards and wait for every single partition before returning a result (scatter-gather), the mathematical probability of hitting at least one slow shard is `1 - (0.99^50) ≈ 39.5%`. Over a third of live suspect lookups stall for 300ms, causing dispatchers to miss highway exit interdiction windows.",
+    "symptoms": [
+      "Dispatcher search requests experience 300ms+ latency in 40% of queries despite fast individual shards",
+      "Scatter-gather coordinator CPU sits idle while waiting for the single slowest shard to respond",
+      "Telemetry reveals each individual shard has a p99 of 250ms caused by transient 200ms GC pause blips",
+      "High-speed pursuit units miss crucial expressway roadblocks due to delayed biometric confirmation"
+    ],
+    "objective": "Diagnose tail latency amplification in distributed scatter-gather queries and implement Hedged Requests to eliminate the straggler effect."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dispatch-ui",
+        "type": "client",
+        "label": "Dispatch Pursuit Terminal",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Tactical Intercept Console",
+          "logs": [
+            "[14:22:01.002] SEARCH: Querying suspect facial biometrics across 50 regional shards",
+            "[14:22:01.320] WARN: Search took 318ms (Target SLA: < 30ms)",
+            "[14:22:05.100] SEARCH: Querying license plate match",
+            "[14:22:05.312] WARN: Search took 212ms — intercept window closing"
+          ],
+          "data": {
+            "Total Inquiries": "1,420 queries/min",
+            "Observed p99 Latency": "340ms",
+            "Queries Exceeding SLA": "39.2%"
+          },
+          "status": "Dispatch operators reporting 4 out of 10 search queries freeze unexpectedly."
+        }
+      },
+      {
+        "id": "scatter-coordinator",
+        "type": "server",
+        "label": "Biometric Scatter-Gather Coordinator",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Scatter-Gather Query Engine",
+          "logs": [
+            "[14:22:01.005] INFO: Fanning out parallel query to Shards 1 through 50",
+            "[14:22:01.014] INFO: Shards 1-49 returned results in 9.2ms average",
+            "[14:22:01.015] WARN: Still waiting for Shard 37...",
+            "[14:22:01.315] INFO: Shard 37 finally responded (duration: 310ms)",
+            "[14:22:01.316] ERROR: Total scatter-gather latency dictated by slowest straggler (311ms)"
+          ],
+          "data": {
+            "Fan-out Count": "50 Shards",
+            "Waiting Strategy": "Wait for 100% of shards without hedging",
+            "Straggler Impact": "1 - (0.99)^50 = 39.5% probability of spike"
+          },
+          "status": "Aggregator forced to wait for the slowest single replica out of 50."
+        }
+      },
+      {
+        "id": "shard-fast",
+        "type": "database",
+        "label": "Shards 1-49 (Normal Nodes)",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 70
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Healthy Shard Group (49 Nodes)",
+          "logs": [
+            "[14:22:01.008] INFO: Shard 01 executed indexed vector search in 6.4ms",
+            "[14:22:01.009] INFO: Shard 12 executed indexed vector search in 7.1ms",
+            "[14:22:01.012] INFO: Shard 48 executed indexed vector search in 8.3ms"
+          ],
+          "data": {
+            "Median Latency": "8.1ms",
+            "99th Percentile": "19.5ms",
+            "CPU Utilization": "24% (Healthy)"
+          },
+          "status": "49 out of 50 shards respond in under 10ms with zero contention."
+        }
+      },
+      {
+        "id": "shard-straggler",
+        "type": "database",
+        "label": "Shard 37 (Straggler Replica A)",
+        "status": "degraded",
+        "position": {
+          "x": 640,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Straggler Node (Shard 37)",
+          "logs": [
+            "[14:22:01.006] WARN: JVM Garbage Collection Pause: Stop-The-World (295ms)",
+            "[14:22:01.301] INFO: GC finished, resuming query thread execution",
+            "[14:22:01.310] INFO: Returned match candidate to coordinator after 304ms",
+            "[14:22:01.312] NOTE: Backup Replica B for Shard 37 was 100% idle at 0% GC"
+          ],
+          "data": {
+            "Node State": "GC Pause (STW)",
+            "Query Execution Duration": "304ms",
+            "Replica Availability": "Backup Replica 37-B was idle"
+          },
+          "status": "Transient GC pause on primary replica delayed the entire 50-shard scatter query."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ui-coord",
+        "source": "dispatch-ui",
+        "target": "scatter-coordinator",
+        "label": "biometric search [318ms]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-coord-fast",
+        "source": "scatter-coordinator",
+        "target": "shard-fast",
+        "label": "scatter x49 [8ms]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-coord-slow",
+        "source": "scatter-coordinator",
+        "target": "shard-straggler",
+        "label": "scatter x1 [304ms STW]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Why do 40% of biometric searches experience severe 300ms latency spikes when 99% of individual shard queries take less than 20ms?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Tail latency amplification in a scatter-gather fan-out: querying 50 independent shards in parallel compounds individual p99 latency spikes (1 - 0.99^50 ≈ 40%), causing the slowest straggler node to dictate overall query latency",
+          "correct": true,
+          "feedback": "Correct! When a system scatters a query across 50 shards and waits for all of them to respond before finishing, the overall query latency is equal to `max(shard_1, shard_2, ..., shard_50)`. Even though each shard has only a 1% chance of hitting a 300ms GC pause (p99), the probability that *at least one* of the 50 shards hits that spike on any given search is `1 - (0.99)^50 ≈ 39.5%`. A single slow replica turns an otherwise fast query into an unacceptable crawl."
+        },
+        {
+          "id": "rc-2",
+          "text": "The coordinator node has a 100Mbps Ethernet network interface card that saturates during image payload transmission",
+          "correct": false,
+          "feedback": "Network utilization on the coordinator is below 12% on a 10Gbps fiber link. Payload sizes are small vector feature arrays (~4KB each), so network bandwidth is not the constraint."
+        },
+        {
+          "id": "rc-3",
+          "text": "The biometric facial recognition model is running unvectorized on CPU rather than GPU cores",
+          "correct": false,
+          "feedback": "49 of the 50 shards return in under 8ms, proving that model vectorization and hardware acceleration are performing exceptionally well across the cluster."
+        },
+        {
+          "id": "rc-4",
+          "text": "The dispatch terminal browser is throttled by client-side JavaScript garbage collection on the Electron frontend",
+          "correct": false,
+          "feedback": "Server-side coordinator metrics explicitly record 311ms elapsed time on the backend waiting for Shard 37. The bottleneck is entirely inside the distributed backend scatter-gather topology."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the distributed query engine be architected to eliminate the straggler effect and achieve consistent low p99 latency?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement Hedged Requests: after scattering requests to the primary replicas, start a timer set to the expected p95 latency (15ms); if any shard has not responded by then, send a duplicate speculative request to that shard's backup replica and take the fastest result",
+          "correct": true,
+          "feedback": "Correct! Hedged requests (popularized by Google's 'The Tail at Scale') directly conquer tail latency amplification with negligible resource overhead (~2-5% additional queries). Because transient spikes are localized (like a brief GC pause on Shard 37-A), the backup replica (Shard 37-B) is almost always running smoothly. Firing a hedged request at 15ms ensures that slow stragglers are seamlessly bypassed, dropping aggregate p99 latency from over 300ms down to under 25ms."
+        },
+        {
+          "id": "fix-2",
+          "text": "Merge all 50 shards into a single monolithic 100TB database instance running on one physical server to eliminate network fan-out",
+          "correct": false,
+          "feedback": "Consolidating 50 shards into a single monolithic server creates a massive single point of failure and completely destroys horizontal scalability and vector search concurrency."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configure the coordinator to return immediately after receiving the first 10 responses, discarding the other 40 shards",
+          "correct": false,
+          "feedback": "Dropping 40 out of 50 shards would mean 80% of regional criminal records are omitted from the search, causing dispatchers to miss dangerous armed felons entirely."
+        },
+        {
+          "id": "fix-4",
+          "text": "Recompile the database daemon to disable memory garbage collection completely by allocating a fixed 2TB heap and never releasing memory",
+          "correct": false,
+          "feedback": "Disabling memory management causes an inevitable Out-Of-Memory (OOM) kernel panic as soon as the fixed heap fills up, causing catastrophic unrecoverable database node crashes."
+        }
+      ]
+    }
+  },
+  "conceptId": "hedged-requests-tail-latency",
+  "badge": {
+    "name": "Tail Hunter",
+    "icon": "🎯"
+  }
+}

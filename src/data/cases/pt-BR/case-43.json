@@ -1,0 +1,186 @@
+{
+  "id": "case-43",
+  "number": 43,
+  "title": "O Elefante na Fila",
+  "subtitle": "Uma transcrição de 4 horas bloqueia milhares de alertas de despacho de 30 segundos",
+  "brief": {
+    "narrative": "A central de operações policiais implantou um serviço de transcrição de áudio por IA para processar chamadas de rádio e emergências do 911. Todas as gravações recebidas são publicadas em uma única partição de mensageria (`audio-transcription-events`). Às 19:00:00, o Detetive Briggs faz upload de uma escuta telefônica contínua de 4 horas de uma quadrilha para identificação de voz. Como a partição impõe a ordem FIFO estrita e os offsets de consumo só são confirmados (commit) após a conclusão do processamento, o Worker 1 assume a tarefa de 4 horas. A partir das 19:01:00, mais de 1.400 chamadas de pânico de 30 segundos entram na fila imediatamente atrás da escuta. Presas atrás da tarefa elefante no início da fila (Head-of-Line Blocking), nenhuma das chamadas de emergência consegue ser processada. Mesmo com cinco outros workers com 0% de uso de CPU, o offset da partição não avança, deixando as viaturas sem transcrições automáticas por horas.",
+    "symptoms": [
+      "Latência na transcrição de chamadas de emergência subiu de 3 segundos para mais de 3.5 horas",
+      "Mais de 1.400 gravações urgentes de 30 segundos represadas atrás de uma única escuta de 4 horas",
+      "O atraso de consumo (consumer lag) na partição `audio-transcription-events-0` cresce continuamente",
+      "Cinco workers no pool de transcrição permanecem totalmente ociosos (0% de CPU) devido à trava FIFO da partição"
+    ],
+    "objective": "Diagnosticar o bloqueio de início de fila (Head-of-Line Blocking) em partições FIFO e implementar segregação de filas para separar tarefas pesadas de chamadas emergenciais."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audio-ingest",
+        "type": "client",
+        "label": "Ingestão de Áudio",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Origens de Áudio Recebido",
+          "logs": [
+            "[19:00:00] INGEST: Detetive Briggs enviou áudio de escuta de 4 horas (tamanho: 2.1GB)",
+            "[19:00:01] PUBLISH: Enviado para partição `audio-transcription-events-0` no offset 10420",
+            "[19:01:15] INGEST: Chamada de emergência #4811 (duração: 25s, prioridade: URGENTE)",
+            "[19:01:15] PUBLISH: Enviado para a mesma partição no offset 10421",
+            "[19:05:00] WARN: 1.420 chamadas emergenciais enfileiradas atrás do offset 10420"
+          ],
+          "data": {
+            "Tarefa Elefante": "Escuta #901 (4 horas de execução)",
+            "Tarefas Rato": "1.420 chamadas (média de 25s cada)",
+            "Tópico da Fila": "audio-transcription-events (Partição Única)"
+          },
+          "status": "Tarefas com durações desproporcionais agrupadas no mesmo fluxo FIFO."
+        }
+      },
+      {
+        "id": "fifo-queue",
+        "type": "server",
+        "label": "Partição FIFO (Offset 10420)",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Partição do Broker de Mensageria",
+          "logs": [
+            "[19:00:02] CONSUMER: Worker 1 assumiu offset 10420 (Escuta - 4h)",
+            "[19:00:05] INFO: Offset 10420 em processamento ativo...",
+            "[19:05:00] WARN: Commit da partição pausado até que o offset 10420 finalize",
+            "[19:30:00] CRITICAL: Lag de consumo = 1.420 mensagens; início da fila bloqueado",
+            "[19:30:01] WARN: Offsets 10421-11840 não podem ser lidos devido à ordenação FIFO"
+          ],
+          "data": {
+            "Offset em Execução": "10420 (Escuta de 4h)",
+            "Mensagens Aguardando": "1.420",
+            "Avanço do Offset": "PARALISADO (Aguardando Worker 1)",
+            "Head-of-Line Blocking": "ATIVO"
+          },
+          "status": "A tarefa pesada no início da partição bloqueia todas as mensagens seguintes."
+        }
+      },
+      {
+        "id": "transcription-pool",
+        "type": "server",
+        "label": "Pool de Transcrição por IA",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster de Workers (6 Nós)",
+          "logs": [
+            "[19:00:05] Worker 1 (Alocado à partição 0): 100% de CPU (transcrevendo escuta)",
+            "[19:05:00] Worker 2: OCIOSO (0% de CPU - sem partição alocada)",
+            "[19:05:00] Worker 3: OCIOSO (0% de CPU - sem partição alocada)",
+            "[19:05:00] Worker 4: OCIOSO (0% de CPU - sem partição alocada)",
+            "[19:05:00] Worker 5: OCIOSO (0% de CPU - sem partição alocada)",
+            "[19:05:00] Worker 6: OCIOSO (0% de CPU - sem partição alocada)"
+          ],
+          "data": {
+            "Worker em Operação": "Worker 1 (Preso na tarefa de 4h)",
+            "Workers Ociosos": "5 nós (100% de capacidade desperdiçada)",
+            "Modelo de Consumo": "1 Consumidor por Partição"
+          },
+          "status": "5 de 6 workers desocupados devido à restrição de partição única."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ingest-queue",
+        "source": "audio-ingest",
+        "target": "fifo-queue",
+        "label": "áudio misto [HoL Bloqueado]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-queue-workers",
+        "source": "fifo-queue",
+        "target": "transcription-pool",
+        "label": "preso no offset 10420",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz arquitetural de mais de 1.400 chamadas de emergência ficarem bloqueadas por horas?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Bloqueio de início de fila (Head-of-Line Blocking) em uma partição FIFO única: misturar uma tarefa em lote de 4 horas com chamadas de emergência de baixa latência travou o avanço do offset de consumo, prendendo todas as mensagens seguintes",
+          "correct": true,
+          "feedback": "Correto! Em brokers com partições sequenciais (como Kafka ou RabbitMQ FIFO), as mensagens são consumidas rigorosamente em ordem, e o offset representa o último item finalizado com sucesso. Colocar uma tarefa enorme ('elefante') de 4 horas na mesma partição antes de tarefas rápidas ('ratos') de 30 segundos gera Head-of-Line (HoL) Blocking: workers ociosos não podem adiantar o consumo nem realizar commits de itens posteriores até que a tarefa pesada termine, paralisando chamadas emergenciais com recursos de sobra no cluster."
+        },
+        {
+          "id": "rc-2",
+          "text": "O modelo de IA de transcrição sofreu um erro fatal de Out-Of-Memory ao carregar os dados de áudio da escuta",
+          "correct": false,
+          "feedback": "O Worker 1 não sofreu crash; sua CPU está a 100% transcrevendo o arquivo continuamente. O problema é a duração de 4 horas, período durante o qual a partição permanece travada."
+        },
+        {
+          "id": "rc-3",
+          "text": "O broker de mensagens ficou sem inodes no disco, impedindo o registro de novos offsets no log de commits",
+          "correct": false,
+          "feedback": "As novas mensagens foram registradas com sucesso nos offsets 10421 a 11840. A falha está no consumo represado no início da fila, e não na capacidade de armazenamento do broker."
+        },
+        {
+          "id": "rc-4",
+          "text": "O gravador da central salvou as chamadas com taxa de amostragem inválida, rejeitada na desserialização do consumidor",
+          "correct": false,
+          "feedback": "Os arquivos de emergência estão íntegros e corretos. Os workers sequer começaram a processá-los porque continuam bloqueados no offset 10420."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de ingestão e filas deve ser refatorada para que tarefas longas nunca atrasem chamadas de emergência?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar Segregação de Filas: classificar as tarefas de áudio na entrada pela duração estimada, roteando escutas longas para uma fila de segundo plano e chamadas rápidas para uma fila prioritária com workers independentes",
+          "correct": true,
+          "feedback": "Correto! Separar filas com base em SLA e duração (modelo de filas Elefante vs Rato) elimina totalmente o Head-of-Line Blocking. Chamadas de emergência entram em uma fila prioritária com workers dedicados de resposta ultrarrápida (3 segundos), enquanto escutas de horas operam em segundo plano sem prejudicar o atendimento emergencial."
+        },
+        {
+          "id": "fix-2",
+          "text": "Aumentar o timeout do consumidor no broker para 24 horas para evitar rebalanceamento de nós durante tarefas longas",
+          "correct": false,
+          "feedback": "Aumentar o timeout apenas permite que o worker segure a partição por mais tempo sem desconectar; não resolve a espera das 1.400 chamadas paradas na fila."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cortar os áudios de escutas investigativas para no máximo 30 segundos para igualar o tamanho das chamadas de emergência",
+          "correct": false,
+          "feedback": "Truncar áudios de investigações descartaria 3 horas e 59 minutos de provas criminais indispensáveis, destruindo processos judiciais."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configurar o consumidor para fazer o commit do offset da escuta de 4 horas antes de iniciar o processamento e descartar se houver falha",
+          "correct": false,
+          "feedback": "Fazer commit antecipado causa perda irreversível de dados em caso de queda do worker e não resolve o desperdício dos nós ociosos."
+        }
+      ]
+    }
+  },
+  "conceptId": "head-of-line-blocking",
+  "badge": {
+    "name": "Guardião da Fila",
+    "icon": "🚦"
+  }
+}

@@ -1,0 +1,184 @@
+{
+  "id": "case-47",
+  "number": 47,
+  "title": "A Milha Cinquenta Milhões",
+  "subtitle": "Paginação profunda com OFFSET força varredura completa de índice e colapsa o disco",
+  "brief": {
+    "narrative": "Uma comissão de auditoria judicial federal chega à delegacia para auditar o histórico de leitura automática de placas veiculares (ALPR), que totaliza 50.000.000 de registros. O portal de auditoria forense exibe 50 itens por página. Na Página 1, a consulta responde velozmente em 2ms. Porém, o auditor salta direto para a Página 240.000 para inspecionar registros de seis meses atrás. A aplicação executa: `SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000`. O motor de banco de dados não consegue pular direto para a linha 12.000.000; ele é obrigado a percorrer e ler 12.000.050 entradas de índice B-tree e blocos de dados do disco, ordenar na memória, descartar as primeiras 12.000.000 linhas e retornar apenas as 50 finais. A consulta leva 52 segundos, saturando 100% da capacidade de I/O do disco e expulsando o buffer pool de memória cache. Ao clicar em mais algumas páginas profundas, as consultas de auditoria monopolizam todas as conexões do pool do banco, paralisando e derrubando as chamadas em tempo real do despacho do 911 por toda a cidade.",
+    "symptoms": [
+      "Latência no portal de auditoria saltou de 2ms na primeira página para mais de 52.000ms nas páginas profundas",
+      "I/O do disco do banco atingiu 100% com degradação massiva por varredura de linhas descartadas ($O(N)$)",
+      "Taxa de acerto do buffer pool caiu de 99.4% para 18.2% devido à expulsão de dados quentes do cache",
+      "Pool de conexões da aplicação esgotou, gerando erros HTTP 504 Gateway Timeout no despacho do 911"
+    ],
+    "objective": "Diagnosticar o colapso de desempenho da paginação com OFFSET profundo em grandes volumes de dados e implementar paginação Keyset (baseada em cursor) com custo constante O(1)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audit-portal",
+        "type": "client",
+        "label": "Portal de Auditoria Federal",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Sessão do Navegador do Auditor",
+          "logs": [
+            "[11:15:00] Página 1: GET /api/alpr?page=1 -> 2ms (HTTP 200)",
+            "[11:15:20] Página 240000: GET /api/alpr?page=240000 -> AGUARDANDO...",
+            "[11:16:12] Página 240000: Concluída em 52.140ms (HTTP 200)",
+            "[11:16:15] Página 240001: GET /api/alpr?page=240001 -> AGUARDANDO...",
+            "[11:16:45] ERROR: HTTP 504 Gateway Timeout (Timeout ao obter conexão do pool)"
+          ],
+          "data": {
+            "Total de Registros": "50.000.000 linhas",
+            "Página Alvo": "Página 240.000 (OFFSET: 12.000.000)",
+            "Meta de SLA": "< 100ms"
+          },
+          "status": "Navegação em páginas profundas gerando timeouts em cascata por toda a delegacia."
+        }
+      },
+      {
+        "id": "alpr-backend",
+        "type": "server",
+        "label": "Serviço da API do ALPR",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Backend da API de Auditoria",
+          "logs": [
+            "[11:15:20] CONSULTA SQL: SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000",
+            "[11:15:45] WARN: Tempo de retenção de conexão: 24.000ms",
+            "[11:16:15] ERROR: Pool de conexões HikariCP esgotado (30/30 ativas, 142 na fila)",
+            "[11:16:20] CRITICAL: Consultas do despacho 911 bloqueadas aguardando conexões de banco"
+          ],
+          "data": {
+            "Método de Paginação": "LIMIT 50 OFFSET N",
+            "Conexões Ativas": "30 / 30 (100% ocupadas pela auditoria)",
+            "Fila de Espera": "142 consultas represadas"
+          },
+          "status": "Todas as conexões de banco monopolizadas por consultas que descartam milhões de linhas."
+        }
+      },
+      {
+        "id": "alpr-db",
+        "type": "database",
+        "label": "Banco de Dados ALPR (50M Linhas)",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Motor PostgreSQL do ALPR",
+          "logs": [
+            "[11:15:20] EXPLAIN ANALYZE: Limit (cost=342918.22..342919.65 rows=50)",
+            "[11:15:20] -> Varredura regressiva de índice (Index Scan Backward) via idx_captured_at",
+            "[11:15:20] DETALHE: Lendo 12.000.050 linhas; descartando 12.000.000 linhas",
+            "[11:15:50] I/O DISCO: 100% de uso (Carregando 4.2GB de blocos em RAM)",
+            "[11:16:12] BUFFER CACHE: Acerto caiu para 18% (Tabelas de despacho expulsas)"
+          ],
+          "data": {
+            "Plano de Execução": "Index Scan -> Ler 12.000.050 -> Descartar 12.000.000",
+            "Duração da Consulta": "52.118ms",
+            "Volume Lido do Disco": "4.2 GB por consulta",
+            "Complexidade": "O(OFFSET + LIMIT) = O(N)"
+          },
+          "status": "O banco é obrigado a ler e descartar milhões de linhas de disco a cada requisição."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-audit-api",
+        "source": "audit-portal",
+        "target": "alpr-backend",
+        "label": "OFFSET 12M [52s]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "alpr-backend",
+        "target": "alpr-db",
+        "label": "varrer 12M linhas [DISCO 100%]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz da degradação crítica do banco de dados e do esgotamento do pool de conexões em páginas profundas?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Falha de escalabilidade da paginação com OFFSET profundo: a instrução `OFFSET 12000000 LIMIT 50` força o motor de banco a percorrer, ordenar e descartar 12.000.000 de linhas no disco ($O(N)$), saturando o I/O e expulsando páginas da memória cache",
+          "correct": true,
+          "feedback": "Correto! A cláusula SQL `OFFSET N` não realiza um salto direto por índice; trata-se de uma leitura sequencial com descarte. Para atender `OFFSET 12.000.000 LIMIT 50`, o motor precisa percorrer 12.000.050 entradas de índice, carregar gigabytes de blocos de disco na memória, descartar as 12.000.000 primeiras e preservar apenas 50. Essa complexidade linear $O(N)$ faz com que páginas profundas levem quase um minuto para responder, saturando a taxa de I/O do disco, esvaziando o buffer pool e esgotando o pool de conexões."
+        },
+        {
+          "id": "rc-2",
+          "text": "A tabela do ALPR não possui chave primária definida, forçando a execução de um produto cartesiano",
+          "correct": false,
+          "feedback": "A tabela possui chave primária e índice B-tree na coluna `captured_at`. O problema é que a estrutura B-tree não permite saltar arbitrariamente para a enésima posição sem navegar por todos os nós anteriores."
+        },
+        {
+          "id": "rc-3",
+          "text": "O navegador do auditor abriu 10.000 conexões WebSocket concorrentes saturando o pool de threads do servidor web",
+          "correct": false,
+          "feedback": "O auditor apenas realizou requisições HTTP GET sequenciais. O esgotamento ocorreu no pool de banco de dados interno porque cada consulta reteve uma conexão por mais de 50 segundos."
+        },
+        {
+          "id": "rc-4",
+          "text": "Uma controladora de disco RAID com defeito gerou recálculos de checksum de paridade em cada bloco lido",
+          "correct": false,
+          "feedback": "O hardware de armazenamento está em perfeito estado. A Página 1 responde em 2ms. O atraso de 52 segundos na página 240.000 é puramente o custo algorítmico $O(N)$ de ler e descartar 12 milhões de linhas."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de paginação forense deve ser redesenhada para garantir tempo de resposta constante O(1) em qualquer profundidade?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Migrar para Paginação por Keyset (baseada em cursor): criar índice em `(captured_at DESC, id DESC)` e buscar diretamente utilizando o último item da página anterior: `WHERE (captured_at, id) < (:last_time, :last_id) ORDER BY captured_at DESC, id DESC LIMIT 50`",
+          "correct": true,
+          "feedback": "Correto! A paginação Keyset (por cursor) elimina totalmente o uso de OFFSET. Em vez de pedir ao banco para contar e jogar fora 12 milhões de registros, o cliente envia as informações do último registro visualizado na página anterior como cursor. O banco executa uma busca rápida na árvore B (Index Seek) diretamente até o próximo registro em tempo constante $O(1)$ (geralmente < 3ms), seja na página 1 ou na página 500.000. O uso de I/O em disco cai para perto de zero e a memória cache é preservada."
+        },
+        {
+          "id": "fix-2",
+          "text": "Aumentar o pool de conexões do banco de 30 para 5.000 conexões para que consultas lentas não afetem outras threads",
+          "correct": false,
+          "feedback": "Abrir milhares de conexões executando consultas pesadas de 50 segundos causaria uma sobrecarga violenta de troca de contexto de CPU e saturação de disco, derrubando o banco de imediato."
+        },
+        {
+          "id": "fix-3",
+          "text": "Carregar todos os 50.000.000 de registros na memória do navegador e fazer a paginação com fatiamento de array em JavaScript",
+          "correct": false,
+          "feedback": "Baixar 50 milhões de linhas exigiria trafegar mais de 15 gigabytes de JSON na rede, provocando o estouro de memória e o congelamento imediato do navegador."
+        },
+        {
+          "id": "fix-4",
+          "text": "Excluir registros históricos com mais de 30 dias para garantir que a tabela nunca exceda 500.000 linhas",
+          "correct": false,
+          "feedback": "Apagar evidências de investigações viola as leis federais de retenção de registros e impede o trabalho da polícia em casos não resolvidos e rastreamento de criminosos."
+        }
+      ]
+    }
+  },
+  "conceptId": "keyset-vs-offset-pagination",
+  "badge": {
+    "name": "Navegador de Profundezas",
+    "icon": "⚓"
+  }
+}

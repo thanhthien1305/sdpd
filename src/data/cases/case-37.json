@@ -1,0 +1,250 @@
+{
+  "id": "case-37",
+  "number": 37,
+  "title": "The Ghost Dispatch",
+  "subtitle": "A database write succeeds but the message broker publish fails, leaving services desynced",
+  "brief": {
+    "narrative": "When detectives file formal felony indictments, the Case Management service must perform two tasks: (1) save the indictment to the PostgreSQL primary database, and (2) emit an 'IndictmentFiled' event to Apache Kafka so downstream consumers — specifically the Elasticsearch search cluster and Patrol Alert Dispatch — can index the suspect and alert squad cars. The code executes a naive dual-write: first it runs `await db.save(indictment)` and immediately follows with `await kafka.send(event)`. At 14:30:00, detectives file 42 indictments during a high-profile narcotics bust. For 18 of those records, the PostgreSQL database transaction successfully commits. However, right after the commit, a brief network flap causes the Kafka TCP socket to reset, and an uncaught exception crashes the application container. The database holds the committed indictments, but the Kafka events were never emitted. Patrol officers searching Elasticsearch for suspect 'Marcus Vance' get zero results. Vance is stopped for speeding 20 minutes later and released because the search index never learned of his felony indictment.",
+    "symptoms": [
+      "18 felony indictments exist in PostgreSQL but are completely missing from Elasticsearch search results",
+      "Kafka topic consumer offsets confirm 18 fewer messages than database rows committed between 14:30 and 14:35",
+      "Application container logs show `Postgres COMMIT OK` followed by `UnhandledPromiseRejection: Kafka broker unreachable, container exiting`",
+      "Wanted narcotics suspect released during a routine traffic stop due to missing search records"
+    ],
+    "objective": "Diagnose how independent writes across a database and message broker cause permanent state drift, and adopt an atomic pattern to guarantee event publishing."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "detective-terminal",
+        "type": "client",
+        "label": "Detective Workstation",
+        "status": "healthy",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Case Filing Portal",
+          "logs": [
+            "[14:30:10] INFO: Filed felony indictment #8819 (Suspect: Marcus Vance)",
+            "[14:30:11] INFO: Server returned HTTP 200 OK — Indictment Saved",
+            "[14:30:20] INFO: Filed 41 additional narcotics indictment records"
+          ],
+          "data": {
+            "Total Indictments Filed": "42 records",
+            "Client Response": "HTTP 200 OK received for all",
+            "User Expectation": "Suspects are immediately searchable citywide"
+          },
+          "status": "Detectives successfully submitted records and received success receipts."
+        }
+      },
+      {
+        "id": "case-service",
+        "type": "server",
+        "label": "Case Management API",
+        "status": "degraded",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Case Management Service Container",
+          "logs": [
+            "[14:30:10] INFO: BEGIN transaction on PostgreSQL",
+            "[14:30:10.050] INFO: INSERT INTO indictments ... COMMIT OK (id=8819)",
+            "[14:30:10.060] WARN: Attempting kafka.producer.send('indictments', {id: 8819})",
+            "[14:30:10.200] ERROR: SocketException: Connection reset by peer (Kafka 10.0.4.12:9092)",
+            "[14:30:10.210] CRITICAL: Uncaught exception in async callback — Process Terminated (SIGTERM)"
+          ],
+          "data": {
+            "Pattern Used": "Naive Dual-Write (DB then Kafka)",
+            "Postgres Write Status": "COMMITTED",
+            "Kafka Publish Status": "FAILED / DROPPED",
+            "Process Lifespan": "Crashed before retry"
+          },
+          "status": "Committed to database, but crashed on Kafka publish. Event lost permanently."
+        }
+      },
+      {
+        "id": "postgres-db",
+        "type": "database",
+        "label": "Primary PostgreSQL DB",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Primary Cluster",
+          "logs": [
+            "[14:30:10.050] INFO: COMMIT transaction tx_99210 — row 8819 persisted to disk",
+            "[14:30:12.000] INFO: Total indictment count: 42 new rows committed in table 'indictments'",
+            "[14:30:30] INFO: Database state healthy, WAL replication nominal"
+          ],
+          "data": {
+            "Record #8819": "PRESENT in database table",
+            "Suspect Name": "Marcus Vance",
+            "Charge": "Class A Felony Narcotics",
+            "Status": "ACTIVE INDICTMENT"
+          },
+          "status": "Data is durably saved in PostgreSQL, but isolated from downstream search."
+        }
+      },
+      {
+        "id": "kafka-broker",
+        "type": "server",
+        "label": "Apache Kafka Broker",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Apache Kafka Cluster",
+          "logs": [
+            "[14:30:09] INFO: Topic 'indictments' partition 0 leader active",
+            "[14:30:10.150] WARN: Brief network socket reset on client connection pool",
+            "[14:30:10.300] INFO: Client reconnected, but no message received for ID 8819",
+            "[14:30:30] INFO: Topic message count: 24 received (18 missing)"
+          ],
+          "data": {
+            "Topic": "indictments-stream",
+            "Received Messages": "24",
+            "Expected Messages": "42",
+            "Missing Events": "18 events never published"
+          },
+          "status": "Never received the 18 missing events due to client-side crash after DB commit."
+        }
+      },
+      {
+        "id": "elasticsearch-cluster",
+        "type": "server",
+        "label": "Elasticsearch Search Index",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 340
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Elasticsearch Patrol Search Index",
+          "logs": [
+            "[14:30:15] INFO: Consumed 24 messages from Kafka topic 'indictments'",
+            "[14:30:16] INFO: Indexed 24 suspect documents",
+            "[14:50:00] INFO: Query: 'Marcus Vance' -> 0 hits found"
+          ],
+          "data": {
+            "Documents Indexed": "24 / 42",
+            "Query: Marcus Vance": "NOT FOUND (0 hits)",
+            "Sync Status": "OUT OF SYNC WITH POSTGRESQL"
+          },
+          "status": "Search index is missing 18 suspects because Kafka never received the events."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-det-api",
+        "source": "detective-terminal",
+        "target": "case-service",
+        "label": "POST /indictments",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-db",
+        "source": "case-service",
+        "target": "postgres-db",
+        "label": "1. COMMIT OK",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-kafka",
+        "source": "case-service",
+        "target": "kafka-broker",
+        "label": "2. socket reset / lost",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-kafka-es",
+        "source": "kafka-broker",
+        "target": "elasticsearch-cluster",
+        "label": "desynced stream",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the missing indictment records in the Elasticsearch search cluster?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "The Dual-Write Problem: Writing to a database and a message broker in separate non-atomic operations means failure after the database commit causes permanent message loss and data divergence",
+          "correct": true,
+          "feedback": "Correct! This is the infamous Dual-Write Problem. In distributed systems, updating two independent storage systems (PostgreSQL and Kafka) without atomicity is inherently dangerous. If the database transaction commits and the application server crashes or loses network before publishing to Kafka, the event is lost forever. Because PostgreSQL does not natively coordinate with Kafka, the two systems permanently drift apart."
+        },
+        {
+          "id": "rc-2",
+          "text": "Elasticsearch segment corruption caused the search engine to silently drop Marcus Vance's document from the inverted index",
+          "correct": false,
+          "feedback": "Elasticsearch logs show it operated normally and indexed all 24 messages that it received from Kafka. Elasticsearch never dropped any data; it simply never received the message for Marcus Vance from Kafka."
+        },
+        {
+          "id": "rc-3",
+          "text": "Kafka consumer groups suffered an offset commit conflict, skipping 18 messages during a partition rebalance",
+          "correct": false,
+          "feedback": "Kafka broker logs confirm that only 24 messages were ever received on the topic. The 18 missing messages were never published to Kafka in the first place because the application container crashed."
+        },
+        {
+          "id": "rc-4",
+          "text": "PostgreSQL transaction isolation level was set to Read Uncommitted, causing dirty reads to vanish on rollback",
+          "correct": false,
+          "feedback": "The records were NOT rolled back. All 42 records, including Marcus Vance (#8819), are permanently committed and present in the PostgreSQL database table. The problem is that downstream services never learned about them."
+        }
+      ]
+    },
+    "fix": {
+      "question": "What architectural pattern guarantees that every committed database record reliably produces a corresponding event in Kafka?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement the Transactional Outbox Pattern: Save the event into an 'outbox' table within the SAME database transaction, and use a separate relay or Change Data Capture (CDC / Debezium) to publish to Kafka with at-least-once delivery",
+          "correct": true,
+          "feedback": "Correct! The Transactional Outbox pattern is the industry standard solution. By inserting the outgoing event into an `outbox` table in the exact same local ACID transaction that saves the indictment, atomicity is guaranteed: either both are saved, or neither is. A separate background process or Change Data Capture tool (like Debezium reading the Postgres WAL) tails the outbox table and streams the events to Kafka with guaranteed at-least-once delivery. Even if the app crashes, the outbox record is safe on disk."
+        },
+        {
+          "id": "fix-2",
+          "text": "Invert the operation order: Publish to Kafka first, and only commit to PostgreSQL after Kafka acknowledges message receipt",
+          "correct": false,
+          "feedback": "Reversing the order does not fix the problem; it merely reverses the failure mode. If you publish to Kafka first and the database write fails or times out, you will have emitted an event for an indictment that does not exist in the database (phantom data)."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configure an HTTP webhook so PostgreSQL triggers an external curl call to Kafka inside a stored procedure trigger",
+          "correct": false,
+          "feedback": "Calling external network services from inside database triggers is an anti-pattern. If the network call blocks or fails, it holds database row locks and crashes the transaction, severely degrading database performance."
+        },
+        {
+          "id": "fix-4",
+          "text": "Increase Kafka client producer retries to infinity so the application thread blocks until Kafka comes back online",
+          "correct": false,
+          "feedback": "Infinite retries in-memory do not survive application restarts, container crashes, or hardware reboots. If the container process is killed (as happened here), all in-memory pending retries vanish instantly."
+        }
+      ]
+    }
+  },
+  "conceptId": "transactional-outbox",
+  "badge": {
+    "name": "Outbox Marshal",
+    "icon": "📬"
+  }
+}

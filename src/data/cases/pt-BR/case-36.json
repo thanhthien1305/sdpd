@@ -1,0 +1,253 @@
+{
+  "id": "case-36",
+  "number": 36,
+  "title": "O Anel em Cascata",
+  "subtitle": "A queda de um nó de cache sobrecarrega seu vizinho, disparando um colapso em efeito dominó",
+  "brief": {
+    "narrative": "O sistema de Vigilância por Vídeo em Tempo Real do SDPD armazena em cache os quadros das câmeras CCTV em um cluster distribuído de 4 nós (Nós A, B, C, D) usando hashing consistente. Cada máquina física ocupa um único ponto no anel de 360 graus. Às 09:00:00, o Nó B sofre uma falha na fonte de alimentação e desliga abruptamente. Pelo hashing consistente ingênuo sem nós virtuais, todas as chaves do Nó B são roteadas para o próximo nó no sentido horário: o Nó C. Instantaneamente, o tráfego do Nó C dobra de 15.000 req/s para 30.000 req/s e o uso de RAM sobe de 75% para 100%. Às 09:00:25, o OOM killer do Linux encerra o Nó C. Agora, o Nó D herda as chaves de B e de C (300% de carga) e colapsa às 09:01:00. Por fim, o Nó A permanece sozinho e cai 10 segundos depois. Em 70 segundos, a falha de um único nó provocou uma reação em cadeia que derrubou todo o anel de cache, inundando o armazenamento primário de vídeo.",
+    "symptoms": [
+      "Fonte do Nó B queimou às 09:00:00",
+      "Memória do Nó C disparou de 75% para 100% em 20 segundos, finalizado pelo OOM killer às 09:00:25",
+      "Nó D colapsou às 09:01:00, seguido pelo Nó A às 09:01:10 — 100% de indisponibilidade do cache",
+      "Transmissões das câmeras da cidade congelaram, deixando as telas da central de monitoramento apagadas"
+    ],
+    "objective": "Diagnosticar por que a perda de um nó sobrecarregou seu vizinho em efeito dominó e redesenhar o anel de hashing para distribuir a carga uniformemente."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "camera-feed",
+        "type": "client",
+        "label": "Rede de Câmeras CCTV",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Ingresso de Câmeras CCTV",
+          "logs": [
+            "[09:00:00] INFO: Transmitindo 60.000 quadros/s para 4 nós de cache",
+            "[09:00:05] WARN: Nó B offline — roteando chaves de B para o sucessor Nó C",
+            "[09:00:25] ERROR: Nó C caiu — roteando chaves de B e C para o Nó D",
+            "[09:01:00] ERROR: Nó D caiu — todo o tráfego atingindo o sobrevivente Nó A",
+            "[09:01:15] CRITICAL: Falha total do cluster de cache — 503 Service Unavailable"
+          ],
+          "data": {
+            "Taxa de Quadros": "60.000 quadros/s",
+            "Câmeras Ativas": "8.400 câmeras na cidade",
+            "Disponibilidade do Cache": "0% (todos os nós caíram)",
+            "Telas de Monitoramento": "FORA DO AR"
+          },
+          "status": "Câmeras incapazes de ler ou gravar quadros no cache."
+        }
+      },
+      {
+        "id": "cache-b",
+        "type": "server",
+        "label": "Nó de Cache B",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó de Cache B (Posição no Anel: 90°)",
+          "logs": [
+            "[08:59:59] INFO: Processando 15.000 req/s, RAM: 48 GB / 64 GB (75%)",
+            "[09:00:00] CRITICAL: Falha na fonte de alimentação — máquina desligada",
+            "[09:00:00] OFFLINE: Host inacessível na rede"
+          ],
+          "data": {
+            "Posição no Anel": "90° (Token Único)",
+            "Nós Virtuais": "0 (Nenhum)",
+            "Status": "MORTO (Falha de hardware)",
+            "Chaves Órfãs": "15.000 req/s redirecionadas ao Nó C"
+          },
+          "status": "Fonte queimada. Todas as chaves transferidas para o vizinho imediato C."
+        }
+      },
+      {
+        "id": "cache-c",
+        "type": "server",
+        "label": "Nó de Cache C",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó de Cache C (Posição no Anel: 180°)",
+          "logs": [
+            "[08:59:59] INFO: Carga nominal: 15.000 req/s, RAM: 48 GB (75%)",
+            "[09:00:01] WARN: Herdando 100% das chaves do Nó B (0°-90°)",
+            "[09:00:05] WARN: Tráfego recebido saltou para 30.000 req/s (200% da capacidade)",
+            "[09:00:20] ERROR: RAM em 63.8 GB / 64 GB — swap esgotada",
+            "[09:00:25] CRITICAL: Out of Memory: Processo 'cache-daemon' encerrado pelo OOM-killer"
+          ],
+          "data": {
+            "Posição no Anel": "180° (Token Único)",
+            "Pico de Tráfego": "30.500 req/s (203% da capacidade)",
+            "Causa da Queda": "OOM Killer do Kernel Linux",
+            "Chaves Repassadas": "Herdou B, repassou B + C para o Nó D"
+          },
+          "status": "Esmagado por assumir 100% da carga do Nó B. Falha por esgotamento de memória."
+        }
+      },
+      {
+        "id": "cache-d",
+        "type": "server",
+        "label": "Nó de Cache D",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó de Cache D (Posição no Anel: 270°)",
+          "logs": [
+            "[09:00:25] WARN: Nó C caiu. Nó D é o próximo sucessor para B e C!",
+            "[09:00:30] ERROR: Tráfego saltou para 45.000 req/s (300% de carga)",
+            "[09:00:55] ERROR: CPU 100%, placa de rede saturada, descarte de pacotes",
+            "[09:01:00] CRITICAL: Processo caiu sob pressão extrema de memória"
+          ],
+          "data": {
+            "Posição no Anel": "270° (Token Único)",
+            "Multiplicador de Carga": "3x da capacidade nominal",
+            "Hora da Queda": "09:01:00"
+          },
+          "status": "Herdou chaves de B e C. Colapsou sob 300% de sobrecarga."
+        }
+      },
+      {
+        "id": "primary-video-db",
+        "type": "database",
+        "label": "Storage SAN de Vídeo Primário",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Storage SAN Primário",
+          "logs": [
+            "[09:00:00] INFO: IOPS de leitura nominal: 2.000 IOPS",
+            "[09:01:15] CRITICAL: Todo o cache fora do ar — 60.000 req/s atingindo o SAN",
+            "[09:01:20] ERROR: Fila do controlador ultrapassou 10.000 requisições",
+            "[09:01:30] ERROR: SAN ativando contenção protetora somente-leitura"
+          ],
+          "data": {
+            "Capacidade Máxima": "10.000 IOPS",
+            "Pico Recebido": "60.000 IOPS",
+            "Status": "Soterrado pela tempestade de 100% de falhas de cache"
+          },
+          "status": "Afogado por requisições de vídeo sem cache após o colapso do anel."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cam-b",
+        "source": "camera-feed",
+        "target": "cache-b",
+        "label": "falhou (09:00:00)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-b-c",
+        "source": "cache-b",
+        "target": "cache-c",
+        "label": "100% das chaves em C",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-c-d",
+        "source": "cache-c",
+        "target": "cache-d",
+        "label": "200% das chaves em D",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-cam-san",
+        "source": "camera-feed",
+        "target": "primary-video-db",
+        "label": "60.000 req/s esmagando SAN",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz de todo o cluster de cache de 4 nós colapsar após a falha de hardware de um único nó?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Hashing consistente ingênuo sem Nós Virtuais (vnodes) fez com que 100% do tráfego do nó falho fosse despejado em seu único vizinho imediato, disparando uma falha em cascata",
+          "correct": true,
+          "feedback": "Correto! Quando cada máquina física ocupa apenas um ponto no anel de hash, a falha do Nó B direciona 100% de suas chaves para seu sucessor imediato (Nó C). Dobrar a carga no Nó C causou sua morte por falta de memória (OOM), o que por sua vez despejou a carga de B e C no Nó D (3x de carga). Esse efeito dominó dizimou todo o cluster em 70 segundos."
+        },
+        {
+          "id": "rc-2",
+          "text": "A resolução dos vídeos das câmeras foi elevada de 1080p para 4K, estourando a largura de banda de todos os nós",
+          "correct": false,
+          "feedback": "A resolução permaneceu em 1080p. A causa não foi o tamanho individual dos quadros, mas sim a concentração desproporcional de chaves sobre um único vizinho."
+        },
+        {
+          "id": "rc-3",
+          "text": "Os nós de cache sofreram split-brain entre instâncias mestre e réplica, congelando o anel por escritas conflitantes",
+          "correct": false,
+          "feedback": "Não houve split-brain. O Nó B sofreu uma pane física real de energia e os demais caíram sequencialmente por sobrecarga extrema de memória RAM."
+        },
+        {
+          "id": "rc-4",
+          "text": "O storage SAN enviou pacotes corrompidos de volta aos servidores de cache, travando seus processos",
+          "correct": false,
+          "feedback": "O storage SAN operava normalmente até o anel de cache colapsar e enviar 60.000 requisições por segundo contra ele. O SAN foi vítima da sobrecarga, não a causa."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como o anel de hashing consistente deve ser reestruturado para evitar colapsos em cascata?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar Nós Virtuais (vnodes), atribuindo a cada máquina física centenas de posições virtuais distribuídas uniformemente ao redor do anel de hash",
+          "correct": true,
+          "feedback": "Correto! Nós virtuais (vnodes) são a solução padrão adotada por sistemas como Dynamo e Cassandra. Ao atribuir a cada máquina física de 150 a 250 pontos virtuais espalhados no anel, as chaves de um nó que falha ficam intercaladas com todos os outros nós. Se o Nó B cai, suas chaves são repartidas igualmente entre os Nós A, C e D (~33% de carga adicional para cada um, em vez de 100% em um só). Isso elimina o efeito dominó."
+        },
+        {
+          "id": "fix-2",
+          "text": "Substituir o hashing consistente pelo algoritmo tradicional de resto de divisão (`hash(key) % N`)",
+          "correct": false,
+          "feedback": "O hashing por módulo pioraria o cenário! Quando N muda de 4 para 3, praticamente 100% de todas as chaves do sistema são remapeadas para outros servidores, causando perda total instantânea de cache em toda a cidade."
+        },
+        {
+          "id": "fix-3",
+          "text": "Expandir a memória RAM dos Nós C e D de 64 GB para 512 GB para que suportem o dobro de carga",
+          "correct": false,
+          "feedback": "Superdimensionar hardware é custoso e ineficiente. Se dois nós caírem, um nó de 512 GB também poderá sucumbir, além de não resolver a falha arquitetural de concentração de carga."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configurar a rede de câmeras para cessar o envio de imagens sempre que qualquer servidor de cache falhar",
+          "correct": false,
+          "feedback": "Desligar o monitoramento de segurança da cidade por causa de uma falha de servidor anula a proposta de construir um sistema distribuído tolerante a falhas."
+        }
+      ]
+    }
+  },
+  "conceptId": "consistent-hashing-vnodes",
+  "badge": {
+    "name": "Equilibrador do Anel",
+    "icon": "💍"
+  }
+}

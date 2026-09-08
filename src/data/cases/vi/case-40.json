@@ -1,0 +1,217 @@
+{
+  "id": "case-40",
+  "number": 40,
+  "title": "Mâu Thuẫn Dưới Hầm",
+  "subtitle": "Ghi chú hiện trường ngoại tuyến hợp nhất bằng dấu thời gian ngây thơ đã xóa sổ bằng chứng sống còn",
+  "brief": {
+    "narrative": "Hai thám tử Diaz và Chen tiến hành đột kích khám xét một căn hầm bê tông kiên cố ngầm bên dưới một nhà kho bỏ hoang theo lệnh tòa. Dưới lòng đất sâu, hoàn toàn không có sóng di động 5G hay Wi-Fi. Cả hai thám tử chuyển máy tính bảng chiến thuật sang Chế Độ Hiện Trường Ngoại Tuyến (Offline Mode) và cùng mở Vụ Án #402. Lúc 16:02:00, Diaz tiếp cận Căn Phòng 1 và phát hiện lính có vũ trang đang khống chế con tin; cô khẩn cấp gắn các thẻ nguy hiểm `['suspect-armed', 'hostage-present']` (nghi phạm có vũ trang, có con tin) vào hồ sơ #402. Đồng hồ máy tính bảng của Diaz chạy chuẩn xác ở mốc 16:02:00. Lúc 16:02:15, Chen tiến vào Căn Phòng 2 ở cánh đối diện, phát hiện xưởng in tiền giả và thêm thẻ `['counterfeit-currency']`. Tuy nhiên, máy tính bảng của Chen bị chai pin CMOS đồng hồ phần cứng khiến giờ hệ thống bị chạy nhanh 12 phút, ghi nhận thao tác của anh với mốc thời gian 16:14:15. Đến 16:20:00, cả hai thám tử rời khỏi hầm và máy tính bảng tự động bắt sóng Wi-Fi của đồn cảnh sát. Máy chủ đồng bộ sử dụng thuật toán giải quyết xung đột ngây thơ 'Ghi-Sau-Cùng-Thắng' (Last-Write-Wins - LWW) dựa trên dấu thời gian của thiết bị. Thấy mốc 16:14:15 của Chen lớn hơn mốc 16:02:00 của Diaz, máy chủ coi phiên bản của Chen là 'mới nhất'. Nó ghi đè toàn bộ danh sách thẻ bằng `['counterfeit-currency']`, âm thầm xóa sạch cảnh báo có con tin của Diaz. Đội đặc nhiệm SWAT chuẩn bị dùng thuốc nổ phá tường tấn công vào hầm mà hoàn toàn không hề biết bên trong đang có con tin vô tội.",
+    "symptoms": [
+      "Các thẻ nguy hiểm cốt lõi `['suspect-armed', 'hostage-present']` biến mất hoàn toàn khỏi Vụ Án #402 ngay sau khi kết nối Wi-Fi",
+      "Nhật ký máy chủ trung tâm ghi nhận phiên bản lúc 16:02:00 của Diaz đã bị ghi đè bởi phiên bản của Chen mang mốc thời gian 16:14:15",
+      "Kiểm tra phần cứng máy tính bảng của Thám tử Chen phát hiện đồng hồ RTC bị lệch nhanh tới +720 giây (12 phút)",
+      "Chỉ huy tác chiến SWAT suýt ra lệnh nổ súng đánh bộc phá do thông tin cảnh báo con tin bị hệ thống xóa mất"
+    ],
+    "objective": "Chẩn đoán khiếm khuyết chết người của thuật toán Last-Write-Wins dựa trên đồng hồ thiết bị trong đồng bộ ngoại tuyến, và ứng dụng Kiểu Dữ Liệu Tự Do Nhân Bản (CRDTs) để bảo toàn mọi chỉnh sửa đồng thời."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "tablet-diaz",
+        "type": "client",
+        "label": "Máy Tính Bảng Của Diaz",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Di Động Diaz (Đồng Hồ Chuẩn)",
+          "logs": [
+            "[16:02:00] OFFLINE: Người dùng thêm thẻ: ['suspect-armed', 'hostage-present']",
+            "[16:02:00] INFO: Commit cục bộ với client_timestamp = 16:02:00.120",
+            "[16:20:05] INFO: Đã bắt lại sóng Wi-Fi — đang gửi dữ liệu lên máy chủ đồng bộ",
+            "[16:20:06] INFO: Nhận phản hồi ACK thành công từ máy chủ"
+          ],
+          "data": {
+            "Giờ Đồng Hồ Thiết Bị": "16:02:00 (Chuẩn xác / Lệch 0s)",
+            "Chỉnh Sửa Cục Bộ": "Thêm ['suspect-armed', 'hostage-present']",
+            "Trạng Thái Sau Đồng Bộ": "Dữ liệu bị biến mất khỏi hồ sơ máy chủ"
+          },
+          "status": "Ghi nhận chính xác thông tin con tin sống còn khi ngoại tuyến nhưng bị xóa sổ khi đồng bộ."
+        }
+      },
+      {
+        "id": "tablet-chen",
+        "type": "client",
+        "label": "Máy Tính Bảng Của Chen",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Di Động Chen (Đồng Hồ Chạy Nhanh)",
+          "logs": [
+            "[16:14:15 (Thực tế: 16:02:15)] OFFLINE: Người dùng thêm thẻ: ['counterfeit-currency']",
+            "[16:14:15] WARN: Pin CMOS yếu — phát hiện lệch đồng hồ phần cứng RTC (+720s)",
+            "[16:14:15] INFO: Commit cục bộ với client_timestamp = 16:14:15.500",
+            "[16:20:05] INFO: Đã bắt lại sóng Wi-Fi — đang gửi dữ liệu lên máy chủ đồng bộ"
+          ],
+          "data": {
+            "Giờ Đồng Hồ Thiết Bị": "16:14:15 (LỆCH: Chạy trước tương lai +12 phút)",
+            "Chỉnh Sửa Cục Bộ": "Thêm ['counterfeit-currency']",
+            "Sức Khỏe Pin CMOS": "NGUY CẤP / CHAI PIN"
+          },
+          "status": "Đồng hồ phần cứng chạy trước 12 phút, vô tình phát sinh dấu thời gian 'tương lai' giả tạo."
+        }
+      },
+      {
+        "id": "sync-server",
+        "type": "server",
+        "label": "Cổng Đồng Bộ Hồ Sơ",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Đồng Bộ Chiến Thuật",
+          "logs": [
+            "[16:20:05.100] INFO: Nhận gói đồng bộ từ Diaz (dấu thời gian: 16:02:00)",
+            "[16:20:05.150] INFO: Nhận gói đồng bộ từ Chen (dấu thời gian: 16:14:15)",
+            "[16:20:05.200] WARN: Phát hiện xung đột đồng thời trên trường 'tags' của Vụ Án #402",
+            "[16:20:05.210] ERROR: Giải quyết theo Ghi-Sau-Cùng-Thắng (LWW): 16:14:15 > 16:02:00",
+            "[16:20:05.220] CRITICAL: Ghi đè tags của Case #402 bằng mảng của Chen. Thẻ của Diaz bị vứt bỏ!"
+          ],
+          "data": {
+            "Chiến Lược Xung Đột": "Last-Write-Wins (LWW) bằng Đồng Hồ Client",
+            "Kết Quả Phân Xử": "Chen có timestamp lớn hơn -> xóa bỏ sửa đổi của Diaz",
+            "Hỗ Trợ CRDT": "KHÔNG",
+            "Mất Mát Dữ Liệu": "CÓ (Xóa thẻ âm thầm)"
+          },
+          "status": "Thuật toán LWW ngây thơ chọn giờ tương lai của Chen và vứt bỏ cảnh báo có con tin của Diaz."
+        }
+      },
+      {
+        "id": "central-case-db",
+        "type": "database",
+        "label": "Cơ Sở Dữ Liệu Vụ Án Trung Tâm",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Bộ Lưu Trữ Hồ Sơ Vụ Án Trung Tâm",
+          "logs": [
+            "[16:20:05.250] INFO: UPDATE cases SET tags = ['counterfeit-currency'] WHERE id = 402",
+            "[16:20:06.000] INFO: Truy vấn SWAT: lấy danh sách tags cho Case #402 -> ['counterfeit-currency']",
+            "[16:20:06.100] WARN: Không phát hiện bất kỳ cờ nguy hiểm hay con tin nào trên Vụ Án #402"
+          ],
+          "data": {
+            "Mã Vụ Án": "#402",
+            "Thẻ Hiện Có": "['counterfeit-currency']",
+            "Thẻ Bị Mất": "['suspect-armed', 'hostage-present'] (ĐÃ BỊ XÓA)",
+            "Đánh Giá Rủi Ro SWAT": "NGUY CƠ THẤP (SAI LẦM CHẾT NGƯỜI)"
+          },
+          "status": "Chỉ lưu trữ thẻ tiền giả của Chen. Thông tin có con tin đã hoàn toàn biến mất."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-diaz-sync",
+        "source": "tablet-diaz",
+        "target": "sync-server",
+        "label": "đồng bộ (ts: 16:02:00) [BỊ HỦY]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-chen-sync",
+        "source": "tablet-chen",
+        "target": "sync-server",
+        "label": "đồng bộ (ts: 16:14:15) [THẮNG LWW]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-sync-db",
+        "source": "sync-server",
+        "target": "central-case-db",
+        "label": "ghi đè trạng thái thắng",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến cảnh báo có con tin sống còn của Thám tử Diaz bị xóa sạch trong quá trình đồng bộ là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Giải Quyết Xung Đột Ngây Thơ Bằng Last-Write-Wins (LWW): Việc dựa vào dấu thời gian đồng hồ máy khách vốn không đồng bộ đã cho phép một thiết bị bị lệch giờ ghi đè và xóa sổ các chỉnh sửa ngoại tuyến đồng thời",
+          "correct": true,
+          "feedback": "Chính xác! Trong hệ thống phân tán hoạt động ngoại tuyến, dấu thời gian đồng hồ vật lý của các máy client tuyệt đối không bao giờ được tin cậy để giải quyết xung đột do hiện tượng sai lệch đồng hồ (clock skew), chai pin phần cứng hoặc người dùng chỉnh giờ. Chiến lược Ghi-Sau-Cùng-Thắng (LWW) ngây thơ chỉ đơn giản so sánh và chọn timestamp cao hơn (đồng hồ chạy nhanh 16:14:15 của Chen) rồi coi toàn bộ mảng dữ liệu là một khối ghi đè duy nhất, xóa sạch toàn bộ các bổ sung quý giá lúc 16:02:00 của Diaz."
+        },
+        {
+          "id": "rc-2",
+          "text": "Động cơ cơ sở dữ liệu SQLite trên máy tính bảng của Diaz bị hỏng do từ trường ngầm dưới lòng đất",
+          "correct": false,
+          "feedback": "Máy tính bảng của Diaz hoạt động hoàn hảo. Cơ sở dữ liệu cục bộ của cô đã lưu trữ chính xác các thẻ và truyền đi trọn vẹn khi gặp sóng Wi-Fi. Dữ liệu bị xóa bỏ ở phía máy chủ bởi thuật toán đồng bộ bị lỗi."
+        },
+        {
+          "id": "rc-3",
+          "text": "Bộ phát Wi-Fi tại đồn cảnh sát bị rớt gói tin mạng của Diaz do quá hạn bắt tay xác thực WPA3",
+          "correct": false,
+          "feedback": "Nhật ký máy chủ đồng bộ xác nhận đã nhận gói tin của Diaz lúc 16:20:05.100. Gói tin không hề bị mất trên đường truyền mạng; nó được máy chủ tiếp nhận nhưng sau đó bị thuật toán LWW chủ động vứt bỏ."
+        },
+        {
+          "id": "rc-4",
+          "text": "Thám tử Chen nắm giữ khóa bi quan (pessimistic lock) trên hồ sơ Vụ Án #402 ngăn cản Diaz quyền chỉnh sửa",
+          "correct": false,
+          "feedback": "Khóa bi quan đòi hỏi phải có kết nối mạng liên tục với bộ điều phối trung tâm và không thể hoạt động khi các thiết bị đang ngoại tuyến dưới hầm bê tông. Cả hai thiết bị đều thao tác độc lập không kết nối."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần tái thiết kế kiến trúc đồng bộ ngoại tuyến phân tán như thế nào để đảm bảo các chỉnh sửa đồng thời được hợp nhất an toàn?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Ứng dụng Kiểu Dữ Liệu Tự Do Nhân Bản (CRDTs) — cụ thể là tập hợp Add-Wins Observed-Remove Set (AWORSet) — để hợp nhất toán học các thao tác thêm và xóa thẻ mà không phụ thuộc vào đồng hồ vật lý",
+          "correct": true,
+          "feedback": "Chính xác! Kiểu Dữ Liệu Tự Do Nhân Bản Không Xung Đột (CRDTs) là cấu trúc dữ liệu toán học được chứng minh chuyên dùng cho môi trường phân tán đa chủ và ngoại tuyến. Bằng cách biểu diễn danh sách thẻ dưới dạng tập hợp Add-Wins Observed-Remove Set (AWORSet), mỗi thao tác thêm thẻ được gắn với một định danh nhân quả duy nhất (causal identifier/version vector). Khi đồng bộ, các tập hợp tự động hợp nhất giao hoán: `{'suspect-armed', 'hostage-present'} ∪ {'counterfeit-currency'} = {'suspect-armed', 'hostage-present', 'counterfeit-currency'}`. Phát hiện của cả hai thám tử đều được bảo tồn trọn vẹn mà không mất mát bất kỳ thông tin nào, bất chấp đồng hồ thiết bị bị lệch."
+        },
+        {
+          "id": "fix-2",
+          "text": "Cấm hoàn toàn chế độ làm việc ngoại tuyến, bắt buộc cảnh sát chỉ được thao tác chỉnh sửa hồ sơ khi có kết nối mạng di động 5G liên tục",
+          "correct": false,
+          "feedback": "Các hầm ngầm, đường hầm, vùng đồi núi hẻo lánh và khu vực thảm họa luôn có những điểm chết không có sóng. Vô hiệu hóa tính năng ngoại tuyến sẽ làm tê liệt hoạt động tác chiến và đe dọa trực tiếp an toàn của lực lượng thực thi công vụ."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấu hình đồng bộ NTP tự động thăm dò tín hiệu vệ tinh GPS định kỳ khi máy tính bảng đang nằm sâu dưới hầm bê tông",
+          "correct": false,
+          "feedback": "Sóng vô tuyến GPS và NTP hoàn toàn không thể xuyên qua lớp bê tông cốt thép kiên cố dưới lòng đất. Một hệ thống phân tán tuyệt đối không được dựa dẫm vào kết nối ngoại cảnh để bảo vệ tính toàn vẹn dữ liệu."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấu hình máy chủ đồng bộ từ chối bất kỳ gói tin nào có dấu thời gian lệch quá 5 phút so với đồng hồ của máy chủ",
+          "correct": false,
+          "feedback": "Từ chối gói tin có đồng hồ lệch sẽ khiến Thám tử Chen không thể đồng bộ dữ liệu bằng chứng tiền giả của mình lên máy chủ, làm dữ liệu quan trọng bị giam hãm mãi mãi trong máy tính bảng của anh."
+        }
+      ]
+    }
+  },
+  "conceptId": "crdt-offline-sync",
+  "badge": {
+    "name": "Bản Đồ Dưới Hầm",
+    "icon": "🗺️"
+  }
+}

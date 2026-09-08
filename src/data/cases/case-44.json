@@ -1,0 +1,182 @@
+{
+  "id": "case-44",
+  "number": 44,
+  "title": "The Compromised Badge",
+  "subtitle": "Stateless JWT tokens remain valid after administrative revocation, leaking confidential files",
+  "brief": {
+    "narrative": "Internal Affairs discovers that Detective Vance's laptop and authentication token were stolen during an undercover bust by an organized crime syndicate. At 14:00:00, the Chief Security Officer immediately suspends Vance's credentials in the central Identity Provider (IdP) and changes his database record to `STATUS = REVOKED`. However, at 14:25:00, access logs reveal that the stolen laptop successfully downloaded 48 sealed confidential informant case files from the precinct Evidence Vault Microservice. Because the architecture uses completely stateless JSON Web Tokens (JWT) with a 12-hour expiration window (`exp`), downstream microservices validate access purely by verifying the token's RS256 signature using a cached public key. The microservices make zero calls to the IdP, oblivious to the fact that the officer was suspended. The syndicate continues harvesting state secrets using a revoked badge.",
+    "symptoms": [
+      "Suspended detective account continues accessing confidential microservice endpoints 25 minutes after revocation",
+      "Evidence Vault access logs show HTTP 200 OK for requests presenting Vance's stolen JWT token",
+      "Identity Provider audit confirms Detective Vance was marked `REVOKED` at 14:00:00",
+      "Downstream microservices perform zero network lookups during JWT validation to minimize latency"
+    ],
+    "objective": "Diagnose the architectural blindspot of stateless JWT revocation and implement short-lived access tokens with distributed in-memory revocation blocklists."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "attacker-laptop",
+        "type": "client",
+        "label": "Stolen Detective Laptop",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Syndicate Breach Terminal",
+          "logs": [
+            "[13:55:00] Extracted valid JWT token from browser local storage",
+            "[14:00:00] NOTE: Officer account suspended by precinct administrator",
+            "[14:25:00] GET /vault/informants HTTP 200 OK (Authorization: Bearer eyJhbGci...)",
+            "[14:25:05] DOWNLOAD: 48 confidential informant dossiers exfiltrated"
+          ],
+          "data": {
+            "Token Expiration": "Issued: 13:00 / Expires: 01:00 (12-hour lifetime)",
+            "JWT Signature": "RS256 VALID",
+            "Target Microservice": "Evidence Vault Service"
+          },
+          "status": "Attacker exploiting a mathematically valid JWT token long after account suspension."
+        }
+      },
+      {
+        "id": "evidence-vault",
+        "type": "server",
+        "label": "Evidence Vault Microservice",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Downstream Vault Service",
+          "logs": [
+            "[14:25:00] INFO: Validating JWT signature with cached IdP public key",
+            "[14:25:00] INFO: Signature check: PASSED (RS256 match)",
+            "[14:25:00] INFO: Expiration check: current_time < exp (Remaining: 10h 35m)",
+            "[14:25:00] WARN: No revocation check performed (stateless architecture)",
+            "[14:25:01] INFO: Dispatched confidential informant dossiers to client"
+          ],
+          "data": {
+            "Auth Strategy": "Stateless JWT (Local Public Key Validation)",
+            "Revocation Verification": "NONE",
+            "Data Exposure": "HIGH (Classified Informant Records)"
+          },
+          "status": "Service verifies cryptographic signature locally without checking if token is revoked."
+        }
+      },
+      {
+        "id": "central-idp",
+        "type": "server",
+        "label": "Central Identity Provider (IdP)",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Precinct Identity Authority",
+          "logs": [
+            "[14:00:00] ADMIN: Officer Vance status set to 'REVOKED'",
+            "[14:00:00] INFO: User password scrambled and MFA revoked in DB",
+            "[14:00:01] NOTE: No mechanism to notify downstream services of revoked active JWTs",
+            "[14:25:00] IDLE: 0 inbound verification queries received from Evidence Vault"
+          ],
+          "data": {
+            "Detective Vance Status": "REVOKED / SUSPENDED",
+            "Active JWTs Outstanding": "1 (Valid for 10 more hours)",
+            "Notification Channel": "NONE"
+          },
+          "status": "Account is terminated in database, but has no mechanism to revoke issued tokens."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-attacker-vault",
+        "source": "attacker-laptop",
+        "target": "evidence-vault",
+        "label": "GET /informants [200 OK]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-idp-disconnect",
+        "source": "central-idp",
+        "target": "evidence-vault",
+        "label": "no revocation sync",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the security root cause allowing the stolen credentials to access files after account revocation?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Stateless JWT architectural blindspot: microservices independently validate cryptographic signatures and expiration timestamps locally without real-time revocation checking, allowing stolen 12-hour tokens to remain trusted until expiration",
+          "correct": true,
+          "feedback": "Correct! Stateless JSON Web Tokens (JWT) are designed to avoid database lookups by verifying identity using public-key cryptography. However, this creates a major revocation blindspot: once issued, a token is mathematically valid until its `exp` timestamp passes. Downstream services validating only the signature and timestamp have no knowledge that the identity provider suspended the account at 14:00:00."
+        },
+        {
+          "id": "rc-2",
+          "text": "The RSA 2048-bit private key of the identity provider was factored by the syndicate using quantum computing",
+          "correct": false,
+          "feedback": "The private key was never compromised. The attacker did not forge a new token; they simply presented the legitimate existing token that was issued before the laptop was stolen."
+        },
+        {
+          "id": "rc-3",
+          "text": "A Cross-Site Scripting (XSS) vulnerability on the Evidence Vault bypassed JWT validation entirely",
+          "correct": false,
+          "feedback": "The service logs show that JWT validation executed normally and passed. The failure is that the token itself was trusted despite being revoked."
+        },
+        {
+          "id": "rc-4",
+          "text": "The Network Time Protocol (NTP) service on the Evidence Vault drifted 24 hours into the past",
+          "correct": false,
+          "feedback": "System clocks are synchronized. The token's expiration window was 12 hours, meaning it was naturally valid for another 10+ hours under real time."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the authentication architecture be redesigned to allow instantaneous revocation while maintaining high-performance microservice access?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement short-lived access tokens (5-minute expiry) paired with rotating refresh tokens, and broadcast revoked token IDs (jti) to an in-memory distributed Redis blocklist with pub/sub invalidation",
+          "correct": true,
+          "feedback": "Correct! A robust distributed authentication pattern combines two tiers: 1) Short-lived access tokens (e.g., 5-15 minutes) drastically shrink the window of exposure if a token is leaked. 2) For emergency revocations (stolen devices, employee termination), the IdP publishes the unique token identifier (`jti`) or user ID to an in-memory distributed cache (like Redis with Bloom filters) via pub/sub. Microservices perform a fast sub-millisecond memory lookup against the blocklist during validation, rejecting revoked tokens instantly."
+        },
+        {
+          "id": "fix-2",
+          "text": "Revert to monolithic server-side session cookies stored in a single relational SQL database queried synchronously on every single microservice call",
+          "correct": false,
+          "feedback": "Forcing every microservice request across dozens of internal services to hit a single relational database destroys microservice autonomy and creates a massive scalability and availability bottleneck."
+        },
+        {
+          "id": "fix-3",
+          "text": "Increase the JWT token expiration to 7 days so that users do not need to re-authenticate during long tactical operations",
+          "correct": false,
+          "feedback": "Extending the token expiration window to 7 days worsens the vulnerability, giving the syndicate an entire week of unrestricted access to classified systems."
+        },
+        {
+          "id": "fix-4",
+          "text": "Change the symmetric signing algorithm from RS256 to HS256 and distribute the secret key to all client devices",
+          "correct": false,
+          "feedback": "Distributing shared secret keys to client devices allows any client to forge arbitrary administrator tokens, completely destroying system security."
+        }
+      ]
+    }
+  },
+  "conceptId": "jwt-revocation-blacklist",
+  "badge": {
+    "name": "Ghost Key Hunter",
+    "icon": "🗝️"
+  }
+}

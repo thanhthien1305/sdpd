@@ -198,6 +198,8 @@
   "category.storage": "Distributed Storage",
   "category.network": "Network & Communication",
   "category.advanced": "Advanced Patterns",
+  "category.coordination": "Distributed Coordination & Architecture",
+  "category.performance": "High Performance & Resiliency",
 
   "rankUp.title": "PROMOTED",
   "rankUp.subtitle": "You are now",
@@ -252,6 +254,8 @@
   "rank.sergeant": "Sergeant",
   "rank.lieutenant": "Lieutenant",
   "rank.chief": "Chief",
+  "rank.commissioner": "Commissioner",
+  "rank.inspector_general": "Inspector General",
 
   "social.github": "Star on GitHub",
   "social.linkedin": "Add me on LinkedIn",

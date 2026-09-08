@@ -1,0 +1,183 @@
+{
+  "id": "case-45",
+  "number": 45,
+  "title": "A Seca Silenciosa de Portas",
+  "subtitle": "Conexões HTTP sem pool prendem 28.000 sockets em TIME_WAIT, causando pane total",
+  "brief": {
+    "narrative": "Um alerta Amber com prioridade máxima é acionado após o sequestro de uma criança de 6 anos vista em uma van roubada. O Serviço de Notificações de Emergência da polícia começa a disparar alertas por SMS e notificações push para 200.000 moradores cadastrados a 3.000 requisições HTTP/segundo através do gateway governamental (`api.telecom.state.gov:443`). Durante os primeiros 10 segundos, o envio opera com perfeição. No entanto, aos 15 segundos, o sistema colapsa completamente. Cada nova tentativa de envio falha instantaneamente com o erro de socket do sistema operacional: `connect: cannot assign requested address (EADDRNOTAVAIL)`. O código do serviço criava uma nova instância de cliente HTTP com o cabeçalho `Connection: close` para cada mensagem individual enviada. No TCP, a 4-tupla (IP Origem, Porta Origem, IP Destino, Porta Destino) identifica um canal único. Com um destino fixo, o kernel alocou todas as ~28.232 portas efêmeras disponíveis (faixa 32768 a 60999). Ao fechar cada conexão, os sockets entraram no estado obrigatório de espera `TIME_WAIT` por 60 segundos, esgotando todas as portas locais de saída e paralisando o alerta de emergência.",
+    "symptoms": [
+      "Envio de alertas de emergência caiu abruptamente 15 segundos após início do disparo em alta velocidade",
+      "Logs de erro inundados com mensagens `EADDRNOTAVAIL: Cannot assign requested address`",
+      "Métrica de sockets do sistema operacional indicou 28.232 conexões presas em TIME_WAIT",
+      "Uso de banda de rede e carga de CPU caíram para menos de 5% durante a interrupção"
+    ],
+    "objective": "Diagnosticar o esgotamento de portas efêmeras causado por sockets de vida curta em TIME_WAIT e implementar pool de conexões HTTP Keep-Alive com reuso de portas no kernel."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "alert-service",
+        "type": "server",
+        "label": "Serviço de Alertas de Emergência",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó de Disparo de Alertas",
+          "logs": [
+            "[10:00:01] INFO: Enviando Alerta Amber #809 para 200.000 moradores",
+            "[10:00:10] INFO: 30.000 mensagens enviadas com sucesso (média 3.000 req/s)",
+            "[10:00:14] WARN: Latência na alocação de portas de saída aumentando",
+            "[10:00:15] CRITICAL: Falha em connect(): EADDRNOTAVAIL (Endereço solicitado indisponível)",
+            "[10:00:16] ERROR: Fluxo de envio paralisado (0 mensagens transmitidas)"
+          ],
+          "data": {
+            "Modo do Cliente HTTP": "Novo cliente a cada requisição (Connection: close)",
+            "Pool de Conexões": "DESATIVADO",
+            "Destino": "api.telecom.state.gov:443 (IP/Porta Únicos)"
+          },
+          "status": "A aplicação não consegue abrir sockets de saída por falta de portas livres no sistema operacional."
+        }
+      },
+      {
+        "id": "os-network-stack",
+        "type": "server",
+        "label": "Pilha de Rede do Kernel",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Subsistema TCP do Kernel Linux",
+          "logs": [
+            "[10:00:01] NET: Alocando portas efêmeras locais da faixa [32768 - 60999]",
+            "[10:00:10] NET: 20.000 sockets encerrados -> entrando em TIME_WAIT (timeout: 60s)",
+            "[10:00:14] WARN: Portas efêmeras livres restantes: 412",
+            "[10:00:15] CRITICAL: Faixa de portas efêmeras esgotada (28.232 sockets em TIME_WAIT)",
+            "[10:00:15] KERNEL: Retornando EADDRNOTAVAIL para o processo de envio"
+          ],
+          "data": {
+            "Faixa Efêmera": "32768 - 60999 (28.232 portas no total)",
+            "Sockets em TIME_WAIT": "28.232 (100% de saturação)",
+            "Tempo de TIME_WAIT": "60 segundos (2 * MSL)",
+            "tcp_tw_reuse": "0 (Desativado)"
+          },
+          "status": "Todas as portas de saída locais estão presas no estado TIME_WAIT por 60 segundos."
+        }
+      },
+      {
+        "id": "telecom-gateway",
+        "type": "server",
+        "label": "Gateway de SMS Governamental",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Gateway Estadual (api.telecom.state.gov)",
+          "logs": [
+            "[10:00:10] INFO: Processando 3.000 req/s normalmente",
+            "[10:00:15] WARN: Tráfego de entrada caiu repentinamente para 0 req/s",
+            "[10:00:16] INFO: Gateway operando normalmente, carga de CPU em 0%, pronto para receber"
+          ],
+          "data": {
+            "Estado do Gateway": "TOTALMENTE SAUDÁVEL",
+            "Protocolos Suportados": "HTTP/1.1 (Keep-Alive), HTTP/2",
+            "IP do Gateway": "198.51.100.45:443"
+          },
+          "status": "O gateway externo está saudável; parou de receber tráfego porque o cliente não consegue discar."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-svc-kernel",
+        "source": "alert-service",
+        "target": "os-network-stack",
+        "label": "socket() [EADDRNOTAVAIL]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-kernel-gw",
+        "source": "os-network-stack",
+        "target": "telecom-gateway",
+        "label": "TCP de saída [PARALISADO]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz do erro de socket `EADDRNOTAVAIL` que paralisou a transmissão do alerta de emergência?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Esgotamento de portas efêmeras por conexões curtas sem Keep-Alive: abrir um novo socket TCP para cada requisição consumiu todas as ~28.000 portas de origem do sistema, prendendo-as em TIME_WAIT por 60 segundos",
+          "correct": true,
+          "feedback": "Correto! Uma conexão TCP é definida pela 4-tupla: (IP Origem, Porta Origem, IP Destino, Porta Destino). Quando a aplicação envia para um único IP/Porta de destino sem reutilização (`Connection: close`), cada chamada gasta uma porta de origem temporária (porta efêmera) do kernel (faixa 32768–60999, cerca de 28.000 portas). Conforme o padrão RFC 793, ao fechar a conexão o socket precisa permanecer em `TIME_WAIT` por 2*MSL (60s) para descartar pacotes residuais. A 3.000 req/s, todas as 28.000 portas se esgotaram em menos de 10 segundos, fazendo qualquer chamada seguinte falhar com `EADDRNOTAVAIL`."
+        },
+        {
+          "id": "rc-2",
+          "text": "O firewall do gateway governamental detectou um ataque de negação de serviço (DDoS) e bloqueou o IP da polícia",
+          "correct": false,
+          "feedback": "Os logs do gateway confirmam que ele nunca bloqueou o IP; o tráfego apenas parou de chegar. Além disso, `EADDRNOTAVAIL` é um erro emitido pelo sistema operacional local antes de qualquer pacote sair da placa de rede."
+        },
+        {
+          "id": "rc-3",
+          "text": "O serviço de alertas esgotou o limite de descritores de arquivos abertos (FD) por reter arquivos no disco local",
+          "correct": false,
+          "feedback": "Se os descritores de arquivos estivessem esgotados, o erro retornado seria `EMFILE: Too many open files`. O erro registrado foi expressamente `EADDRNOTAVAIL`, apontando a falta de portas no subsistema de rede."
+        },
+        {
+          "id": "rc-4",
+          "text": "O certificado SSL do gateway expirou, fazendo com que a negociação de TLS fosse abortada de imediato",
+          "correct": false,
+          "feedback": "Falhas de certificado emitem códigos como `CERT_HAS_EXPIRED` durante a negociação TLS, e não erros de alocação de socket TCP no sistema operacional."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como o serviço de envio e o sistema operacional devem ser configurados para sustentar alta vazão de mensagens sem esgotar portas?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Ativar HTTP Keep-Alive com pool persistente de conexões para reaproveitar sockets TCP entre requisições, atualizar para multiplexação com HTTP/2 e habilitar `tcp_tw_reuse` no kernel",
+          "correct": true,
+          "feedback": "Correto! Habilitar HTTP Keep-Alive com um pool de conexões (mantendo de 200 a 500 canais TCP abertos) permite que centenas de milhares de requisições transitem pelos mesmos sockets sem recriá-los continuamente. A migração para HTTP/2 permite multiplexar fluxos concorrentes em poucos canais. Por fim, configurar `net.ipv4.tcp_tw_reuse = 1` no kernel permite reaproveitar com segurança portas presas em `TIME_WAIT` para conexões de saída."
+        },
+        {
+          "id": "fix-2",
+          "text": "Reescrever o serviço de alertas para usar datagramas UDP sem verificação de erros ou confirmação de entrega",
+          "correct": false,
+          "feedback": "O gateway externo expõe uma API REST sobre HTTPS. O envio unilateral de pacotes UDP para uma porta HTTPS falhará de imediato, pois o destino exige uma negociação TLS sobre TCP."
+        },
+        {
+          "id": "fix-3",
+          "text": "Reduzir o envio para no máximo 50 mensagens por segundo para que os sockets saiam naturalmente do estado TIME_WAIT",
+          "correct": false,
+          "feedback": "Limitar a taxa a 50 mensagens/s faria a notificação dos 200.000 cidadãos demorar mais de uma hora, inviabilizando o resgate da criança sequestrada."
+        },
+        {
+          "id": "fix-4",
+          "text": "Reiniciar a máquina do servidor a cada 15 segundos para forçar a limpeza da tabela de conexões do kernel",
+          "correct": false,
+          "feedback": "Reiniciar o servidor a cada 15 segundos causaria indisponibilidade contínua e não corrige a deficiência arquitetural de abrir conexões sem pool."
+        }
+      ]
+    }
+  },
+  "conceptId": "ephemeral-port-exhaustion",
+  "badge": {
+    "name": "Libertador de Sockets",
+    "icon": "🔌"
+  }
+}

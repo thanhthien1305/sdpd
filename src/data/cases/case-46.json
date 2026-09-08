@@ -1,0 +1,182 @@
+{
+  "id": "case-46",
+  "number": 46,
+  "title": "The Transatlantic Divergence",
+  "subtitle": "Concurrent multi-leader writes across London and New York datacenters cause irreconcilable data loss",
+  "brief": {
+    "narrative": "Interpol and SDPD operate an active-active multi-leader distributed database synchronized across two global datacenters: New York (`us-east`) and London (`eu-west`). Each regional datacenter accepts local writes to provide sub-millisecond response times for local detectives. At 14:00:00.000 UTC, an SDPD detective in New York interrogates Suspect #8812, verifies an alibi, and updates their threat level to `CLEARED_OF_SUSPICION`. Exactly 40 milliseconds later, at 14:00:00.040 UTC, an Interpol agent at Heathrow Airport in London identifies the same suspect boarding a private jet with automatic weapons and flags the profile as `ARMED_AND_DANGEROUS`. Because transoceanic replication takes 75ms of network fiber transit, both regions accepted conflicting writes concurrently. To resolve conflicts, the cluster uses naive Last-Write-Wins (LWW) based on NTP physical wall clocks. However, London's server clock suffered a -120ms NTP drift, stamping the London write with 13:59:59.920. When London's replication payload arrived in New York, the server compared timestamps (`14:00:00.000 > 13:59:59.920`), decided New York was 'newer', and silently discarded London's armed warning. Tactical units in New York stand down, leaving a heavily armed felon completely unmonitored.",
+    "symptoms": [
+      "Critical armed fugitive status update submitted in London was silently overwritten and deleted in New York",
+      "Replication conflict resolution logs show London write rejected with `LWW_TIMESTAMP_STALE`",
+      "Auditing server hardware reveals a -120ms NTP synchronization drift between European and US clusters",
+      "Field teams in London and New York observe conflicting criminal profile data for hours"
+    ],
+    "objective": "Diagnose silent data destruction caused by physical clock Last-Write-Wins in multi-leader replication, and implement Geo-Pinning (Home Region) and Vector Clocks to preserve causal conflict integrity."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dc-london",
+        "type": "database",
+        "label": "London DC (eu-west Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "London Leader Node (eu-west)",
+          "logs": [
+            "[Real: 14:00:00.040 | Clock: 13:59:59.920] WRITE: UPDATE suspect #8812 SET status = 'ARMED_AND_DANGEROUS'",
+            "[13:59:59.920] INFO: Local commit SUCCESS — status updated in London database",
+            "[13:59:59.925] INFO: Transmitting async replication packet to New York DC via transatlantic fiber",
+            "[14:00:00.115] WARN: New York replication packet received setting status to 'CLEARED_OF_SUSPICION'"
+          ],
+          "data": {
+            "Region": "eu-west (London)",
+            "Local Status": "ARMED_AND_DANGEROUS",
+            "Hardware Clock Skew": "-120ms (NTP sync degraded)"
+          },
+          "status": "Accepted local write, but tagged it with a drifted backward physical timestamp."
+        }
+      },
+      {
+        "id": "dc-newyork",
+        "type": "database",
+        "label": "New York DC (us-east Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "New York Leader Node (us-east)",
+          "logs": [
+            "[14:00:00.000] WRITE: UPDATE suspect #8812 SET status = 'CLEARED_OF_SUSPICION'",
+            "[14:00:00.001] INFO: Local commit SUCCESS in New York database",
+            "[14:00:00.100] REPL: Inbound replication packet received from London (Timestamp: 13:59:59.920)",
+            "[14:00:00.101] WARN: Concurrent write conflict detected on Suspect #8812",
+            "[14:00:00.102] ERROR: Resolving via LWW: 14:00:00.000 > 13:59:59.920 -> London write discarded!"
+          ],
+          "data": {
+            "Region": "us-east (New York)",
+            "Local Status": "CLEARED_OF_SUSPICION",
+            "Conflict Resolution": "Last-Write-Wins (Physical NTP Timestamp)"
+          },
+          "status": "Silently destroyed London's urgent armed warning due to client clock comparison."
+        }
+      },
+      {
+        "id": "conflict-resolver",
+        "type": "server",
+        "label": "Multi-Leader Replication Bus",
+        "status": "failed",
+        "position": {
+          "x": 420,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cross-Region Replication Link",
+          "logs": [
+            "[14:00:00.000] Cross-Atlantic round-trip latency: 75ms",
+            "[14:00:00.040] London and New York writes executed independently before replication arrived",
+            "[14:00:00.102] CRITICAL: Conflict resolution discarded London update without operator alert",
+            "[14:00:00.105] ERROR: Datacenters in divergent state: London shows ARMED, NY shows CLEARED"
+          ],
+          "data": {
+            "Topology": "Multi-Leader Active-Active",
+            "Conflict Avoidance": "NONE (Both DCs accept writes to any entity)",
+            "Data Divergence": "ACTIVE (London and NY inconsistent)"
+          },
+          "status": "Multi-leader replication engine silently lost data due to clock-based LWW."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-lon-bus",
+        "source": "dc-london",
+        "target": "conflict-resolver",
+        "label": "replicate [ts: 13:59:59.920]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-ny-bus",
+        "source": "dc-newyork",
+        "target": "conflict-resolver",
+        "label": "replicate [ts: 14:00:00.000]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the architectural root cause of London's critical armed threat warning being deleted?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Multi-leader concurrent write conflict resolved with naive Last-Write-Wins (LWW) relying on unsynchronized physical clocks: physical NTP clock drift caused a truly newer write in London to be falsely judged as older and silently dropped",
+          "correct": true,
+          "feedback": "Correct! In active-active multi-leader replication, allowing multiple datacenters to concurrently accept writes to the same entity guarantees write conflicts. Relying on physical wall-clock timestamps (Last-Write-Wins) is notoriously dangerous in distributed systems because physical quartz clocks drift, NTP adjustments are imprecise, and leap seconds introduce non-monotonic time. Because London's clock was 120ms behind, its update—though occurring 40ms later in real physical time—carried a lower timestamp and was silently discarded."
+        },
+        {
+          "id": "rc-2",
+          "text": "The undersea transatlantic fiber-optic cable was severed by an anchor drag, dropping 100% of replication packets",
+          "correct": false,
+          "feedback": "The replication link was fully operational with 75ms latency. New York did receive London's packet at 14:00:00.100; the server software received it and intentionally discarded it due to the flawed LWW timestamp check."
+        },
+        {
+          "id": "rc-3",
+          "text": "London's database was running a relational schema while New York was running a schemaless document store",
+          "correct": false,
+          "feedback": "Both clusters run identical database software and schemas. The breakdown is strictly in multi-leader distributed conflict resolution."
+        },
+        {
+          "id": "rc-4",
+          "text": "A SQL injection vulnerability on the London terminal set the suspect status to a NULL byte",
+          "correct": false,
+          "feedback": "London's audit log shows a valid parameterized update: `status = 'ARMED_AND_DANGEROUS'`. The write was correctly executed locally and sent over the wire."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the global multi-datacenter architecture be redesigned to eliminate concurrent write conflicts and prevent silent data loss?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement Conflict Avoidance via Geo-Pinning (Home Region / Master-per-Entity): pin all write operations for a specific suspect or case to a designated home datacenter, combined with Vector Clocks to preserve causal ordering for cross-region updates",
+          "correct": true,
+          "feedback": "Correct! The most robust architecture for multi-region systems is Conflict Avoidance: route all writes for a given entity (e.g., suspect ID or case number) to a single designated 'Home Region' (e.g., via global consistent routing or user location pinning). This transforms cross-region writes into deterministic single-leader streams. Where concurrent multi-region updates must be permitted, replace physical wall clocks with Vector Clocks or Conflict-Free Replicated Data Types (CRDTs) to capture causal relationships and preserve conflicting versions for explicit review rather than silently dropping data."
+        },
+        {
+          "id": "fix-2",
+          "text": "Enforce synchronous distributed Two-Phase Commit (2PC) with distributed global row locks across the Atlantic Ocean for every single database write",
+          "correct": false,
+          "feedback": "Synchronous 2PC across the Atlantic requires multiple sequential round-trips (> 200ms latency) and paralyzes the entire global database whenever either datacenter experiences network maintenance or temporary latency spikes."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configure NTP servers to synchronize physical time once every millisecond via cellular 4G towers",
+          "correct": false,
+          "feedback": "NTP over wireless networks cannot guarantee sub-millisecond precision due to unpredictable radio jitter. Physical clocks in distributed systems can never be fully synchronized to resolve concurrent events safely."
+        },
+        {
+          "id": "fix-4",
+          "text": "Permanently shut down the London datacenter and force all European police agencies to query New York over the public internet",
+          "correct": false,
+          "feedback": "Centralizing in New York forces high transoceanic latency on European law enforcement and violates European data sovereignty and residency regulations."
+        }
+      ]
+    }
+  },
+  "conceptId": "multi-leader-conflicts",
+  "badge": {
+    "name": "Meridian Arbiter",
+    "icon": "🌐"
+  }
+}

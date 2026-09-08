@@ -1,0 +1,222 @@
+{
+  "id": "case-38",
+  "number": 38,
+  "title": "Hồ Sơ Dịch Chuyển",
+  "subtitle": "Nhân bản bất đồng bộ liên vùng khiến người dùng thấy dữ liệu cũ ngay sau khi vừa lưu",
+  "brief": {
+    "narrative": "Để giảm độ trễ đọc dữ liệu cho lực lượng cảnh sát trải dài hai bờ đại dương, sở SDPD triển khai mô hình cơ sở dữ liệu đa vùng (Multi-region): Vùng Bờ Đông (US-East) đặt cụm PostgreSQL chính chuyên xử lý các lệnh đọc/ghi, trong khi Vùng Bờ Tây (US-West) đặt cụm bản sao Read Replica bất đồng bộ. Hệ thống Geo-DNS tự động định tuyến các yêu cầu đọc tới khu vực địa lý gần người dùng nhất. Thám tử Vance tại đồn Los Angeles vừa tạo một lệnh bắt khẩn cấp (mã W-991) đối với một đối tượng nguy hiểm đang chuẩn bị lên máy bay tẩu thoát. Lệnh ghi được gửi xuyên nước Mỹ về cụm chính US-East và commit thành công vào đĩa sau 120ms lúc 11:00:00.100. Giao diện web ngay lập tức chuyển hướng trình duyệt của Vance sang đường dẫn xem chi tiết `/warrants/W-991`. Do Vance ở California, Geo-DNS tự động điều hướng request đọc này tới cụm bản sao US-West gần nhất. Tuy nhiên, sự cố nghẽn cáp quang liên vùng đang khiến độ trễ nhân bản của US-West tăng đột biến lên 850ms. Đúng 11:00:00.250, cụm US-West vẫn chưa nhận và chưa phát lại bản ghi W-991. Bản sao trả về lỗi '404 NOT FOUND: Không tìm thấy hồ sơ'. Tưởng rằng hệ thống bị lỗi làm mất hồ sơ, Vance hoảng hốt bấm lưu liên tiếp 5 lần nữa, tạo ra 5 lệnh bắt trùng lặp với các mã số khác nhau khiến tòa án bối rối.",
+    "symptoms": [
+      "Thám tử báo cáo: 'Tôi vừa bấm Lưu thành công, màn hình lập tức nhảy sang trang báo lỗi 404 Không Tìm Thấy!'",
+      "Số lượng lệnh bắt bị tạo trùng lặp tăng vọt 350% tại các đồn cảnh sát khu vực Bờ Tây",
+      "Database chính US-East xác nhận lệnh bắt W-991 đã commit thành công lúc 11:00:00.100",
+      "Chỉ số độ trễ nhân bản (replication lag) của bản sao US-West vọt từ 50ms lên 850ms do nghẽn mạng liên bang"
+    ],
+    "objective": "Chẩn đoán nguyên nhân vi phạm tính nhất quán đọc-sau-khi-ghi do độ trễ nhân bản bất đồng bộ, và áp dụng cơ chế nhất quán đọc đơn điệu để người dùng luôn thấy cập nhật của chính mình."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "det-vance",
+        "type": "client",
+        "label": "Thám Tử Vance (Đồn Los Angeles)",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Trạm Thám Tử Vance (Bờ Tây)",
+          "logs": [
+            "[11:00:00.000] INFO: Gửi POST /api/warrants -> tạo lệnh bắt đối tượng W-991",
+            "[11:00:00.120] INFO: POST phản hồi HTTP 201 Created (Chuyển hướng: /warrants/W-991)",
+            "[11:00:00.250] ERROR: GET /warrants/W-991 phản hồi HTTP 404 Not Found!",
+            "[11:00:00.500] WARN: Người dùng hoảng hốt bấm 'Lưu' liên tiếp 5 lần"
+          ],
+          "data": {
+            "Vị Trí Client": "Los Angeles, CA (Bờ Tây nước Mỹ)",
+            "Hiện Tượng Nhìn Thấy": "Lưu thành công nhưng xem lại thì biến mất",
+            "Hồ Sơ Bị Trùng": "5 bản ghi lệnh bắt trùng lặp được sinh ra"
+          },
+          "status": "Gặp hiện tượng bất nhất: nhận mã 201 Thành Công rồi ngay lập tức nhận 404 Không Thấy."
+        }
+      },
+      {
+        "id": "geo-dns",
+        "type": "server",
+        "label": "Định Tuyến Địa Lý Geo-DNS",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Bộ Định Tuyến Lưu Lượng Toàn Cầu",
+          "logs": [
+            "[11:00:00.010] INFO: Điều hướng lệnh ghi POST /warrants về Database Chính US-East",
+            "[11:00:00.240] INFO: Điều hướng lệnh đọc GET /warrants/W-991 về vùng gần nhất: Bản Sao US-West",
+            "[11:00:00.245] INFO: Nhận biết phiên (Session awareness): KHÔNG CÓ (định tuyến mù)"
+          ],
+          "data": {
+            "Định Tuyến Ghi": "Luôn gửi về US-East Primary",
+            "Định Tuyến Đọc": "Vùng Gần Nhất (US-West cho Vance)",
+            "Ghim Phiên Đọc-Sau-Ghi": "ĐANG TẮT"
+          },
+          "status": "Tự động gửi lệnh đọc tới bản sao cục bộ đang bị trễ mà không hay biết phiên làm việc."
+        }
+      },
+      {
+        "id": "primary-east",
+        "type": "database",
+        "label": "PostgreSQL Chính (US-East)",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cơ Sở Dữ Liệu Chính (Virginia)",
+          "logs": [
+            "[11:00:00.100] INFO: INSERT INTO warrants (id, suspect) VALUES ('W-991', 'Vance') -> ĐÃ COMMIT",
+            "[11:00:00.105] INFO: Chuỗi nhật ký WAL LSN 0/14A9820 đã được sinh ra",
+            "[11:00:00.110] INFO: Bắt đầu truyền luồng WAL bất đồng bộ sang bản sao US-West"
+          ],
+          "data": {
+            "Khu Vực": "US-East (Virginia)",
+            "Mã LSN Hiện Tại": "0/14A9820",
+            "Trạng Thái Lệnh W-991": "TỒN TẠI & ĐÃ COMMIT XUỐNG ĐĨA"
+          },
+          "status": "Cụm chính đã ghi bền vững lệnh W-991 xuống đĩa lúc 11:00:00.100."
+        }
+      },
+      {
+        "id": "replica-west",
+        "type": "database",
+        "label": "Bản Sao Đọc (US-West)",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Read Replica (Oregon)",
+          "logs": [
+            "[11:00:00.200] WARN: Tăng đột biến độ trễ cáp quang liên vùng (RTT: 180ms)",
+            "[11:00:00.245] INFO: Nhận câu truy vấn: SELECT * FROM warrants WHERE id = 'W-991'",
+            "[11:00:00.250] WARN: Không tìm thấy dòng (LSN hiện tại là 0/14A8100 — đang trễ so với cụm chính)",
+            "[11:00:00.950] INFO: Đã nhận và phát lại WAL LSN 0/14A9820 — W-991 đã xuất hiện (trễ 850ms)"
+          ],
+          "data": {
+            "Khu Vực": "US-West (Oregon)",
+            "Chế Độ Nhân Bản": "Bất Đồng Bộ (Async Streaming)",
+            "Độ Trễ Hiện Tại": "850ms (bình thường: 40ms)",
+            "LSN Lúc 11:00:00.250": "0/14A8100 (Cũ hơn lệnh ghi)"
+          },
+          "status": "Bị trễ 850ms. Trả lời câu truy vấn trước khi kịp phát lại giao dịch ghi của cụm chính."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-vance-router",
+        "source": "det-vance",
+        "target": "geo-dns",
+        "label": "POST rồi GET",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-east",
+        "source": "geo-dns",
+        "target": "primary-east",
+        "label": "ghi POST (commit lúc .100)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-west",
+        "source": "geo-dns",
+        "target": "replica-west",
+        "label": "đọc GET lúc .250 (404 KHÔNG THẤY)",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-east-west",
+        "source": "primary-east",
+        "target": "replica-west",
+        "label": "nhân bản async (trễ 850ms)",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao thám tử Vance lại nhận mã lỗi 404 ngay sau khi vừa tạo thành công lệnh bắt W-991?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Thiếu Tính Nhất Quán Đọc-Sau-Khi-Ghi (Read-Your-Own-Writes): Geo-DNS đã điều hướng yêu cầu đọc ngay sau đó về một bản sao bất đồng bộ đang bị trễ và chưa kịp phát lại giao dịch ghi từ cụm chính",
+          "correct": true,
+          "feedback": "Chính xác! Đây là sự vi phạm mô hình nhất quán Đọc-Sau-Khi-Ghi (Read-Your-Own-Writes hay Read-After-Write Consistency). Trong mô hình nhân bản bất đồng bộ, luôn tồn tại một khoảng trễ nhân bản (Replication Lag) giữa cụm chính và các bản sao. Khi người dùng gửi lệnh ghi, dữ liệu đã lưu an toàn trên cụm chính; nhưng nếu lệnh đọc ngay sau đó bị đẩy về một bản sao đang bị trễ 850ms, bản sao đó chưa hề có dữ liệu và trả về lỗi 404 giả tạo hoặc dữ liệu lỗi thời."
+        },
+        {
+          "id": "rc-2",
+          "text": "Database chính US-East bị sập nguồn đột ngột ngay sau khi vừa ghi lệnh bắt W-991",
+          "correct": false,
+          "feedback": "Cụm chính US-East hoạt động hoàn toàn bình thường và đã commit lệnh W-991 an toàn lúc 11:00:00.100. Dữ liệu chưa từng bị mất trên cụm chính; chỉ đơn giản là nó chưa kịp bay qua mạng cáp quang tới bản sao."
+        },
+        {
+          "id": "rc-3",
+          "text": "Bộ nhớ đệm của trình duyệt thám tử Vance lưu giữ mã phản hồi HTTP 304 từ phiên tìm kiếm trước đó",
+          "correct": false,
+          "feedback": "Lệnh bắt W-991 là một bản ghi hoàn toàn mới vừa sinh ra. Trình duyệt chưa từng lưu bộ đệm nào về nó; phản hồi 404 đến trực tiếp từ cơ sở dữ liệu bản sao US-West."
+        },
+        {
+          "id": "rc-4",
+          "text": "Nhật ký ghi trước WAL của PostgreSQL trên cụm chính bị lỗi hỏng đĩa khiến lệnh ghi bị khôi phục lại (rollback)",
+          "correct": false,
+          "feedback": "Nhật ký WAL hoàn toàn nguyên vẹn. Bản sao US-West đã phát lại thành công LSN 0/14A9820 và cập nhật lệnh W-991 lúc 11:00:00.950, chính xác 850ms sau lệnh ghi."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần nâng cấp kiến trúc ứng dụng như thế nào để đảm bảo người dùng luôn luôn nhìn thấy các bản cập nhật do chính mình vừa thực hiện?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai tính nhất quán Đọc-Sau-Khi-Ghi (Read-Your-Own-Writes) bằng cách lưu mốc thời gian ghi hoặc mã LSN trong Session Token, và ghim các yêu cầu đọc của chính người dùng đó về Database chính trong N giây sau khi ghi",
+          "correct": true,
+          "feedback": "Chính xác! Tính nhất quán Đọc-Sau-Khi-Ghi (RYOW) đảm bảo một tác nhân luôn nhìn thấy các sửa đổi của chính họ. Giải pháp tiêu chuẩn là kẹp một Session Token (hoặc cookie) chứa mốc thời gian ghi hoặc mã số LSN vừa commit. Trong khoảng 3–5 giây kế tiếp (hoặc cho đến khi bản sao địa phương bắt kịp LSN ghi), tầng định tuyến sẽ ghim (pin) các yêu cầu đọc của người dùng đó trực tiếp về Database chính. Các người dùng khác không sửa dữ liệu vẫn tiếp tục đọc từ bản sao địa phương với độ trễ cực thấp."
+        },
+        {
+          "id": "fix-2",
+          "text": "Xóa bỏ hoàn toàn tất cả các bản sao Read Replica và bắt buộc 100% lưu lượng đọc toàn cầu phải đi xuyên lục địa về cụm chính US-East",
+          "correct": false,
+          "feedback": "Xóa bỏ các bản sao sẽ làm mất hoàn toàn khả năng mở rộng thông lượng đọc theo chiều ngang và bắt buộc mọi cảnh sát Bờ Tây phải chịu độ trễ mạng xuyên lục địa 180ms cho mỗi cú click chuột, khiến ứng dụng trở nên chậm chạp không thể chấp nhận."
+        },
+        {
+          "id": "fix-3",
+          "text": "Thêm lệnh tạm dừng 5 giây (`setTimeout`) trên giao diện người dùng trước khi thực hiện chuyển hướng sang trang chi tiết lệnh bắt",
+          "correct": false,
+          "feedback": "Bắt người dùng đứng đợi nhân tạo trên giao diện mang lại trải nghiệm rất tệ, và không giải quyết được tính đúng đắn: khi mạng nghẽn nặng, độ trễ nhân bản hoàn toàn có thể vượt quá 5 giây."
+        },
+        {
+          "id": "fix-4",
+          "text": "Bật chế độ nhân bản đồng bộ (Synchronous Replication) xuyên lục địa để lệnh ghi chỉ commit sau khi bản sao US-West xác nhận",
+          "correct": false,
+          "feedback": "Nhân bản đồng bộ qua mạng diện rộng (WAN) làm suy giảm nghiêm trọng tính sẵn sàng và tốc độ ghi. Nếu đường cáp quang xuyên lục địa bị đứt, toàn bộ thao tác ghi của sở cảnh sát toàn thành phố sẽ bị đóng băng hoàn toàn."
+        }
+      ]
+    }
+  },
+  "conceptId": "read-your-own-writes",
+  "badge": {
+    "name": "Thanh Tra Lượng Tử",
+    "icon": "🌐"
+  }
+}

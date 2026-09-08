@@ -1,0 +1,182 @@
+{
+  "id": "case-44",
+  "number": 44,
+  "title": "Chiếc Thẻ Huy Hiệu Bị Đánh Cắp",
+  "subtitle": "Token JWT phi trạng thái vẫn có hiệu lực sau khi tài khoản bị khóa, làm rò rỉ hồ sơ mật",
+  "brief": {
+    "narrative": "Thanh Tra Nội Vụ phát hiện máy tính xách tay và token xác thực của Thám tử Vance đã bị một tổ chức tội phạm có vũ trang đánh cắp trong một chiến dịch ngầm. Vào lúc 14:00:00, Giám đốc An ninh lập tức đình chỉ tài khoản của Vance tại Nhà Cung Cấp Danh Tính Trung Tâm (IdP) và cập nhật trạng thái `STATUS = REVOKED`. Tuy nhiên, đến 14:25:00, nhật ký truy cập hệ thống phát hiện chiếc máy tính bị đánh cắp đã tải xuống thành công 48 bộ hồ sơ mật về các đặc tình ngầm từ Vi Dịch Vụ Kho Chứng Cứ (Evidence Vault Microservice). Do hệ thống áp dụng kiến trúc token JWT phi trạng thái với thời hạn lên tới 12 tiếng (`exp`), các vi dịch vụ phía sau chỉ xác thực tính hợp lệ bằng cách kiểm tra chữ ký số RS256 bằng khóa công khai (public key) lưu trong bộ đệm nội bộ. Các vi dịch vụ hoàn toàn không gọi sang IdP, do đó không hề biết tài khoản của sĩ quan này đã bị khóa khẩn cấp. Băng nhóm tội phạm tiếp tục khai thác các bí mật quốc gia bằng một chiếc huy hiệu đã bị thu hồi.",
+    "symptoms": [
+      "Tài khoản thám tử bị đình chỉ vẫn tiếp tục truy cập thành công vào các vi dịch vụ bảo mật sau 25 phút khóa tài khoản",
+      "Nhật ký Kho Chứng Cứ trả về HTTP 200 OK cho các yêu cầu sử dụng token JWT bị đánh cắp của Vance",
+      "Hệ thống định danh IdP xác nhận Thám tử Vance đã được gắn cờ `REVOKED` vào lúc 14:00:00",
+      "Các vi dịch vụ hạ tầng không thực hiện bất kỳ truy vấn mạng nào khi xác thực JWT để giảm thiểu độ trễ"
+    ],
+    "objective": "Chẩn đoán lỗ hổng kiến trúc trong việc thu hồi JWT phi trạng thái và triển khai mô hình token truy cập ngắn hạn kết hợp danh sách đen phân tán trong bộ nhớ RAM."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "attacker-laptop",
+        "type": "client",
+        "label": "Laptop Thám Tử Bị Đánh Cắp",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Trạm Kẻ Tấn Công Chiếm Quyền",
+          "logs": [
+            "[13:55:00] Trích xuất token JWT hợp lệ từ bộ nhớ local storage của trình duyệt",
+            "[14:00:00] NOTE: Tài khoản sĩ quan đã bị khóa bởi quản trị viên",
+            "[14:25:00] GET /vault/informants HTTP 200 OK (Authorization: Bearer eyJhbGci...)",
+            "[14:25:05] DOWNLOAD: 48 hồ sơ đặc tình bí mật đã bị tuồn ra ngoài"
+          ],
+          "data": {
+            "Thời hạn token": "Phát hành: 13:00 / Hết hạn: 01:00 (Thời hạn 12 tiếng)",
+            "Chữ ký số JWT": "RS256 HỢP LỆ",
+            "Mục tiêu tấn công": "Dịch vụ Kho Chứng Cứ (Evidence Vault)"
+          },
+          "status": "Kẻ tấn công khai thác token JWT hợp lệ về mặt toán học rất lâu sau khi tài khoản bị đình chỉ."
+        }
+      },
+      {
+        "id": "evidence-vault",
+        "type": "server",
+        "label": "Vi Dịch Vụ Kho Chứng Cứ",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Vi Dịch Vụ Lưu Trữ Hồ Sơ Mật",
+          "logs": [
+            "[14:25:00] INFO: Kiểm tra chữ ký JWT bằng public key của IdP lưu trong cache",
+            "[14:25:00] INFO: Kiểm tra chữ ký: HỢP LỆ (Khớp RS256)",
+            "[14:25:00] INFO: Kiểm tra thời hạn: current_time < exp (Còn lại: 10h 35m)",
+            "[14:25:00] WARN: Không thực hiện kiểm tra trạng thái thu hồi (Kiến trúc phi trạng thái)",
+            "[14:25:01] INFO: Xuất và gửi dữ liệu hồ sơ đặc tình cho client"
+          ],
+          "data": {
+            "Chiến lược xác thực": "JWT Phi Trạng Thái (Kiểm tra cục bộ bằng Public Key)",
+            "Kiểm tra thu hồi": "KHÔNG CÓ",
+            "Mức độ rò rỉ dữ liệu": "NGHIÊM TRỌNG (Hồ sơ đặc tình tuyệt mật)"
+          },
+          "status": "Dịch vụ xác thực chữ ký số cục bộ mà không kiểm tra xem token đã bị vô hiệu hóa hay chưa."
+        }
+      },
+      {
+        "id": "central-idp",
+        "type": "server",
+        "label": "Nhà Cung Cấp Định Danh Trung Tâm (IdP)",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Xác Thực & Cấp Quyền",
+          "logs": [
+            "[14:00:00] ADMIN: Trạng thái Thám tử Vance chuyển thành 'REVOKED'",
+            "[14:00:00] INFO: Mật khẩu bị đổi ngẫu nhiên và khóa xác thực 2 bước trong DB",
+            "[14:00:01] NOTE: Không có kênh thông báo thu hồi token đang lưu hành tới các vi dịch vụ",
+            "[14:25:00] IDLE: 0 truy vấn kiểm tra danh tính nào gửi tới từ Kho Chứng Cứ"
+          ],
+          "data": {
+            "Trạng thái Thám tử Vance": "REVOKED / ĐÃ ĐÌNH CHỈ",
+            "Token JWT còn lưu hành": "1 (Còn giá trị sử dụng trong hơn 10 tiếng)",
+            "Kênh phát sóng vô hiệu hóa": "KHÔNG CÓ"
+          },
+          "status": "Tài khoản đã bị chấm dứt trong cơ sở dữ liệu, nhưng không có cách nào thu hồi các token đã cấp."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-attacker-vault",
+        "source": "attacker-laptop",
+        "target": "evidence-vault",
+        "label": "GET /informants [200 OK]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-idp-disconnect",
+        "source": "central-idp",
+        "target": "evidence-vault",
+        "label": "không đồng bộ thu hồi",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân bảo mật cốt lõi cho phép thông tin xác thực bị đánh cắp vẫn truy cập được hệ thống sau khi đã khóa tài khoản là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Điểm mù kiến trúc của JWT phi trạng thái: các vi dịch vụ tự kiểm tra chữ ký số và dấu thời gian hết hạn cục bộ mà không tra cứu trạng thái thu hồi thời gian thực, khiến các token 12 tiếng bị đánh cắp vẫn được tin cậy hoàn toàn cho đến khi hết hạn",
+          "correct": true,
+          "feedback": "Chính xác! Các token JSON Web Token (JWT) phi trạng thái được sinh ra để tránh việc phải tra cứu cơ sở dữ liệu tập trung ở mỗi request bằng cách kiểm tra chữ ký số bằng khóa công khai. Tuy nhiên, tính chất này tạo ra một điểm mù bảo mật nghiêm trọng: một khi đã phát hành, token sẽ luôn có giá trị về mặt toán học cho đến khi chạm mốc thời gian `exp`. Các vi dịch vụ hạ tầng chỉ kiểm tra chữ ký và hạn dùng nên hoàn toàn không thể biết rằng tài khoản này đã bị khóa khẩn cấp tại máy chủ IdP vào lúc 14:00:00."
+        },
+        {
+          "id": "rc-2",
+          "text": "Khóa bí mật RSA 2048-bit của máy chủ định danh đã bị băng nhóm tội phạm bẻ khóa bằng máy tính lượng tử",
+          "correct": false,
+          "feedback": "Khóa bí mật không hề bị lộ. Kẻ tấn công không giả mạo token mới; chúng chỉ sử dụng token hợp pháp đã được cấp cho máy tính của thám tử trước khi bị đánh cắp."
+        },
+        {
+          "id": "rc-3",
+          "text": "Một lỗ hổng bảo mật Cross-Site Scripting (XSS) trên Kho Chứng Cứ đã bỏ qua hoàn toàn bước kiểm tra JWT",
+          "correct": false,
+          "feedback": "Nhật ký dịch vụ cho thấy quy trình xác thực JWT vẫn chạy bình thường và vượt qua trót lọt. Vấn đề là bản thân token đó vẫn được hệ thống chấp nhận dù đã bị thu hồi ở tầng quản trị."
+        },
+        {
+          "id": "rc-4",
+          "text": "Dịch vụ đồng bộ thời gian NTP trên Kho Chứng Cứ bị sai lệch 24 tiếng lùi về quá khứ",
+          "correct": false,
+          "feedback": "Đồng hồ hệ thống hoàn toàn đồng bộ. Thời hạn của token vốn được cấu hình là 12 tiếng, nghĩa là trong thời gian thực nó vẫn còn giá trị sử dụng trong hơn 10 tiếng nữa."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Kiến trúc xác thực cần được thiết kế lại như thế nào để cho phép vô hiệu hóa token ngay lập tức mà vẫn duy trì hiệu năng cao cho các vi dịch vụ?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai token truy cập ngắn hạn (hết hạn sau 5 phút) kết hợp xoay vòng refresh token, và phát sóng mã định danh token bị thu hồi (jti) tới danh sách đen phân tán trong bộ nhớ RAM (Redis) qua cơ chế pub/sub",
+          "correct": true,
+          "feedback": "Chính xác! Mô hình xác thực phân tán chuẩn kết hợp 2 lớp: 1) Access Token có thời hạn cực ngắn (5-15 phút) giúp thu hẹp tối đa cửa sổ rò rỉ nếu token bị lộ. 2) Đối với các tình huống khẩn cấp (mất máy, đuổi việc), IdP đẩy định danh token (`jti`) hoặc user ID vào bộ nhớ đệm phân tán tốc độ cao (như Redis kết hợp Bloom filter) qua kênh pub/sub. Các vi dịch vụ chỉ mất dưới 1 mili-giây để kiểm tra bộ nhớ đệm nội bộ và từ chối ngay lập tức các token nằm trong danh sách đen."
+        },
+        {
+          "id": "fix-2",
+          "text": "Quay trở lại mô hình session cookie nguyên khối truyền thống lưu trong một cơ sở dữ liệu SQL duy nhất và bắt buộc mọi vi dịch vụ phải truy vấn đồng bộ ở mỗi request",
+          "correct": false,
+          "feedback": "Bắt hàng chục vi dịch vụ phải truy vấn đồng bộ vào một cơ sở dữ liệu SQL duy nhất ở mỗi lệnh gọi API sẽ phá hủy hoàn toàn tính độc lập của microservice và tạo ra nút thắt cổ chai hiệu năng khổng lồ."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tăng thời hạn token JWT lên 7 ngày để người dùng không phải đăng nhập lại nhiều lần trong các chuyên án tác chiến kéo dài",
+          "correct": false,
+          "feedback": "Tăng hạn token lên 7 ngày chỉ làm trầm trọng thêm thảm họa an ninh, tạo điều kiện cho băng nhóm tội phạm có cả tuần để thoải mái lục lọi tài liệu mật."
+        },
+        {
+          "id": "fix-4",
+          "text": "Đổi thuật toán ký từ bất đối xứng RS256 sang đối xứng HS256 và phân phát khóa bí mật cho tất cả các thiết bị máy khách",
+          "correct": false,
+          "feedback": "Gửi khóa bí mật dùng chung xuống máy khách sẽ cho phép bất kỳ ai cũng có thể tự ký và mạo danh quyền quản trị viên tối cao, phá hủy toàn bộ hệ thống bảo mật."
+        }
+      ]
+    }
+  },
+  "conceptId": "jwt-revocation-blacklist",
+  "badge": {
+    "name": "Thợ Săn Chìa Khóa Ma",
+    "icon": "🗝️"
+  }
+}

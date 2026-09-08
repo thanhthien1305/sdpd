@@ -1,0 +1,184 @@
+{
+  "id": "case-47",
+  "number": 47,
+  "title": "Hố Đen Phân Trang Hàng Triệu Dòng",
+  "subtitle": "Phân trang OFFSET trang sâu buộc database quét hàng triệu dòng, làm nghẽn đĩa và cạn kiệt kết nối",
+  "brief": {
+    "narrative": "Một đoàn thanh tra tư pháp liên bang đến trụ sở cảnh sát để kiểm toán kho dữ liệu nhận dạng biển số xe tự động (ALPR) chứa tới 50.000.000 bản ghi quét xe. Cổng tra cứu pháp y hiển thị danh sách với 50 bản ghi mỗi trang. Ở Trang 1, câu truy vấn chạy siêu tốc chỉ mất 2ms. Tuy nhiên, thanh tra viên nhảy cóc thẳng tới Trang 240.000 để kiểm tra các phương tiện di chuyển từ sáu tháng trước. Ứng dụng thực thi câu lệnh SQL: `SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000`. Động cơ cơ sở dữ liệu không thể bay thẳng tới dòng thứ 12.000.000; nó buộc phải đọc và duyệt qua 12.000.050 nút chỉ mục B-tree và khối dữ liệu từ ổ đĩa, sắp xếp trong RAM, vứt bỏ 12.000.000 dòng đầu tiên và chỉ trả về 50 dòng cuối cùng. Câu truy vấn quay mòng mòng trong suốt 52 giây, đẩy I/O đĩa cứng lên mức bão hòa 100% và đá văng toàn bộ dữ liệu bộ đệm (buffer pool) ra khỏi RAM. Khi thanh tra viên bấm tiếp vài trang nữa, các truy vấn kiểm toán nặng nề chiếm giữ toàn bộ pool kết nối cơ sở dữ liệu, khiến các cuộc gọi cấp cứu 911 thời gian thực trên toàn thành phố bị nghẽn mạng và báo lỗi sập hệ thống.",
+    "symptoms": [
+      "Độ trễ truy vấn cổng thanh tra tăng vọt từ 2ms ở trang đầu lên tới 52.000ms ở các trang sâu",
+      "I/O đĩa máy chủ cơ sở dữ liệu bị bão hòa 100% do hiện tượng đọc và vứt bỏ hàng triệu dòng ($O(N)$)",
+      "Tỷ lệ trúng bộ đệm (buffer pool hit ratio) tụt dốc không phanh từ 99.4% xuống 18.2% do các đợt quét sâu quét sạch dữ liệu nóng",
+      "Pool kết nối ứng dụng cạn kiệt hoàn toàn, gây ra hàng loạt lỗi 504 Gateway Timeout cho các đội điều phối 911 trực tiếp"
+    ],
+    "objective": "Chẩn đoán sự sụp đổ hiệu năng của phân trang OFFSET trên tập dữ liệu khổng lồ và triển khai phân trang theo con trỏ Keyset (Cursor-based) để đạt tốc độ tìm kiếm chỉ mục không đổi O(1)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audit-portal",
+        "type": "client",
+        "label": "Cổng Kiểm Toán Liên Bang",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phiên Làm Việc Trình Duyệt Của Thanh Tra Viên",
+          "logs": [
+            "[11:15:00] Trang 1: GET /api/alpr?page=1 -> 2ms (HTTP 200)",
+            "[11:15:20] Trang 240000: GET /api/alpr?page=240000 -> ĐANG CHỜ PHẢN HỒI...",
+            "[11:16:12] Trang 240000: Hoàn tất sau 52.140ms (HTTP 200)",
+            "[11:16:15] Trang 240001: GET /api/alpr?page=240001 -> ĐANG CHỜ PHẢN HỒI...",
+            "[11:16:45] ERROR: HTTP 504 Gateway Timeout (Hết thời gian chờ mượn kết nối DB)"
+          ],
+          "data": {
+            "Tổng số bản ghi trong bảng": "50.000.000 dòng",
+            "Trang đang xem": "Trang 240.000 (Vị trí OFFSET: 12.000.000)",
+            "Mục tiêu SLA truy vấn": "< 100ms"
+          },
+          "status": "Thanh tra viên lật các trang sâu làm kích hoạt timeout dây chuyền trên toàn sở cảnh sát."
+        }
+      },
+      {
+        "id": "alpr-backend",
+        "type": "server",
+        "label": "Dịch Vụ API Kiểm Toán ALPR",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Xử Lý Backend ALPR",
+          "logs": [
+            "[11:15:20] TRUY VẤN DB: SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000",
+            "[11:15:45] WARN: Thời gian giữ kết nối DB: 24.000ms",
+            "[11:16:15] ERROR: Connection pool HikariCP cạn kiệt (30/30 kết nối đang bận, 142 truy vấn đang chờ)",
+            "[11:16:20] CRITICAL: Các truy vấn điều phối cấp cứu 911 bị chặn cứng phía sau truy vấn kiểm toán"
+          ],
+          "data": {
+            "Phương thức phân trang": "LIMIT 50 OFFSET N",
+            "Kết nối DB đang bận": "30 / 30 (100% bị chiếm bởi luồng kiểm toán)",
+            "Độ sâu hàng đợi": "142 truy vấn xếp hàng"
+          },
+          "status": "Toàn bộ kết nối cơ sở dữ liệu bị độc chiếm bởi các truy vấn đọc bỏ triệu dòng."
+        }
+      },
+      {
+        "id": "alpr-db",
+        "type": "database",
+        "label": "Cơ Sở Dữ Liệu ALPR (50 Triệu Dòng)",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Động Cơ PostgreSQL Lưu Trữ ALPR",
+          "logs": [
+            "[11:15:20] EXPLAIN ANALYZE: Limit (cost=342918.22..342919.65 rows=50)",
+            "[11:15:20] -> Quét chỉ mục ngược (Index Scan Backward) bằng idx_captured_at",
+            "[11:15:20] CHI TIẾT: Đọc 12.000.050 dòng; loại bỏ 12.000.000 dòng",
+            "[11:15:50] I/O Ổ ĐĨA: Hoạt động 100% công suất (Đang đọc 4.2GB khối đĩa vào RAM)",
+            "[11:16:12] BỘ ĐỆM RAM: Tỷ lệ trúng tụt xuống 18% (Đã đá văng các bảng dữ liệu điều phối 911)"
+          ],
+          "data": {
+            "Kế hoạch thực thi": "Index Scan -> Đọc 12.000.050 -> Vứt bỏ 12.000.000",
+            "Thời gian chạy": "52.118ms",
+            "Lượng dữ liệu đọc đĩa": "4.2 GB cho mỗi lượt truy vấn",
+            "Độ phức tạp tính toán": "O(OFFSET + LIMIT) = O(N)"
+          },
+          "status": "Động cơ bắt buộc phải đọc và vứt bỏ hàng triệu bản ghi từ đĩa cho mỗi lần bấm trang."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-audit-api",
+        "source": "audit-portal",
+        "target": "alpr-backend",
+        "label": "OFFSET 12M [52s]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "alpr-backend",
+        "target": "alpr-db",
+        "label": "quét 12M dòng [ĐĨA 100%]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ gây ra sự sụt giảm hiệu năng cơ sở dữ liệu nghiêm trọng và cạn kiệt connection pool ở các trang kiểm toán sâu là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Lỗi mở rộng kiến trúc của kỹ thuật phân trang OFFSET sâu: câu lệnh `OFFSET 12000000 LIMIT 50` buộc động cơ database phải duyệt, sắp xếp và vứt bỏ 12.000.000 dòng trên đĩa ($O(N)$), gây tắc nghẽn I/O đĩa cực nặng và đá văng các trang bộ nhớ đệm nóng",
+          "correct": true,
+          "feedback": "Chính xác! Mệnh đề SQL `OFFSET N` không phải là một phép nhảy con trỏ index trực tiếp; bản chất của nó là duyệt tuần tự và vứt bỏ dữ liệu. Để thực hiện `OFFSET 12.000.000 LIMIT 50`, động cơ cơ sở dữ liệu bắt buộc phải duyệt qua 12.000.050 phần tử chỉ mục, nạp hàng gigabyte khối đĩa vào RAM, vứt bỏ 12.000.000 dòng đầu tiên và chỉ giữ lại đúng 50 dòng. Chi phí này tăng tuyến tính $O(N)$ theo độ sâu của trang. Khi bảng dữ liệu có hàng chục triệu dòng, mỗi lần lật trang mất gần một phút, làm tê liệt ổ đĩa, xóa sạch cache RAM và chiếm cạn Connection Pool."
+        },
+        {
+          "id": "rc-2",
+          "text": "Bảng ALPR bị thiếu ràng buộc khóa chính (primary key), khiến cơ sở dữ liệu phải thực hiện phép kết tích Descartes (Cartesian product)",
+          "correct": false,
+          "feedback": "Bảng dữ liệu có khóa chính và có chỉ mục index trên cột `captured_at`. Vấn đề cốt lõi là cây chỉ mục B-tree không thể nhảy cóc đến một vị trí offset bất kỳ mà không phải duyệt qua toàn bộ các khóa nằm phía trước."
+        },
+        {
+          "id": "rc-3",
+          "text": "Trình duyệt của thanh tra viên đã mở 10.000 kết nối WebSocket đồng thời làm bão hòa nhóm luồng của web server",
+          "correct": false,
+          "feedback": "Thanh tra viên chỉ gửi các yêu cầu HTTP GET tuần tự thông thường qua trình duyệt. Tình trạng cạn kiệt kết nối xảy ra tại pool cơ sở dữ liệu nội bộ vì mỗi câu lệnh kiểm toán chiếm giữ một kết nối DB trong hơn 50 giây."
+        },
+        {
+          "id": "rc-4",
+          "text": "Một bộ điều khiển ổ đĩa RAID bị hỏng phần cứng khiến nó phải tính toán lại mã kiểm tra lỗi chẵn lẻ (parity checksum) trên mỗi khối lưu trữ",
+          "correct": false,
+          "feedback": "Phần cứng lưu trữ hoàn toàn khỏe mạnh. Bằng chứng là Trang 1 trả về siêu tốc chỉ trong 2ms. Độ trễ 52 giây ở trang 240.000 hoàn toàn là chi phí thuật toán $O(N)$ do việc đọc và vứt bỏ 12 triệu dòng index."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Kiến trúc phân trang hồ sơ pháp y cần được tái cấu trúc như thế nào để đạt độ trễ truy vấn không đổi O(1) bất kể độ sâu của trang?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Chuyển sang Phân Trang Theo Con Trỏ (Keyset / Cursor-based): đánh chỉ mục `(captured_at DESC, id DESC)` và tìm kiếm trực tiếp bằng giá trị của bản ghi cuối trang trước: `WHERE (captured_at, id) < (:last_time, :last_id) ORDER BY captured_at DESC, id DESC LIMIT 50`",
+          "correct": true,
+          "feedback": "Chính xác! Phân trang Keyset (hay Cursor-based) loại bỏ hoàn toàn việc dùng OFFSET. Thay vì bắt database đếm và vứt bỏ 12 triệu dòng, client gửi kèm giá trị của bản ghi cuối cùng đã xem ở trang trước làm điểm neo. Cơ sở dữ liệu sẽ thực hiện phép nhảy trực tiếp trên cây B-tree (Index Seek) đến thẳng bản ghi mục tiêu trong thời gian không đổi $O(1)$ (thường chỉ mất dưới 3ms), bất kể người dùng đang xem trang 1 hay trang 500.000. I/O đĩa giảm về gần như bằng 0 và bộ nhớ đệm RAM được bảo toàn nguyên vẹn."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng kích thước connection pool của database từ 30 lên 5.000 kết nối để các truy vấn kiểm toán chậm không chặn các luồng khác",
+          "correct": false,
+          "feedback": "Mở hàng ngàn kết nối đồng thời cùng chạy các truy vấn nghẽn đĩa 50 giây sẽ làm bùng nổ xung đột I/O và chuyển đổi ngữ cảnh CPU (context switching), khiến máy chủ database sập nguồn hoàn toàn."
+        },
+        {
+          "id": "fix-3",
+          "text": "Tải toàn bộ 50.000.000 dòng biển số xe về bộ nhớ của trình duyệt web và thực hiện phân trang bằng mảng JavaScript ở phía client",
+          "correct": false,
+          "feedback": "Tải 50 triệu dòng dữ liệu đòi hỏi truyền tải hơn 15 gigabyte JSON qua mạng, khiến trình duyệt của client bị tràn bộ nhớ và sập tab ngay lập tức."
+        },
+        {
+          "id": "fix-4",
+          "text": "Xóa toàn bộ các bản ghi quét xe cũ hơn 30 ngày để tổng số dòng trong bảng không bao giờ vượt quá 500.000",
+          "correct": false,
+          "feedback": "Xóa bằng chứng điều tra vi phạm nghiêm trọng luật lưu trữ hồ sơ của ngành tư pháp và khiến các điều tra viên không thể phá các vụ án nguội hoặc truy vết tội phạm trong quá khứ."
+        }
+      ]
+    }
+  },
+  "conceptId": "keyset-vs-offset-pagination",
+  "badge": {
+    "name": "Hải Điều Khiển Trang Sâu",
+    "icon": "⚓"
+  }
+}

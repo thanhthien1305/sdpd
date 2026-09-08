@@ -229,5 +229,103 @@
     "title": "O Rate Limiter",
     "subtitle": "Uma integração inunda o sistema, afogando todos os outros",
     "conceptId": "rate-limiting"
+  },
+  {
+    "id": "case-34",
+    "number": 34,
+    "title": "As Consultas Fantasma",
+    "subtitle": "Registros inexistentes ignoram o cache e sobrecarregam o banco de dados principal",
+    "conceptId": "cache-penetration"
+  },
+  {
+    "id": "case-35",
+    "number": 35,
+    "title": "O Líder Zumbi",
+    "subtitle": "Um líder congelado acorda de uma pausa de GC e sobrescreve o estado atual",
+    "conceptId": "fencing-tokens"
+  },
+  {
+    "id": "case-36",
+    "number": 36,
+    "title": "O Anel em Cascata",
+    "subtitle": "A queda de um nó de cache sobrecarrega seu vizinho, disparando um colapso em efeito dominó",
+    "conceptId": "consistent-hashing-vnodes"
+  },
+  {
+    "id": "case-37",
+    "number": 37,
+    "title": "O Despacho Fantasma",
+    "subtitle": "A gravação no banco é bem-sucedida mas a publicação no broker falha, dessincronizando serviços",
+    "conceptId": "transactional-outbox"
+  },
+  {
+    "id": "case-38",
+    "number": 38,
+    "title": "O Mandado Teleportado",
+    "subtitle": "A replicação assíncrona entre regiões faz usuários verem dados antigos logo após salvar",
+    "conceptId": "read-your-own-writes"
+  },
+  {
+    "id": "case-39",
+    "number": 39,
+    "title": "Os Sockets Desaparecidos",
+    "subtitle": "Exceções de código não tratadas ignoram a liberação de conexões, paralisando um banco ocioso",
+    "conceptId": "connection-pool-leaks"
+  },
+  {
+    "id": "case-40",
+    "number": 40,
+    "title": "A Contradição do Bunker",
+    "subtitle": "Anotações offline mescladas com timestamps ingênuos sobrescrevem evidências críticas",
+    "conceptId": "crdt-offline-sync"
+  },
+  {
+    "id": "case-41",
+    "number": 41,
+    "title": "O Congelamento de Escrita da Meia-Noite",
+    "subtitle": "Ingestão massiva de telemetria dispara write stalls repentinos no motor de armazenamento",
+    "conceptId": "lsm-write-stalls"
+  },
+  {
+    "id": "case-42",
+    "number": 42,
+    "title": "A Emboscada do 50º Shard",
+    "subtitle": "Consulta scatter-gather amplifica a latência de cauda p99 através de 50 partições",
+    "conceptId": "hedged-requests-tail-latency"
+  },
+  {
+    "id": "case-43",
+    "number": 43,
+    "title": "O Elefante na Fila",
+    "subtitle": "Uma transcrição de 4 horas bloqueia milhares de alertas de despacho de 30 segundos",
+    "conceptId": "head-of-line-blocking"
+  },
+  {
+    "id": "case-44",
+    "number": 44,
+    "title": "O Distintivo Comprometido",
+    "subtitle": "Tokens JWT stateless continuam válidos após revogação administrativa, vazando arquivos sigilosos",
+    "conceptId": "jwt-revocation-blacklist"
+  },
+  {
+    "id": "case-45",
+    "number": 45,
+    "title": "A Seca Silenciosa de Portas",
+    "subtitle": "Conexões HTTP sem pool prendem 28.000 sockets em TIME_WAIT, causando pane total",
+    "conceptId": "ephemeral-port-exhaustion"
+  },
+  {
+    "id": "case-46",
+    "number": 46,
+    "title": "A Divergência Transatlântica",
+    "subtitle": "Escritas concorrentes multi-leader entre Londres e Nova York causam perda irreparável de dados",
+    "conceptId": "multi-leader-conflicts"
+  },
+  {
+    "id": "case-47",
+    "number": 47,
+    "title": "A Milha Cinquenta Milhões",
+    "subtitle": "Paginação profunda com OFFSET força varredura completa de índice e colapsa o disco",
+    "conceptId": "keyset-vs-offset-pagination"
   }
 ]

@@ -1,0 +1,253 @@
+{
+  "id": "case-36",
+  "number": 36,
+  "title": "Vòng Băm Sụp Đổ",
+  "subtitle": "Một máy chủ cache gặp sự cố kéo sập máy chủ láng giềng, kích hoạt hiệu ứng domino toàn hệ thống",
+  "brief": {
+    "narrative": "Hệ thống Giám Sát Camera An Ninh Thời Gian Thực của sở SDPD lưu trữ tạm thời các khung hình camera CCTV trên một cụm cache phân tán gồm 4 node vật lý (Node A, B, C, D) sử dụng thuật toán băm nhất quán (Consistent Hashing). Mỗi máy chủ vật lý được gán vào duy nhất một điểm trên vòng tròn băm 360 độ. Đúng 09:00:00, Node B bất ngờ bị cháy bộ nguồn phần cứng và tắt lịm hoàn toàn. Theo nguyên lý băm nhất quán cơ bản không có node ảo, toàn bộ các khóa dữ liệu trước đây thuộc về Node B lập tức được chuyển hướng tới node kế tiếp theo chiều kim đồng hồ: Node C. Ngay lập tức, lưu lượng của Node C tăng vọt gấp đôi từ 15.000 req/giây lên 30.000 req/giây, và lượng RAM sử dụng tăng phi mã từ 75% lên 100%. Đến 09:00:25, tiến trình OOM killer của Linux ra tay tiêu diệt Node C. Lúc này, Node D trở thành node kế tiếp nhận trọn vẹn cả khóa của Node B lẫn Node C. Bị đè bẹp dưới tải trọng gấp 3 lần thiết kế, Node D sập nguồn lúc 09:01:00. Cuối cùng, Node A là kẻ sống sót duy nhất và cũng gục ngã sau đó 10 giây. Chỉ trong vòng 70 giây, một lỗi phần cứng đơn lẻ đã kích hoạt phản ứng dây chuyền tiêu diệt toàn bộ vòng cache, nhấn chìm hệ thống lưu trữ video cốt lõi của thành phố.",
+    "symptoms": [
+      "Node B hỏng bộ nguồn phần cứng lúc 09:00:00",
+      "Node C cạn kiệt bộ nhớ từ 75% lên 100% trong 20 giây và bị OOM-killer tiêu diệt lúc 09:00:25",
+      "Node D sập lúc 09:01:00, kéo theo Node A sập lúc 09:01:10 — 100% cụm cache tê liệt hoàn toàn",
+      "Các luồng truyền hình trực tiếp camera an ninh toàn thành phố bị đóng băng, màn hình tại trung tâm chỉ huy tối đen"
+    ],
+    "objective": "Chẩn đoán nguyên nhân tại sao sự cố của một máy chủ lại giáng đòn hủy diệt lên máy chủ láng giềng theo hiệu ứng domino, và tái thiết kế vòng băm nhất quán để chia đều tải khi có node gặp nạn."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "camera-feed",
+        "type": "client",
+        "label": "Mạng Camera An Ninh CCTV",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Luồng Dữ Liệu Camera Thành Phố",
+          "logs": [
+            "[09:00:00] INFO: Đang truyền 60.000 khung hình/s tới 4 máy chủ cache",
+            "[09:00:05] WARN: Node B offline — chuyển hướng các khóa của B sang node kế tiếp C",
+            "[09:00:25] ERROR: Node C sập — chuyển hướng toàn bộ khóa B & C sang Node D",
+            "[09:01:00] ERROR: Node D sập — 100% lưu lượng đè lên người sống sót duy nhất Node A",
+            "[09:01:15] CRITICAL: Toàn cụm cache tê liệt hoàn toàn — lỗi 503 Service Unavailable"
+          ],
+          "data": {
+            "Tổng Số Khung Hình": "60.000 khung hình/giây",
+            "Camera Đang Chạy": "8.400 camera toàn thành phố",
+            "Độ Sẵn Sàng Của Cache": "0% (tất cả các node đã chết)",
+            "Hệ Thống Màn Hình": "MẤT TÍN HIỆU"
+          },
+          "status": "Các luồng camera không thể đọc hoặc lưu khung hình vào bộ đệm."
+        }
+      },
+      {
+        "id": "cache-b",
+        "type": "server",
+        "label": "Máy Chủ Cache B",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Cache B (Vị Trí Vòng: 90°)",
+          "logs": [
+            "[08:59:59] INFO: Xử lý 15.000 req/s, RAM: 48 GB / 64 GB (75%)",
+            "[09:00:00] CRITICAL: Cháy bộ nguồn phần cứng PSU — máy chủ tắt đột ngột",
+            "[09:00:00] OFFLINE: Mất kết nối mạng hoàn toàn"
+          ],
+          "data": {
+            "Vị Trí Trên Vòng": "90° (Một Token Duy Nhất)",
+            "Số Node Ảo": "0 (Không có)",
+            "Trạng Thái": "CHẾT (Hỏng phần cứng)",
+            "Khóa Bị Mồ Côi": "15.000 req/s bị dồn hết sang Node C"
+          },
+          "status": "Cháy nguồn điện. Toàn bộ dữ liệu bị đổ dồn lên duy nhất một người hàng xóm C."
+        }
+      },
+      {
+        "id": "cache-c",
+        "type": "server",
+        "label": "Máy Chủ Cache C",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Cache C (Vị Trí Vòng: 180°)",
+          "logs": [
+            "[08:59:59] INFO: Tải cơ sở: 15.000 req/s, RAM: 48 GB (75%)",
+            "[09:00:01] WARN: Kế thừa 100% phân đoạn khóa của Node B (0°-90°)",
+            "[09:00:05] WARN: Lưu lượng tăng vọt lên 30.000 req/s (200% công suất)",
+            "[09:00:20] ERROR: RAM chạm mức 63.8 GB / 64 GB — cạn kiệt phân vùng swap",
+            "[09:00:25] CRITICAL: Out of Memory: Tiến trình 'cache-daemon' bị Kernel OOM tiêu diệt"
+          ],
+          "data": {
+            "Vị Trí Trên Vòng": "180° (Một Token Duy Nhất)",
+            "Đỉnh Lưu Lượng": "30.500 req/s (203% định mức)",
+            "Nguyên Nhân Chết": "Bị Linux OOM Killer kết liễu",
+            "Di Chúc Để Lại": "Nhận của B, dồn cả B + C sang Node D"
+          },
+          "status": "Gục ngã vì phải gánh 100% phần việc của B. Bị tràn bộ nhớ RAM."
+        }
+      },
+      {
+        "id": "cache-d",
+        "type": "server",
+        "label": "Máy Chủ Cache D",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Cache D (Vị Trí Vòng: 270°)",
+          "logs": [
+            "[09:00:25] WARN: Node C sập. Node D là node thuận chiều kim đồng hồ tiếp theo cho B và C!",
+            "[09:00:30] ERROR: Tải tăng vọt lên 45.000 req/s (300% công suất)",
+            "[09:00:55] ERROR: CPU 100%, bão hòa card mạng, rớt gói tin hàng loạt",
+            "[09:01:00] CRITICAL: Tiến trình đổ vỡ dưới áp lực bộ nhớ khổng lồ"
+          ],
+          "data": {
+            "Vị Trí Trên Vòng": "270° (Một Token Duy Nhất)",
+            "Hệ Số Tải": "Gấp 3 lần công suất danh định",
+            "Thời Điểm Chết": "09:01:00"
+          },
+          "status": "Kế thừa khóa của cả B và C. Sụp đổ tức khắc dưới tải 300%."
+        }
+      },
+      {
+        "id": "primary-video-db",
+        "type": "database",
+        "label": "Hệ Thống Lưu Trữ SAN Video Gốc",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Hạ Tầng Lưu Trữ SAN Video",
+          "logs": [
+            "[09:00:00] INFO: Băng thông đọc đĩa định mức: 2.000 IOPS",
+            "[09:01:15] CRITICAL: Toàn bộ tầng cache đã chết — 60.000 req/s đánh thẳng vào SAN",
+            "[09:01:20] ERROR: Chiều sâu hàng đợi bộ điều khiển vượt quá 10.000",
+            "[09:01:30] ERROR: Hệ thống SAN kích hoạt cơ chế bóp nghẽn bảo vệ chỉ đọc"
+          ],
+          "data": {
+            "Công Suất Tối Đa": "10.000 IOPS",
+            "Cơn Sóng Thần Đến": "60.000 IOPS",
+            "Trạng Thái": "Bị đánh gục bởi cơn bão 100% Cache Miss"
+          },
+          "status": "Bị chôn vùi bởi các truy vấn video không qua đệm sau khi vòng băm vỡ vụn."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cam-b",
+        "source": "camera-feed",
+        "target": "cache-b",
+        "label": "sập (09:00:00)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-b-c",
+        "source": "cache-b",
+        "target": "cache-c",
+        "label": "100% khóa dồn vào C",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-c-d",
+        "source": "cache-c",
+        "target": "cache-d",
+        "label": "200% khóa dồn vào D",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-cam-san",
+        "source": "camera-feed",
+        "target": "primary-video-db",
+        "label": "60.000 req/s đè bẹp SAN",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến toàn bộ 4 máy chủ cache sụp đổ dây chuyền chỉ sau sự cố phần cứng của một node duy nhất là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Băm Nhất Quán Không Có Node Ảo (Virtual Nodes): Khi một node chết, 100% không gian khóa của nó bị dồn toàn bộ lên duy nhất một máy chủ láng giềng kế tiếp, gây ra phản ứng sụp đổ domino dây chuyền",
+          "correct": true,
+          "feedback": "Chính xác! Khi mỗi máy chủ vật lý chỉ đại diện cho một điểm duy nhất trên vòng tròn băm nhất quán, sự cố sập nguồn của Node B khiến 100% các khóa của nó đổ trọn vẹn lên node kế cận theo chiều kim đồng hồ (Node C). Việc phải gánh tải gấp đôi ngay lập tức khiến Node C bị tràn RAM (OOM) và chết theo. Khi Node C chết, tải của cả B và C lại tiếp tục đè bẹp Node D (tải gấp 3). Hiệu ứng domino này đã cuốn phăng toàn bộ cụm máy chủ chỉ trong vòng 70 giây."
+        },
+        {
+          "id": "rc-2",
+          "text": "Độ phân giải khung hình của camera bị nâng từ 1080p lên 4K khiến băng thông mạng của tất cả các máy chủ cache bị bão hòa",
+          "correct": false,
+          "feedback": "Độ phân giải của camera vẫn giữ nguyên ở mức 1080p chuẩn. Vấn đề không nằm ở kích thước khung hình, mà là do sự tái phân bổ khóa dữ liệu bị lệch tâm hoàn toàn sang duy nhất một máy chủ láng giềng."
+        },
+        {
+          "id": "rc-3",
+          "text": "Các máy chủ cache bị lỗi phân não (split-brain) giữa Master và Replica khiến dữ liệu ghi bị xung đột và đóng băng toàn bộ vòng băm",
+          "correct": false,
+          "feedback": "Không hề có hiện tượng phân não nào xảy ra. Node B chết do hỏng phần cứng bộ nguồn rõ ràng, và các node còn lại lần lượt chết tuần tự do bị quá tải bộ nhớ RAM."
+        },
+        {
+          "id": "rc-4",
+          "text": "Hạ tầng lưu trữ SAN gửi các gói tin dữ liệu bị lỗi (Poison Pill) ngược lại khiến tiến trình trên các máy chủ cache bị crash",
+          "correct": false,
+          "feedback": "Hệ thống SAN hoạt động hoàn toàn ổn định cho đến khi cụm cache sập và 60.000 truy vấn mỗi giây đánh thẳng vào nó. SAN là nạn nhân của sự cố chứ không phải nguyên nhân gây sập."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần cấu trúc lại vòng băm nhất quán như thế nào để ngăn chặn triệt để hiện tượng quá tải lây lan sang máy chủ láng giềng?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai Node Ảo (Virtual Nodes / Vnodes): gán cho mỗi máy chủ vật lý hàng trăm điểm ảo phân bổ rải rác trên khắp vòng băm, giúp phân tán đều các khóa của node bị hỏng cho tất cả các node còn lại",
+          "correct": true,
+          "feedback": "Chính xác! Node ảo (Vnodes) là giải pháp tiêu chuẩn được sử dụng bởi Amazon Dynamo, Apache Cassandra và các cụm cache hiện đại. Bằng cách gán cho mỗi máy vật lý từ 150 đến 250 vị trí ảo nằm xen kẽ trên vòng băm, không gian khóa của bất kỳ máy chủ nào cũng được lồng ghép với các máy khác. Khi Node B gặp sự cố, các khóa mồ côi của nó sẽ được chia đều cho Node A, Node C và Node D (mỗi node chỉ phải gánh thêm ~33% tải thay vì một node phải gánh 100%). Nhờ đó loại bỏ hoàn toàn nguy cơ sụp đổ dây chuyền."
+        },
+        {
+          "id": "fix-2",
+          "text": "Quay lại sử dụng thuật toán chia dư truyền thống (`hash(key) % N`) trên 4 máy chủ cache vật lý",
+          "correct": false,
+          "feedback": "Thuật toán chia dư (modulus hashing) còn nguy hiểm hơn nhiều! Khi N đổi từ 4 thành 3, gần như 100% các khóa trong toàn hệ thống sẽ bị ánh xạ sang các máy chủ khác, gây ra cơn bão xóa trắng cache (Cold Cache Storm) trên toàn thành phố ngay tức khắc."
+        },
+        {
+          "id": "fix-3",
+          "text": "Nâng cấp dung lượng RAM của Node C và Node D từ 64 GB lên 512 GB để đảm bảo chúng chịu được việc tăng gấp đôi tải",
+          "correct": false,
+          "feedback": "Nâng cấp phần cứng cục bộ vô cùng tốn kém và không bền vững. Nếu hai máy chủ cùng hỏng, một máy 512 GB vẫn sẽ bị đè bẹp. Quan trọng hơn, nó không giải quyết được khiếm khuyết cốt lõi trong kiến trúc phân phối tải."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấu hình mạng camera CCTV tự động ngừng truyền video bất cứ khi nào phát hiện một máy chủ cache bị mất nguồn",
+          "correct": false,
+          "feedback": "Tắt toàn bộ hệ thống camera an ninh của thành phố mỗi khi một máy chủ hỏng nguồn là điều hoàn toàn phản tác dụng, đi ngược lại mục tiêu xây dựng một hệ thống phân tán chịu lỗi cao."
+        }
+      ]
+    }
+  },
+  "conceptId": "consistent-hashing-vnodes",
+  "badge": {
+    "name": "Bảo Vệ Vòng Băm",
+    "icon": "💍"
+  }
+}

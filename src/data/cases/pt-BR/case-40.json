@@ -1,0 +1,217 @@
+{
+  "id": "case-40",
+  "number": 40,
+  "title": "A Contradição do Bunker",
+  "subtitle": "Anotações offline mescladas com timestamps ingênuos sobrescrevem evidências críticas",
+  "brief": {
+    "narrative": "Os detetives Diaz e Chen executam um mandado de busca em um bunker subterrâneo de concreto armado sob um armazém abandonado. Nas profundezas, não há sinal de celular nem Wi-Fi. Ambos ativam o Modo Offline em seus tablets táticos e abrem o Caso #402. Às 16:02:00, Diaz inspeciona a Sala 1 e descobre guardas armados vigiando civis; ela adiciona com urgência as tags táticas de perigo `['suspect-armed', 'hostage-present']` ao Caso #402. O relógio de seu tablet está sincronizado com precisão em 16:02:00. Às 16:02:15, Chen entra na Sala 2 na ala oposta, encontra prensas de falsificação e adiciona `['counterfeit-currency']`. Porém, a bateria CMOS do tablet de Chen está desgastada e seu relógio adiantou 12 minutos, registrando a edição com timestamp 16:14:15. Às 16:20:00, ambos saem do bunker e os tablets se conectam ao Wi-Fi da delegacia. O servidor de sincronização usa resolução de conflitos ingênua 'Last-Write-Wins' (LWW) baseada no relógio dos clientes. Ao comparar 16:14:15 de Chen com 16:02:00 de Diaz, o servidor considera a versão de Chen mais recente e sobrescreve as tags com `['counterfeit-currency']`, apagando o alerta de reféns de Diaz. A equipe tática SWAT prepara uma invasão com explosivos sem saber que há reféns no local.",
+    "symptoms": [
+      "Tags táticas críticas `['suspect-armed', 'hostage-present']` desapareceram do Caso #402 na sincronização via Wi-Fi",
+      "Logs de auditoria mostram que a revisão de Diaz às 16:02:00 foi sobrescrita pela de Chen com timestamp 16:14:15",
+      "Auditoria de hardware no tablet de Chen revela deriva de relógio RTC de +720 segundos (12 minutos adiantado)",
+      "Comando da SWAT quase detonou explosivos com base no relatório corrompido"
+    ],
+    "objective": "Diagnosticar a falha fundamental do Last-Write-Wins baseado em relógio físico na sincronização offline e implementar CRDTs para preservar edições concorrentes."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "tablet-diaz",
+        "type": "client",
+        "label": "Tablet da Detetive Diaz",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Tablet de Diaz (Relógio Preciso)",
+          "logs": [
+            "[16:02:00] OFFLINE: Usuária adicionou tags: ['suspect-armed', 'hostage-present']",
+            "[16:02:00] INFO: Commit local criado com client_timestamp = 16:02:00.120",
+            "[16:20:05] INFO: Wi-Fi restabelecido — transmitindo pacote ao servidor",
+            "[16:20:06] INFO: Confirmação ACK recebida do servidor"
+          ],
+          "data": {
+            "Hora do Dispositivo": "16:02:00 (Precisa / Deriva 0s)",
+            "Edições Locais": "Adicionou ['suspect-armed', 'hostage-present']",
+            "Estado Pós-Sincronia": "Edições sumiram do registro mestre"
+          },
+          "status": "Registrou evidências críticas de reféns offline, mas foram apagadas na sincronização."
+        }
+      },
+      {
+        "id": "tablet-chen",
+        "type": "client",
+        "label": "Tablet do Detetive Chen",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Tablet de Chen (Relógio Desviado)",
+          "logs": [
+            "[16:14:15 (Real: 16:02:15)] OFFLINE: Usuário adicionou tag: ['counterfeit-currency']",
+            "[16:14:15] WARN: Bateria CMOS fraca — desvio de hardware detectado (+720s)",
+            "[16:14:15] INFO: Commit local com client_timestamp = 16:14:15.500",
+            "[16:20:05] INFO: Wi-Fi restabelecido — transmitindo pacote ao servidor"
+          ],
+          "data": {
+            "Hora do Dispositivo": "16:14:15 (DESVIADO: +12 minutos no futuro)",
+            "Edições Locais": "Adicionou ['counterfeit-currency']",
+            "Bateria CMOS": "CRÍTICA / DESGASTADA"
+          },
+          "status": "Relógio adiantado em 12 minutos gerou um timestamp 'futuro' falso."
+        }
+      },
+      {
+        "id": "sync-server",
+        "type": "server",
+        "label": "Servidor de Sincronização",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Gateway de Sincronização Tática",
+          "logs": [
+            "[16:20:05.100] INFO: Pacote recebido de Diaz (timestamp: 16:02:00)",
+            "[16:20:05.150] INFO: Pacote recebido de Chen (timestamp: 16:14:15)",
+            "[16:20:05.200] WARN: Conflito concorrente detectado nas tags do Caso #402",
+            "[16:20:05.210] ERROR: Resolução via Last-Write-Wins: 16:14:15 > 16:02:00",
+            "[16:20:05.220] CRITICAL: Sobrescrevendo tags com array de Chen. Tags de Diaz descartadas!"
+          ],
+          "data": {
+            "Estratégia de Conflito": "Last-Write-Wins (LWW) por Timestamp do Cliente",
+            "Resultado da Resolução": "Timestamp de Chen maior -> descartou edições de Diaz",
+            "CRDT Ativo": "NÃO",
+            "Perda de Dados": "SIM (Exclusão silenciosa de tags)"
+          },
+          "status": "Algoritmo LWW escolheu o timestamp adiantado de Chen e apagou os reféns de Diaz."
+        }
+      },
+      {
+        "id": "central-case-db",
+        "type": "database",
+        "label": "Banco de Casos Central",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Armazenamento Central de Casos",
+          "logs": [
+            "[16:20:05.250] INFO: UPDATE cases SET tags = ['counterfeit-currency'] WHERE id = 402",
+            "[16:20:06.000] INFO: Consulta da SWAT: tags do Caso #402 -> ['counterfeit-currency']",
+            "[16:20:06.100] WARN: Nenhuma tag de perigo ou refém detectada no Caso #402"
+          ],
+          "data": {
+            "ID do Caso": "#402",
+            "Tags Atuais": "['counterfeit-currency']",
+            "Tags Ausentes": "['suspect-armed', 'hostage-present'] (PERDIDAS)",
+            "Avaliação de Risco SWAT": "BAIXO RISCO (ERRO FATAL)"
+          },
+          "status": "Armazena apenas a tag de falsificação. A presença de reféns foi excluída."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-diaz-sync",
+        "source": "tablet-diaz",
+        "target": "sync-server",
+        "label": "sincronia (ts: 16:02:00) [DESCARTADO]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-chen-sync",
+        "source": "tablet-chen",
+        "target": "sync-server",
+        "label": "sincronia (ts: 16:14:15) [VENCEU LWW]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-sync-db",
+        "source": "sync-server",
+        "target": "central-case-db",
+        "label": "grava estado vencedor",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz de os alertas críticos de reféns da Detetive Diaz terem sido apagados na sincronização?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Resolução de conflitos Last-Write-Wins (LWW) ingênua baseada em relógios de clientes não sincronizados permitiu que um relógio adiantado sobrescrevesse e apagasse edições offline concorrentes",
+          "correct": true,
+          "feedback": "Correto! Em sistemas offline distribuídos, timestamps físicos de clientes nunca são confiáveis para desempate devido a deriva de relógio ou falha de bateria. A estratégia ingênua Last-Write-Wins (LWW) apenas escolheu o maior timestamp (relógio adiantado de Chen às 16:14:15) e tratou a lista inteira como sobrescrita única, destruindo as anotações concorrentes de Diaz feitas às 16:02:00."
+        },
+        {
+          "id": "rc-2",
+          "text": "O banco de dados SQLite do tablet da Detetive Diaz foi corrompido por interferência magnética subterrânea",
+          "correct": false,
+          "feedback": "O tablet de Diaz funcionou com perfeição. O banco local armazenou as tags e as transmitiu integralmente ao conectar ao Wi-Fi. Os dados foram descartados no servidor pelo algoritmo falho de sincronização."
+        },
+        {
+          "id": "rc-3",
+          "text": "O roteador Wi-Fi da delegacia descartou os pacotes de Diaz por timeout no aperto de mão WPA3",
+          "correct": false,
+          "feedback": "Os logs do servidor confirmam o recebimento do pacote de Diaz às 16:20:05.100. Os dados não se perderam na rede; foram recebidos e depois descartados pela regra de LWW."
+        },
+        {
+          "id": "rc-4",
+          "text": "O Detetive Chen manteve um bloqueio pessimista no Caso #402 que impediu Diaz de obter permissão de escrita",
+          "correct": false,
+          "feedback": "Bloqueios pessimistas exigem conexão contínua com um coordenador central e não funcionam com dispositivos offline em um bunker de concreto."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de sincronização offline distribuída deve ser redesenhada para mesclar edições concorrentes com segurança?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Adotar Tipos de Dados Replicados Sem Conflitos (CRDTs) — especificamente um Add-Wins Observed-Remove Set (AWORSet) — para mesclar matematicamente adições e remoções de tags sem depender de relógios físicos",
+          "correct": true,
+          "feedback": "Correto! CRDTs (Conflict-Free Replicated Data Types) são estruturas com comprovação matemática para ambientes multi-master e offline. Ao modelar as tags do caso como um Add-Wins Observed-Remove Set (AWORSet), cada adição recebe um identificador causal único. Na sincronização, os conjuntos se mesclam de forma comutativa e associativa: `{'suspect-armed', 'hostage-present'} ∪ {'counterfeit-currency'} = {'suspect-armed', 'hostage-present', 'counterfeit-currency'}`. As descobertas de ambos os policiais são preservadas sem perda de dados, independentemente de deriva de relógio."
+        },
+        {
+          "id": "fix-2",
+          "text": "Proibir completamente o modo offline, exigindo conexão 5G ativa contínua para qualquer edição em casos",
+          "correct": false,
+          "feedback": "Bunkers subterrâneos, túneis e áreas remotas sempre terão zonas de sombra. Proibir operações offline paralisa a polícia e compromete a segurança das equipes."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configurar sincronização NTP periódica via GPS enquanto os tablets estiverem no subsolo do bunker",
+          "correct": false,
+          "feedback": "Sinais de GPS e NTP não atravessam concreto armado subterrâneo. Sistemas distribuídos não podem depender de conectividade externa para manter a consistência dos dados."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configurar o servidor para rejeitar pacotes com timestamps que divirjam em mais de 5 minutos do relógio do servidor",
+          "correct": false,
+          "feedback": "Rejeitar pacotes impediria o Detetive Chen de sincronizar suas evidências da fábrica de dinheiro falso, mantendo os dados presos no tablet indefinidamente."
+        }
+      ]
+    }
+  },
+  "conceptId": "crdt-offline-sync",
+  "badge": {
+    "name": "Cartógrafo do Bunker",
+    "icon": "🗺️"
+  }
+}

@@ -1,0 +1,217 @@
+{
+  "id": "case-40",
+  "number": 40,
+  "title": "The Bunker Contradiction",
+  "subtitle": "Offline field notes merged with naive timestamps overwrite critical evidence",
+  "brief": {
+    "narrative": "Detectives Diaz and Chen execute a high-risk search warrant on a reinforced concrete subterranean bunker beneath an abandoned warehouse. Deep underground, there is zero cellular signal and no Wi-Fi. Both detectives switch their mobile tactical tablets to Offline Incident Mode and open Case #402. At 16:02:00, Diaz breaches Room 1 and discovers armed guards holding civilians; she urgently adds tactical hazard tags `['suspect-armed', 'hostage-present']` to Case #402. Her tablet's clock is accurately synchronized to 16:02:00. At 16:02:15, Chen enters Room 2 on the opposite wing, finds a counterfeiting press, and adds `['counterfeit-currency']`. However, Chen's tablet has a failing internal CMOS battery that drifted its hardware clock 12 minutes fast, recording his edit with timestamp 16:14:15. At 16:20:00, both detectives surface and their tablets automatically reconnect to the precinct squad Wi-Fi. The central sync server uses naive 'Last-Write-Wins' (LWW) conflict resolution based on client wall-clock timestamps. Seeing Chen's timestamp of 16:14:15 compared to Diaz's 16:02:00, the server treats Chen's version as the definitive 'latest' state. It completely overwrites the incident tags with `['counterfeit-currency']`, silently obliterating Diaz's hostage warning. The SWAT tactical team prepares to storm the bunker with explosive breaching charges, unaware that hostages are inside.",
+    "symptoms": [
+      "Critical tactical tags `['suspect-armed', 'hostage-present']` vanished completely from Case #402 upon Wi-Fi sync",
+      "Central database audit logs show Diaz's revision at 16:02:00 was overwritten by Chen's revision with timestamp 16:14:15",
+      "Hardware audit of Detective Chen's tablet reveals CMOS clock drift of +720 seconds (12 minutes fast)",
+      "SWAT assault commanders almost launched dynamic explosive breach based on corrupted incident report"
+    ],
+    "objective": "Diagnose the fundamental flaw of wall-clock Last-Write-Wins in distributed offline sync, and implement Conflict-Free Replicated Data Types (CRDTs) to preserve concurrent edits."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "tablet-diaz",
+        "type": "client",
+        "label": "Detective Diaz Tablet",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Diaz Mobile Tablet (Accurate Clock)",
+          "logs": [
+            "[16:02:00] OFFLINE: User added tags: ['suspect-armed', 'hostage-present']",
+            "[16:02:00] INFO: Local commit created with client_timestamp = 16:02:00.120",
+            "[16:20:05] INFO: Reconnected to precinct Wi-Fi — transmitting payload to sync server",
+            "[16:20:06] INFO: Sync server ACK received"
+          ],
+          "data": {
+            "Client Clock Time": "16:02:00 (Accurate / 0s drift)",
+            "Local Edits": "Added ['suspect-armed', 'hostage-present']",
+            "Observed State Post-Sync": "Edits vanished from master record"
+          },
+          "status": "Accurately recorded life-critical hostage evidence offline, but edits were wiped out during sync."
+        }
+      },
+      {
+        "id": "tablet-chen",
+        "type": "client",
+        "label": "Detective Chen Tablet",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Chen Mobile Tablet (Drifted Clock)",
+          "logs": [
+            "[16:14:15 (Real: 16:02:15)] OFFLINE: User added tag: ['counterfeit-currency']",
+            "[16:14:15] WARN: CMOS battery low — hardware RTC drift detected (+720s)",
+            "[16:14:15] INFO: Local commit created with client_timestamp = 16:14:15.500",
+            "[16:20:05] INFO: Reconnected to precinct Wi-Fi — transmitting payload to sync server"
+          ],
+          "data": {
+            "Client Clock Time": "16:14:15 (DRIFTED: +12 minutes in future)",
+            "Local Edits": "Added ['counterfeit-currency']",
+            "CMOS Battery Health": "CRITICAL / FAILING"
+          },
+          "status": "Hardware clock ran 12 minutes fast, generating a false 'future' timestamp."
+        }
+      },
+      {
+        "id": "sync-server",
+        "type": "server",
+        "label": "Incident Sync Gateway",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Tactical Sync Server",
+          "logs": [
+            "[16:20:05.100] INFO: Received sync packet from Diaz (timestamp: 16:02:00)",
+            "[16:20:05.150] INFO: Received sync packet from Chen (timestamp: 16:14:15)",
+            "[16:20:05.200] WARN: Concurrent conflict detected on field 'tags' for Case #402",
+            "[16:20:05.210] ERROR: Resolving via Last-Write-Wins: 16:14:15 > 16:02:00",
+            "[16:20:05.220] CRITICAL: Overwriting Case #402 tags with Chen's array. Diaz's tags discarded!"
+          ],
+          "data": {
+            "Conflict Strategy": "Last-Write-Wins (LWW) via Client Timestamp",
+            "Resolution Result": "Chen timestamp higher -> discarded Diaz's edits",
+            "CRDT Enabled": "NO",
+            "Data Loss": "TRUE (Silent tag deletion)"
+          },
+          "status": "Naive LWW algorithm chose Chen's future timestamp and discarded Diaz's hostage warning."
+        }
+      },
+      {
+        "id": "central-case-db",
+        "type": "database",
+        "label": "Master Incident DB",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Central Incident Storage",
+          "logs": [
+            "[16:20:05.250] INFO: UPDATE cases SET tags = ['counterfeit-currency'] WHERE id = 402",
+            "[16:20:06.000] INFO: SWAT query: tags for Case #402 -> ['counterfeit-currency']",
+            "[16:20:06.100] WARN: No hazard or hostage flags detected on Case #402"
+          ],
+          "data": {
+            "Case ID": "#402",
+            "Current Tags": "['counterfeit-currency']",
+            "Missing Tags": "['suspect-armed', 'hostage-present'] (LOST)",
+            "SWAT Risk Assessment": "LOW RISK (FATAL ERROR)"
+          },
+          "status": "Stores only Chen's counterfeit tag. Hostage presence information is gone."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-diaz-sync",
+        "source": "tablet-diaz",
+        "target": "sync-server",
+        "label": "sync (ts: 16:02:00) [DISCARDED]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-chen-sync",
+        "source": "tablet-chen",
+        "target": "sync-server",
+        "label": "sync (ts: 16:14:15) [WON LWW]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-sync-db",
+        "source": "sync-server",
+        "target": "central-case-db",
+        "label": "write winning state",
+        "animated": true,
+        "style": "normal"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of Detective Diaz's life-critical hostage warnings being deleted during synchronization?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Naive Last-Write-Wins (LWW) conflict resolution relying on unsynchronized client wall-clock timestamps allowed a device with clock drift to silently overwrite and erase concurrent offline edits",
+          "correct": true,
+          "feedback": "Correct! In distributed offline systems, physical wall-clock timestamps across client devices can never be trusted for conflict resolution due to clock skew, battery degradation, or user tampering. The naive Last-Write-Wins (LWW) strategy simply picked the highest timestamp (Chen's drifted clock at 16:14:15) and treated the entire array as a single overwrite, completely destroying Diaz's concurrent additions from 16:02:00."
+        },
+        {
+          "id": "rc-2",
+          "text": "The SQLite database engine on Detective Diaz's tablet was corrupted by subterranean electromagnetic interference",
+          "correct": false,
+          "feedback": "Diaz's tablet operated flawlessly. Her local database accurately stored the tags and transmitted them cleanly upon reaching Wi-Fi. The data was deleted on the server side by the flawed sync engine."
+        },
+        {
+          "id": "rc-3",
+          "text": "The Wi-Fi router at the precinct dropped Diaz's network packets due to WPA3 authentication handshake timeouts",
+          "correct": false,
+          "feedback": "The sync server logs confirm Diaz's packet was received at 16:20:05.100. Her payload was not lost in network transit; it was received and then discarded by the LWW conflict resolution algorithm."
+        },
+        {
+          "id": "rc-4",
+          "text": "Detective Chen held a row-level pessimistic database lock on Case #402 that prevented Diaz from acquiring write access",
+          "correct": false,
+          "feedback": "Pessimistic locks require continuous network connectivity to a central coordinator and cannot function while devices are offline in a concrete bunker. Both devices were operating disconnected."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the distributed offline synchronization architecture be redesigned to ensure concurrent offline edits are safely merged?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Adopt Conflict-Free Replicated Data Types (CRDTs) — specifically an Add-Wins Observed-Remove Set (AWORSet) — to mathematically merge tag additions and removals without relying on wall-clock timestamps",
+          "correct": true,
+          "feedback": "Correct! Conflict-Free Replicated Data Types (CRDTs) are mathematically proven data structures designed specifically for distributed multi-master and offline environments. By representing the case tags as an Add-Wins Observed-Remove Set (AWORSet), each tag addition is tracked with a unique causal identifier (or version vector). When syncing, the sets merge commutatively and associatively: `{'suspect-armed', 'hostage-present'} ∪ {'counterfeit-currency'} = {'suspect-armed', 'hostage-present', 'counterfeit-currency'}`. Both detectives' discoveries are preserved without any data loss, regardless of client clock skew."
+        },
+        {
+          "id": "fix-2",
+          "text": "Forbid all offline operations, requiring officers to only modify case files when connected to an active 5G cellular network",
+          "correct": false,
+          "feedback": "Underground bunkers, tunnels, rural search zones, and disaster areas will always have communication dead zones. Disabling offline functionality paralyzes tactical operations and compromises officer safety."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configure NTP synchronization to periodically poll GPS satellites while the tablets are deep underground inside the concrete bunker",
+          "correct": false,
+          "feedback": "GPS and NTP radio signals cannot penetrate reinforced subterranean concrete bunkers. A distributed system must never depend on external connectivity to prevent data corruption."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configure the sync server to reject any client sync packet whose recorded timestamp differs by more than 5 minutes from server time",
+          "correct": false,
+          "feedback": "Simply rejecting packets with drifted clocks would prevent Detective Chen from syncing his critical evidence entirely, leaving the counterfeit press discovery trapped on his tablet forever."
+        }
+      ]
+    }
+  },
+  "conceptId": "crdt-offline-sync",
+  "badge": {
+    "name": "Bunker Cartographer",
+    "icon": "🗺️"
+  }
+}

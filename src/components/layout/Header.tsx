@@ -5,6 +5,7 @@ import { useNotebook } from "../../hooks/useNotebook";
 import { isDue } from "../../utils/reviewScheduler";
 import { getUtcDateString } from "../../data/dailyDrill";
 import { useTranslation } from "../../i18n";
+import { useAllCases } from "../../hooks/useCase";
 import { Button } from "../common/Button";
 import { MobileMenu } from "./MobileMenu";
 import { ResetProgressButton } from "./ResetProgressButton";
@@ -81,6 +82,9 @@ export function Header() {
 
   const rankTitle = t(`rank.${rank.id}`);
 
+  const cases = useAllCases();
+  const totalCases = cases.length || 33;
+
   return (
     <header className="h-12 bg-noir-800/80 backdrop-blur-sm border-b border-amber-500/10 flex items-center justify-between px-4 md:px-5 shrink-0 relative z-30">
       {/* Subtle amber line at top */}
@@ -111,7 +115,7 @@ export function Header() {
           </div>
           <span className="text-noir-500">|</span>
           <span className="font-mono text-noir-500 text-xs">
-            {completedCases}/33 {t("header.cases")}
+            {completedCases}/{totalCases} {t("header.cases")}
           </span>
         </div>
         <div className="flex items-center rounded border border-noir-600/40 bg-noir-900/60 p-0.5 text-xs font-mono">

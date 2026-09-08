@@ -1,0 +1,222 @@
+{
+  "id": "case-38",
+  "number": 38,
+  "title": "O Mandado Teleportado",
+  "subtitle": "A replicação assíncrona entre regiões faz usuários verem dados antigos logo após salvar",
+  "brief": {
+    "narrative": "Para diminuir a latência de leitura em operações nacionais, o SDPD adotou uma topologia de banco multirregional: a região US-East hospeda o cluster primário de leitura/escrita PostgreSQL, enquanto a US-West hospeda uma réplica de leitura assíncrona. O Geo-DNS direciona leituras para a região mais próxima. O Detetive Vance, em Los Angeles, emite um mandado de prisão urgente (W-991) para um foragido visto embarcando em um voo. A requisição de escrita viaja até a US-East e é efetivada com sucesso em 120ms às 11:00:00.100. A interface redireciona o navegador de Vance para `/warrants/W-991`. Como Vance está na Califórnia, o Geo-DNS direciona o GET à réplica local US-West. Contudo, um congestionamento na fibra transcontinental fez o atraso de replicação da US-West saltar para 850ms. Às 11:00:00.250, a réplica US-West ainda não recebeu nem aplicou o mandado W-991 e retorna '404 NOT FOUND'. Acreditando que o sistema perdeu seu registro, Vance se desespera e clica em salvar mais 5 vezes, gerando múltiplos mandados duplicados e confusão judicial.",
+    "symptoms": [
+      "Detetives relatam: 'Acabei de salvar com sucesso, mas a tela redirecionou para uma página 404!'",
+      "Emissões duplicadas de mandados dispararam 350% nas delegacias da costa oeste",
+      "Banco primário US-East confirma mandado W-991 efetivado no disco às 11:00:00.100",
+      "Métrica de lag da réplica US-West saltou de 50ms para 850ms durante pico de congestionamento"
+    ],
+    "objective": "Diagnosticar a violação de consistência leitura-após-escrita por lag assíncrono e implementar consistência monotônica para que usuários sempre vejam suas próprias edições."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "det-vance",
+        "type": "client",
+        "label": "Detetive Vance (Los Angeles)",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Terminal do Detetive Vance (Costa Oeste)",
+          "logs": [
+            "[11:00:00.000] INFO: POST /api/warrants -> suspeito W-991",
+            "[11:00:00.120] INFO: POST respondeu HTTP 201 Created (Redirect: /warrants/W-991)",
+            "[11:00:00.250] ERROR: GET /warrants/W-991 respondeu HTTP 404 Not Found!",
+            "[11:00:00.500] WARN: Usuário clicou em 'Submeter Mandado' 5 vezes em pânico"
+          ],
+          "data": {
+            "Local do Cliente": "Los Angeles, CA (Costa Oeste)",
+            "Estado Observado": "Salvo com sucesso, mas sumiu imediatamente",
+            "Duplicações": "5 mandados duplicados criados"
+          },
+          "status": "Inconsistência observada: recebeu 201 Created e em seguida 404 Not Found."
+        }
+      },
+      {
+        "id": "geo-dns",
+        "type": "server",
+        "label": "Roteamento Geo-DNS",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Roteador Global de Tráfego",
+          "logs": [
+            "[11:00:00.010] INFO: Roteando escrita POST /warrants para US-East Primário",
+            "[11:00:00.240] INFO: Roteando leitura GET /warrants/W-991 para região mais próxima: US-West Réplica",
+            "[11:00:00.245] INFO: Reconhecimento de sessão: NENHUM (roteamento cego)"
+          ],
+          "data": {
+            "Roteamento de Escrita": "Sempre US-East Primário",
+            "Roteamento de Leitura": "Região Mais Próxima (US-West para Vance)",
+            "Fixação de Sessão RYOW": "DESATIVADA"
+          },
+          "status": "Direcionou a leitura para a réplica local atrasada sem ciência da escrita recente."
+        }
+      },
+      {
+        "id": "primary-east",
+        "type": "database",
+        "label": "PostgreSQL Primário (US-East)",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Primário (Virgínia)",
+          "logs": [
+            "[11:00:00.100] INFO: INSERT INTO warrants (id, suspect) VALUES ('W-991', 'Vance') -> COMMIT EFETIVADO",
+            "[11:00:00.105] INFO: LSN do WAL 0/14A9820 gerado",
+            "[11:00:00.110] INFO: Transmitindo fluxo de WAL para réplica US-West"
+          ],
+          "data": {
+            "Região": "US-East (Virgínia)",
+            "LSN Atual": "0/14A9820",
+            "Status Mandado W-991": "GRAVADO E PERSISTIDO EM DISCO"
+          },
+          "status": "Primário gravou o mandado W-991 no disco com sucesso às 11:00:00.100."
+        }
+      },
+      {
+        "id": "replica-west",
+        "type": "database",
+        "label": "Réplica de Leitura (US-West)",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL Réplica de Leitura (Oregon)",
+          "logs": [
+            "[11:00:00.200] WARN: Pico de latência na fibra continental (RTT: 180ms)",
+            "[11:00:00.245] INFO: Consulta recebida: SELECT * FROM warrants WHERE id = 'W-991'",
+            "[11:00:00.250] WARN: Linha não encontrada (LSN atual é 0/14A8100 — atrasado em relação ao primário)",
+            "[11:00:00.950] INFO: WAL LSN 0/14A9820 recebido e aplicado — W-991 agora existe (850ms de lag)"
+          ],
+          "data": {
+            "Região": "US-West (Oregon)",
+            "Modo de Replicação": "Streaming Assíncrono",
+            "Lag Atual": "850ms (normal: 40ms)",
+            "LSN às 11:00:00.250": "0/14A8100 (Anterior à escrita)"
+          },
+          "status": "Atrasada em 850ms. Respondeu à busca antes de aplicar a escrita do primário."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-vance-router",
+        "source": "det-vance",
+        "target": "geo-dns",
+        "label": "POST depois GET",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-east",
+        "source": "geo-dns",
+        "target": "primary-east",
+        "label": "escrita POST (commit às .100)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-router-west",
+        "source": "geo-dns",
+        "target": "replica-west",
+        "label": "leitura GET às .250 (404 NOT FOUND)",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-east-west",
+        "source": "primary-east",
+        "target": "replica-west",
+        "label": "replicação assíncrona (lag 850ms)",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Por que o Detetive Vance recebeu um erro 404 logo após criar o mandado W-991 com sucesso?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Falta de Consistência Read-Your-Own-Writes: O Geo-DNS roteou a leitura subsequente para uma réplica assíncrona atrasada que ainda não havia aplicado a escrita do primário",
+          "correct": true,
+          "feedback": "Correto! Esta é a violação clássica da consistência Leitura-Após-Escrita (Read-Your-Own-Writes). Na replicação assíncrona, existe um atraso natural (lag) entre o primário e as réplicas. Ao submeter uma escrita, os dados são confirmados no primário; mas se a leitura seguinte for roteada para uma réplica com 850ms de atraso, ela ainda não processou a transação e retorna 404 falso ou dados antigos."
+        },
+        {
+          "id": "rc-2",
+          "text": "O banco primário US-East caiu por falta de energia logo após efetivar a transação do mandado W-991",
+          "correct": false,
+          "feedback": "O primário US-East estava saudável e gravou o mandado W-991 às 11:00:00.100. Os dados nunca se perderam no primário; eles apenas ainda não haviam chegado à réplica."
+        },
+        {
+          "id": "rc-3",
+          "text": "O cache do navegador do Detetive Vance continha uma resposta HTTP 304 de uma busca anterior",
+          "correct": false,
+          "feedback": "O mandado W-991 era um identificador novo recém-criado. O navegador não possuía cache dele; a resposta 404 partiu diretamente da réplica de banco US-West."
+        },
+        {
+          "id": "rc-4",
+          "text": "O log de escrita prévia (WAL) do PostgreSQL foi corrompido por falha nos setores de disco do primário",
+          "correct": false,
+          "feedback": "O WAL estava íntegro. A réplica aplicou o LSN 0/14A9820 com sucesso às 11:00:00.950, exatamente 850ms após a escrita original."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura da aplicação deve ser ajustada para garantir que os usuários sempre vejam suas próprias escritas recentes?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar consistência Read-Your-Own-Writes registrando um timestamp de escrita ou LSN em um token de sessão, roteando leituras do próprio autor ao primário por N segundos após uma escrita",
+          "correct": true,
+          "feedback": "Correto! A consistência Read-Your-Own-Writes (RYOW) assegura que um autor sempre veja suas próprias alterações. Isso é feito armazenando no cookie de sessão o timestamp da última gravação ou o LSN da transação. Pelos 3 a 5 segundos seguintes à gravação (ou até a réplica alcançar o LSN), a camada de roteamento fixa as leituras daquele usuário no primário. Usuários que não realizaram edições continuam lendo das réplicas locais com latência mínima."
+        },
+        {
+          "id": "fix-2",
+          "text": "Desativar permanentemente todas as réplicas de leitura e rotear 100% do tráfego global de leitura para o US-East",
+          "correct": false,
+          "feedback": "Eliminar réplicas destrói a escalabilidade horizontal de leitura e obriga usuários da Costa Oeste a sofrerem 180ms de latência em cada clique de página."
+        },
+        {
+          "id": "fix-3",
+          "text": "Adicionar uma pausa forçada de 5 segundos (`setTimeout`) na interface web antes de redirecionar para a página do mandado",
+          "correct": false,
+          "feedback": "Pausar o navegador artificialmente degrada a experiência do usuário e não garante correção: sob forte lentidão de rede, o lag de replicação pode facilmente superar 5 segundos."
+        },
+        {
+          "id": "fix-4",
+          "text": "Ativar replicação síncrona continental no PostgreSQL para que as escritas travem até a réplica US-West confirmar o recebimento",
+          "correct": false,
+          "feedback": "Replicação síncrona em redes de longa distância (WAN) prejudica drasticamente a disponibilidade e a velocidade de escrita. Um rompimento na fibra continental paralisaria todas as delegacias."
+        }
+      ]
+    }
+  },
+  "conceptId": "read-your-own-writes",
+  "badge": {
+    "name": "Inspetor Quântico",
+    "icon": "🌐"
+  }
+}

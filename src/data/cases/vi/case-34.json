@@ -1,0 +1,255 @@
+{
+  "id": "case-34",
+  "number": 34,
+  "title": "Truy Vấn Ma",
+  "subtitle": "Các bản ghi không tồn tại lọt qua bộ đệm và đánh sập cơ sở dữ liệu chính",
+  "brief": {
+    "narrative": "Đúng 03:00 sáng, một mạng lưới botnet tự động bắt đầu tấn công dò quét cổng Tra Cứu Vụ Án của sở cảnh sát SDPD. Các kịch bản botnet bắn hơn 3.000 yêu cầu mỗi giây với các UUID ngẫu nhiên và số ID âm hoàn toàn không tồn tại trong cơ sở dữ liệu thành phố. Do các khóa ma này không có trong bộ nhớ đệm Redis, toàn bộ 100% yêu cầu đều bị 'Cache Miss'. Máy chủ ứng dụng theo đúng quy trình liền chuyển tiếp toàn bộ truy vấn xuống cơ sở dữ liệu PostgreSQL chính. Động cơ cơ sở dữ liệu phải thực hiện hàng triệu lần quét chỉ mục vô ích để tìm các bản ghi không hề có thật. Chỉ trong vài phút, CPU của database vọt lên 100%, băng thông IOPS đọc đĩa cạn kiệt, và toàn bộ 150 kết nối trong pool bị nghẽn cứng. Các thám tử ngoài hiện trường cần tra cứu thông tin đối tượng khẩn cấp đều nhận lỗi 504 Gateway Timeout. Trong khi đó, cụm Redis gần như nhàn rỗi tuyệt đối với mức RAM rất thấp.",
+    "symptoms": [
+      "CPU của PostgreSQL chính duy trì ở mức 100% kèm nghẽn pool kết nối (150/150 kết nối bị chiếm dụng)",
+      "Tỷ lệ Cache Hit của Redis giảm thê thảm từ 94% xuống dưới 6%",
+      "Thám tử hiện trường báo cáo lỗi 504 Gateway Timeout liên tục khi tra cứu lệnh bắt và nghi phạm",
+      "Nhật ký truy cập API ghi nhận hàng triệu truy vấn với các ID không tồn tại như -9999 hoặc hash ngẫu nhiên"
+    ],
+    "objective": "Chẩn đoán nguyên nhân tại sao các khóa không tồn tại lại vượt qua lớp bảo vệ của bộ nhớ đệm, và thiết kế chiến lược lọc sớm các truy vấn vô căn cứ trước khi chúng chạm vào cơ sở dữ liệu."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "botnet-crawler",
+        "type": "client",
+        "label": "Mạng Botnet Tự Động",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Lưu Lượng Botnet Quét Dữ Liệu",
+          "logs": [
+            "[03:00:01] INFO: Botnet kích hoạt 3.200 req/giây tới /api/v1/incidents/{id}",
+            "[03:00:05] INFO: Mục tiêu ID: UUID ngẫu nhiên, ID âm (-1, -404, -9999)",
+            "[03:00:30] WARN: Nhận mã 404 NOT FOUND cho 99.8% các truy vấn",
+            "[03:01:00] INFO: Tăng số luồng đồng thời lên 5.000 worker"
+          ],
+          "data": {
+            "Tốc Độ Request": "3.200 req/giây",
+            "Đặc Điểm ID": "Hash ngẫu nhiên không tồn tại & ID âm",
+            "Tỷ Lệ Tồn Tại Dự Kiến": "0%",
+            "Giao Thức": "HTTP/2 REST"
+          },
+          "status": "Bơm ồ ạt truy vấn tìm kiếm dữ liệu không hề có thật trong hệ thống."
+        }
+      },
+      {
+        "id": "field-units",
+        "type": "client",
+        "label": "Đội Thám Tử Hiện Trường",
+        "status": "failed",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Thiết Bị Di Động Tuần Tra",
+          "logs": [
+            "[03:01:10] INFO: Xe 12 kiểm tra lệnh bắt đối tượng tình nghi #88219",
+            "[03:01:40] ERROR: Yêu cầu quá thời hạn sau 30.000ms (HTTP 504 Gateway Timeout)",
+            "[03:02:00] ERROR: Xe 7 tìm kiếm khẩn cấp thất bại — máy chủ không phản hồi",
+            "[03:02:15] WARN: Cảnh sát không thể xác minh lệnh bắt khẩn cấp tại hiện trường"
+          ],
+          "data": {
+            "Cảnh Sát Hoạt Động": "180 đơn vị ngoài hiện trường",
+            "Độ Trễ Tra Cứu": "30.000ms+ (quá hạn)",
+            "Tỷ Lệ Thành Công": "0% trong thời gian sự cố",
+            "Rủi Ro An Ninh": "ĐẶC BIỆT NGUY HIỂM"
+          },
+          "status": "Cảnh sát không thể xác minh đối tượng do API tra cứu bị sập hoàn toàn."
+        }
+      },
+      {
+        "id": "lookup-api",
+        "type": "server",
+        "label": "API Cổng Tra Cứu Vụ Án",
+        "status": "degraded",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Gateway API Tra Cứu",
+          "logs": [
+            "[03:00:02] INFO: Lưu lượng đến: 3.400 req/giây",
+            "[03:00:05] WARN: Bị trượt cache (Cache MISS) trên Redis: 3.180 req/giây",
+            "[03:00:10] WARN: Đang chuyển tiếp toàn bộ cache miss xuống cụm PostgreSQL chính",
+            "[03:00:45] ERROR: Cạn kiệt pool kết nối database: 150/150 bận, 1.420 đang đợi",
+            "[03:01:00] ERROR: Bắt đầu từ chối kết nối và trả về HTTP 504"
+          ],
+          "data": {
+            "Lưu Lượng Vào": "3.400 req/giây",
+            "Tỷ Lệ Trúng Cache Redis": "6.2% (tụt dốc từ 94%)",
+            "Lệnh SQL Đẩy Xuống DB": "3.189 req/giây",
+            "Hàng Đợi Chờ Kết Nối": "1.420 yêu cầu đang nghẽn"
+          },
+          "status": "Mọi cache miss đều bị đẩy thẳng xuống cơ sở dữ liệu làm cạn kiệt pool kết nối."
+        }
+      },
+      {
+        "id": "redis-cache",
+        "type": "server",
+        "label": "Cụm Bộ Nhớ Đệm Redis",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Bộ Nhớ RAM Redis",
+          "logs": [
+            "[03:00:00] INFO: Dung lượng sử dụng: 12.4 GB / 64 GB (19.3%)",
+            "[03:00:05] INFO: Số lượt tra khóa: 3.400/giây",
+            "[03:00:06] INFO: Số lượt không thấy khóa: 3.180/giây — khóa không có trong index",
+            "[03:00:30] INFO: Bộ nhớ ổn định, CPU 15% — Redis hoàn toàn khỏe mạnh"
+          ],
+          "data": {
+            "Bộ Nhớ Sử Dụng": "12.4 GB (tối đa 64 GB)",
+            "Mức Sử Dụng CPU": "15%",
+            "Khóa Bị Trục Xuất (Evicted)": "0 khóa",
+            "Giá Trị Null Được Đệm": "0 (chưa bật null caching)"
+          },
+          "status": "Redis rảnh rỗi và khỏe mạnh nhưng liên tục nhận các khóa chưa từng tồn tại."
+        }
+      },
+      {
+        "id": "primary-db",
+        "type": "database",
+        "label": "PostgreSQL Chính",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ PostgreSQL Chính",
+          "logs": [
+            "[03:00:10] WARN: Tăng đột biến truy vấn: 3.100 SELECT ... WHERE incident_id = $1",
+            "[03:00:25] ERROR: Quét chỉ mục B-tree trả về 0 dòng cho 99.8% các câu lệnh",
+            "[03:00:40] ERROR: Băng thông đọc đĩa IOPS bão hòa tuyệt đối (10.000 / 10.000 IOPS)",
+            "[03:00:55] ERROR: CPU 100% — các slot kết nối bị chiếm trọn (150/150)"
+          ],
+          "data": {
+            "Sử Dụng CPU": "100%",
+            "IOPS Ổ Đĩa": "10.000 (100% trần tối đa)",
+            "Kết Nối Đang Dùng": "150/150 (nghẽn hoàn toàn)",
+            "Thời Gian Xử Lý Trung Bình": "4.200ms (bình thường: 3ms)"
+          },
+          "status": "Bị đánh gục bởi các truy vấn tìm kiếm dữ liệu rỗng xuyên thủng tầng cache."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-bot-api",
+        "source": "botnet-crawler",
+        "target": "lookup-api",
+        "label": "3.200 req/s (ID ma)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-officers-api",
+        "source": "field-units",
+        "target": "lookup-api",
+        "label": "truy vấn thật (timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-redis",
+        "source": "lookup-api",
+        "target": "redis-cache",
+        "label": "94% trượt cache",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-api-db",
+        "source": "lookup-api",
+        "target": "primary-db",
+        "label": "3.100 truy vấn/s (đè bẹp DB)",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến toàn bộ hệ thống tê liệt trước đợt truy vấn botnet là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Thủng Bộ Nhớ Đệm (Cache Penetration): Botnet liên tục truy vấn các ID không hề tồn tại, hoàn toàn lọt qua cache Redis và rót hàng ngàn truy vấn vô ích đánh thẳng vào Database chính",
+          "correct": true,
+          "feedback": "Chính xác! Đây là bài toán kinh điển về 'Thủng Bộ Nhớ Đệm' (Cache Penetration). Khi các truy vấn nhắm vào những khóa không tồn tại ở cả trong Cache lẫn Database, mỗi request đều là một Cache Miss đánh thẳng xuống Database. Do Database không tìm thấy dữ liệu nên không có gì được nạp ngược lại Cache, khiến các truy vấn tiếp theo đối với các ID này lặp đi lặp lại việc tra tấn Database cho đến khi cạn kiệt pool kết nối."
+        },
+        {
+          "id": "rc-2",
+          "text": "Trục Xuất Cache (Cache Eviction): Redis đã hết bộ nhớ RAM và đang chủ động đẩy bỏ các hồ sơ vụ án theo chính sách LRU",
+          "correct": false,
+          "feedback": "Kiểm tra Redis cho thấy cụm chỉ sử dụng 12.4 GB trên tổng số 64 GB RAM (dưới 20%) và không hề có khóa nào bị trục xuất (0 evictions). Redis hoàn toàn bình thường; nguyên nhân là các khóa được hỏi vốn chưa từng tồn tại."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hỏng Chỉ Mục: Cột mã vụ án trên PostgreSQL bị mất index khiến cơ sở dữ liệu phải quét toàn bộ bảng (Full Table Scan)",
+          "correct": false,
+          "feedback": "Nhật ký PostgreSQL xác nhận chỉ mục B-tree vẫn hoạt động bình thường. Vấn đề là việc tìm kiếm trên cây index 3.000 lần mỗi giây cho các khóa không tồn tại trên bảng hàng triệu dòng vẫn ngốn sạch IOPS và CPU của máy chủ."
+        },
+        {
+          "id": "rc-4",
+          "text": "Phân Vùng Mạng: Sự cố đứt cáp mạng giữa API Gateway và cụm Redis khiến API không thể kết nối tới cache",
+          "correct": false,
+          "feedback": "API vẫn giao tiếp hoàn hảo với Redis với thời gian phản hồi dưới 1ms. Sự cố nằm ở chỗ logic ứng dụng cứ thấy Cache Miss là mù quáng đẩy truy vấn xuống cơ sở dữ liệu."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần cập nhật kiến trúc như thế nào để bảo vệ cơ sở dữ liệu triệt để trước hiện tượng thủng bộ nhớ đệm?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai Bộ Lọc Bloom (Bloom Filter) trước cơ sở dữ liệu để loại bỏ sớm các ID không tồn tại mà không tốn lệnh SQL nào, kết hợp lưu đệm giá trị rỗng (Null Caching) với TTL ngắn",
+          "correct": true,
+          "feedback": "Chính xác! Bộ lọc Bloom là cấu trúc dữ liệu xác suất siêu nhanh và tiết kiệm RAM, có khả năng khẳng định chắc chắn 100% nếu một ID KHÔNG tồn tại. Nếu Bloom filter từ chối, request sẽ bị hủy ngay mà không cần động đến Redis hay PostgreSQL. Ngoài ra, việc lưu các giá trị null với TTL ngắn (ví dụ 60 giây) vào Redis sẽ hấp thụ hoàn toàn các đợt truy vấn lặp lại đối với những ID vừa được kiểm tra mà không làm phiền Database."
+        },
+        {
+          "id": "fix-2",
+          "text": "Mở rộng cụm Redis theo chiều ngang bằng cách bổ sung thêm 10 node replica để tăng thông lượng đọc",
+          "correct": false,
+          "feedback": "Thêm replica cho Redis không giải quyết được vấn đề. Redis hiện tại chỉ chịu tải 15% CPU. Vấn đề cốt lõi là Redis không có các khóa này, nên thêm bao nhiêu replica thì chúng cũng chỉ báo Cache Miss bấy nhiêu lần."
+        },
+        {
+          "id": "fix-3",
+          "text": "Nâng pool kết nối của cơ sở dữ liệu PostgreSQL từ 150 lên 3.000 kết nối đồng thời",
+          "correct": false,
+          "feedback": "Tăng kích thước pool kết nối sẽ chỉ làm tình hình thê thảm hơn. 3.000 truy vấn đồng thời sẽ gây nghẽn cổ chai chuyển đổi ngữ cảnh (Context Switching) của CPU và làm tê liệt hoàn toàn ổ đĩa IOPS."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấu hình API Gateway tự động trả về dữ liệu mẫu giả định (mock data) kèm mã HTTP 200 bất cứ khi nào truy vấn bị quá thời hạn",
+          "correct": false,
+          "feedback": "Trả dữ liệu giả mạo cho cảnh sát trong quá trình truy bắt tội phạm sẽ gây hậu quả pháp lý và đe dọa trực tiếp tính mạng người thi hành công vụ, đồng thời không giải quyết được gốc rễ quá tải của hệ thống."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-penetration",
+  "badge": {
+    "name": "Thợ Săn Truy Vấn Ma",
+    "icon": "🛡️"
+  }
+}

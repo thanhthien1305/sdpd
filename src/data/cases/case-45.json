@@ -1,0 +1,183 @@
+{
+  "id": "case-45",
+  "number": 45,
+  "title": "The Silent Port Drought",
+  "subtitle": "Unpooled outbound HTTP connections trap 28,000 sockets in TIME_WAIT, causing total outage",
+  "brief": {
+    "narrative": "A code-red Amber Alert is triggered for an abducted 6-year-old child in a stolen minivan. The department's Emergency Dispatch Alert Service begins blasting outbound SMS and cellular push notifications to 200,000 registered neighborhood watch members at 3,000 HTTP requests/second via an external regional telecommunications gateway (`api.telecom.state.gov:443`). For the first 10 seconds, everything works smoothly. Then, at second 15, the entire notification system catastrophically collapses. Every subsequent outbound call fails instantly with OS socket error `connect: cannot assign requested address (EADDRNOTAVAIL)`. The dispatch application code was creating a brand new HTTP client instance with `Connection: close` for every single outbound message. In TCP, the combination of (Source IP, Source Port, Destination IP, Destination Port) uniquely identifies a socket. With a single destination gateway, the operating system kernel allocated all ~28,232 ephemeral ports (range 32768 to 60999). As requests closed, sockets were trapped in the mandatory 60-second `TIME_WAIT` state, exhausting all available ports and paralyzing the emergency broadcast.",
+    "symptoms": [
+      "Outbound emergency alert dispatch crashed abruptly 15 seconds into high-throughput broadcast",
+      "Application logs flooded with `EADDRNOTAVAIL: Cannot assign requested address` errors",
+      "Host operating system socket metric `netstat -an | grep TIME_WAIT | wc -l` hit 28,232",
+      "Outgoing network bandwidth and CPU are practically idle (< 5%) during the outage"
+    ],
+    "objective": "Diagnose ephemeral port exhaustion caused by unpooled short-lived TCP sockets in TIME_WAIT and configure HTTP Keep-Alive connection pooling with kernel socket reuse."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "alert-service",
+        "type": "server",
+        "label": "Emergency Alert Dispatch Service",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Outbound Dispatch Node",
+          "logs": [
+            "[10:00:01] INFO: Broadcasting Amber Alert #809 to 200,000 subscribers",
+            "[10:00:10] INFO: Sent 30,000 requests successfully (avg 3,000 req/s)",
+            "[10:00:14] WARN: Ephemeral port allocation latency increasing",
+            "[10:00:15] CRITICAL: connect() failed: EADDRNOTAVAIL (Cannot assign requested address)",
+            "[10:00:16] ERROR: Outbound pipeline completely stalled (0 messages dispatched)"
+          ],
+          "data": {
+            "HTTP Client Mode": "New client per request (Connection: close)",
+            "Connection Pooling": "DISABLED",
+            "Target Endpoint": "api.telecom.state.gov:443 (Single IP/Port)"
+          },
+          "status": "Application cannot open new outbound sockets because the OS has run out of source ports."
+        }
+      },
+      {
+        "id": "os-network-stack",
+        "type": "server",
+        "label": "Host Kernel Network Stack",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Linux Kernel TCP Subsystem",
+          "logs": [
+            "[10:00:01] NET: Allocating ephemeral source ports from pool [32768 - 60999]",
+            "[10:00:10] NET: 20,000 sockets closed -> entering TIME_WAIT (timeout: 60s)",
+            "[10:00:14] WARN: Free ephemeral ports remaining: 412",
+            "[10:00:15] CRITICAL: Ephemeral port pool exhausted (28,232 sockets in TIME_WAIT)",
+            "[10:00:15] KERNEL: Returning EADDRNOTAVAIL to user space process"
+          ],
+          "data": {
+            "Ephemeral Range": "32768 - 60999 (28,232 total ports)",
+            "Sockets in TIME_WAIT": "28,232 (100% saturation)",
+            "TIME_WAIT Duration": "60 seconds (2 * MSL)",
+            "tcp_tw_reuse": "0 (Disabled)"
+          },
+          "status": "All available source ports locked in 60-second TIME_WAIT state."
+        }
+      },
+      {
+        "id": "telecom-gateway",
+        "type": "server",
+        "label": "Telecom SMS Gateway",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "State Telecom Gateway (api.telecom.state.gov)",
+          "logs": [
+            "[10:00:10] INFO: Receiving 3,000 req/s — processing normally",
+            "[10:00:15] WARN: Inbound connection rate dropped to 0 req/s",
+            "[10:00:16] INFO: Gateway healthy, 0% CPU load, ready to accept messages"
+          ],
+          "data": {
+            "Gateway Status": "HEALTHY",
+            "Supported Protocols": "HTTP/1.1 (Keep-Alive), HTTP/2",
+            "Gateway IP": "198.51.100.45:443"
+          },
+          "status": "External gateway is completely healthy; receives zero traffic because client cannot dial."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-svc-kernel",
+        "source": "alert-service",
+        "target": "os-network-stack",
+        "label": "socket() [EADDRNOTAVAIL]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-kernel-gw",
+        "source": "os-network-stack",
+        "target": "telecom-gateway",
+        "label": "outbound TCP [HALTED]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the sudden `EADDRNOTAVAIL` socket error halting the Amber Alert broadcast?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Ephemeral port exhaustion caused by high-frequency short-lived HTTP connections without Keep-Alive: creating a new TCP socket per request filled all ~28,000 available OS source ports, trapping them in the 60-second TIME_WAIT state",
+          "correct": true,
+          "feedback": "Correct! A TCP connection is uniquely identified by the 4-tuple: (Source IP, Source Port, Destination IP, Destination Port). When an application calls a single upstream IP:Port (the Telecom Gateway) without connection reuse (`Connection: close`), each outbound request consumes a temporary local source port (ephemeral port) from the kernel's range (32768–60999, ~28,000 ports). When closed, TCP sockets are required by RFC 793 to linger in `TIME_WAIT` for 2*MSL (60 seconds) to ensure stray packets dissipate. At 3,000 req/sec, all 28,000 ports depleted in under 10 seconds, causing subsequent `connect()` calls to fail immediately with `EADDRNOTAVAIL`."
+        },
+        {
+          "id": "rc-2",
+          "text": "The State Telecom Gateway's firewall detected a Distributed Denial of Service (DDoS) attack and blacklisted the police IP address",
+          "correct": false,
+          "feedback": "The gateway logs confirm it never blocked the client; inbound traffic simply stopped arriving. Furthermore, `EADDRNOTAVAIL` is a client-side operating system error indicating no local port could be assigned before any packet ever left the machine."
+        },
+        {
+          "id": "rc-3",
+          "text": "The alert service exhausted its open file descriptor (FD) limit due to unclosed file handles on the local disk",
+          "correct": false,
+          "feedback": "If file descriptors were exhausted, the OS would return `EMFILE: Too many open files`. The error was explicitly `EADDRNOTAVAIL: Cannot assign requested address`, indicating ephemeral port exhaustion in the IP stack."
+        },
+        {
+          "id": "rc-4",
+          "text": "The telecom gateway's SSL certificate expired, causing TLS handshakes to abort immediately",
+          "correct": false,
+          "feedback": "TLS certificate errors produce `CERT_HAS_EXPIRED` or handshake failure codes during the TLS negotiation, not socket allocation failures during initial TCP binding."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the dispatch service and host OS be configured to support high-throughput outbound notifications without exhausting ports?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Enable HTTP Keep-Alive with persistent connection pooling in the HTTP client to reuse established TCP sockets across requests, upgrade to HTTP/2 multiplexing, and enable `tcp_tw_reuse` in the kernel",
+          "correct": true,
+          "feedback": "Correct! Enabling HTTP Keep-Alive with a connection pool (e.g., maintaining a pool of 200–500 persistent TCP connections) allows hundreds of thousands of HTTP requests to pipeline across existing sockets without constantly creating and destroying TCP connections. Upgrading to HTTP/2 allows multiplexing multiple concurrent streams over a handful of sockets. Finally, setting `net.ipv4.tcp_tw_reuse = 1` safely allows outgoing connections to reuse sockets in `TIME_WAIT` when timestamp matching is valid."
+        },
+        {
+          "id": "fix-2",
+          "text": "Rewrite the notification service to use raw UDP datagrams without error checking or delivery confirmations",
+          "correct": false,
+          "feedback": "The external Telecom Gateway exposes an HTTPS REST API. Unilaterally sending UDP packets to an HTTPS port will fail completely, as the remote server expects a valid TLS over TCP handshake."
+        },
+        {
+          "id": "fix-3",
+          "text": "Reduce outbound throughput to 50 requests per second so that sockets naturally clear TIME_WAIT before ports run out",
+          "correct": false,
+          "feedback": "Limiting throughput to 50 req/s means dispatching an Amber Alert to 200,000 citizens would take over an hour, fatally compromising child recovery efforts."
+        },
+        {
+          "id": "fix-4",
+          "text": "Reboot the operating system host machine every 15 seconds to flush the kernel's network socket tables",
+          "correct": false,
+          "feedback": "Rebooting the server every 15 seconds results in massive downtime, continuous service disruption, and fails to solve the architectural flaw of unpooled connections."
+        }
+      ]
+    }
+  },
+  "conceptId": "ephemeral-port-exhaustion",
+  "badge": {
+    "name": "Socket Liberator",
+    "icon": "🔌"
+  }
+}

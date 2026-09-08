@@ -1,0 +1,250 @@
+{
+  "id": "case-37",
+  "number": 37,
+  "title": "Hồ Sơ Mồ Côi",
+  "subtitle": "Ghi cơ sở dữ liệu thành công nhưng phát tin nhắn thất bại, khiến các dịch vụ mất đồng bộ vĩnh viễn",
+  "brief": {
+    "narrative": "Khi thám tử nộp cáo trạng tội phạm đặc biệt nghiêm trọng, dịch vụ Quản Lý Hồ Sơ Án phải thực hiện đồng thời hai nhiệm vụ: (1) lưu thông tin cáo trạng vào cơ sở dữ liệu PostgreSQL chính, và (2) phát một sự kiện 'IndictmentFiled' lên hệ thống Apache Kafka để các dịch vụ downstream — cụ thể là cụm tìm kiếm Elasticsearch và Trung Tâm Phát Lệnh Tuần Tra — lập chỉ mục nghi phạm và cảnh báo tới các xe tuần tra. Đoạn mã xử lý theo mô hình Ghi Kép (Dual-Write) ngây thơ: đầu tiên chạy `await db.save(indictment)` và ngay sau đó gọi `await kafka.send(event)`. Vào lúc 14:30:00, các thám tử hoàn tất 42 cáo trạng trong một chuyên án triệt phá đường dây ma túy lớn. Đối với 18 bộ hồ sơ trong số đó, giao dịch database PostgreSQL đã commit thành công xuống đĩa. Tuy nhiên, ngay sau khi vừa commit xong, một sự cố chập chờn mạng ngắn đã ngắt kết nối TCP của Kafka, và một ngoại lệ không được bắt đã đánh sập container ứng dụng. Database lưu giữ trọn vẹn 18 bản ghi, nhưng các sự kiện Kafka tương ứng không bao giờ được phát đi. Khi cảnh sát tuần tra tìm kiếm tên nghi phạm 'Marcus Vance' trên Elasticsearch, kết quả trả về là 0. 20 phút sau, Vance bị chặn lại vì lỗi chạy quá tốc độ và đã được thả đi do hệ thống tìm kiếm không hề biết đối tượng đang mang lệnh bắt nghiêm trọng.",
+    "symptoms": [
+      "18 cáo trạng tội phạm tồn tại trong PostgreSQL nhưng hoàn toàn biến mất trên hệ thống tìm kiếm Elasticsearch",
+      "Chỉ số tin nhắn trên topic Kafka xác nhận thiếu chính xác 18 thông điệp so với số dòng đã commit trong database giữa 14:30 và 14:35",
+      "Nhật ký container ghi nhận dòng chữ `Postgres COMMIT OK` theo sau bởi `UnhandledPromiseRejection: Kafka broker unreachable, container exiting`",
+      "Đối tượng buôn ma túy nguy hiểm đang có lệnh bắt bị cảnh sát giao thông thả tự do do hệ thống tìm kiếm không đồng bộ"
+    ],
+    "objective": "Chẩn đoán nguyên nhân các thao tác ghi độc lập giữa database và message broker gây mất mát sự kiện vĩnh viễn, và áp dụng mẫu thiết kế nguyên tử đảm bảo 100% sự kiện được phát đi tin cậy."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "detective-terminal",
+        "type": "client",
+        "label": "Máy Trạm Thám Tử",
+        "status": "healthy",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cổng Nộp Hồ Sơ Án",
+          "logs": [
+            "[14:30:10] INFO: Nộp cáo trạng đặc biệt nghiêm trọng #8819 (Nghi phạm: Marcus Vance)",
+            "[14:30:11] INFO: Máy chủ trả về HTTP 200 OK — Đã Lưu Cáo Trạng Thành Công",
+            "[14:30:20] INFO: Tiếp tục nộp 41 hồ sơ cáo trạng ma túy liên quan"
+          ],
+          "data": {
+            "Tổng Số Cáo Trạng Nộp": "42 hồ sơ",
+            "Phản Hồi Từ Máy Chủ": "HTTP 200 OK cho toàn bộ",
+            "Kỳ Vọng Người Dùng": "Nghi phạm lập tức có thể tra cứu trên toàn thành phố"
+          },
+          "status": "Thám tử gửi hồ sơ thành công và nhận được biên nhận lưu trữ hợp lệ."
+        }
+      },
+      {
+        "id": "case-service",
+        "type": "server",
+        "label": "API Quản Lý Hồ Sơ Án",
+        "status": "degraded",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Container Dịch Vụ Hồ Sơ Án",
+          "logs": [
+            "[14:30:10] INFO: Bắt đầu giao dịch (BEGIN transaction) trên PostgreSQL",
+            "[14:30:10.050] INFO: INSERT INTO indictments ... COMMIT OK (id=8819)",
+            "[14:30:10.060] WARN: Đang phát tin kafka.producer.send('indictments', {id: 8819})",
+            "[14:30:10.200] ERROR: SocketException: Kết nối bị reset từ phía Kafka (10.0.4.12:9092)",
+            "[14:30:10.210] CRITICAL: Lỗi Promise không bắt được — Tiến trình bị tắt đột ngột (SIGTERM)"
+          ],
+          "data": {
+            "Mẫu Thiết Kế Sử Dụng": "Ghi Kép Ngây Thơ (DB trước, Kafka sau)",
+            "Trạng Thái Ghi Postgres": "ĐÃ COMMIT",
+            "Trạng Thái Bắn Kafka": "THẤT BẠI / BỊ MẤT",
+            "Vòng Đời Tiến Trình": "Sập trước khi kịp thử lại"
+          },
+          "status": "Đã ghi thành công vào DB nhưng bị sập khi bắn Kafka. Tin nhắn bị xóa sổ vĩnh viễn."
+        }
+      },
+      {
+        "id": "postgres-db",
+        "type": "database",
+        "label": "PostgreSQL Chính",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Cơ Sở Dữ Liệu PostgreSQL Chính",
+          "logs": [
+            "[14:30:10.050] INFO: COMMIT giao dịch tx_99210 — dòng 8819 đã ghi bền vững vào đĩa",
+            "[14:30:12.000] INFO: Tổng số cáo trạng: 42 dòng mới đã được commit trong bảng 'indictments'",
+            "[14:30:30] INFO: Trạng thái cơ sở dữ liệu khỏe mạnh, WAL replication bình thường"
+          ],
+          "data": {
+            "Bản Ghi #8819": "TỒN TẠI trong bảng dữ liệu",
+            "Tên Nghi Phạm": "Marcus Vance",
+            "Tội Danh": "Tội Phạm Ma Túy Đặc Biệt Nghiêm Trọng",
+            "Trạng Thái Lệnh": "ĐANG CÓ HIỆU LỰC BẮT GIỮ"
+          },
+          "status": "Dữ liệu được lưu an toàn trong PostgreSQL nhưng bị cô lập khỏi hệ thống tìm kiếm."
+        }
+      },
+      {
+        "id": "kafka-broker",
+        "type": "server",
+        "label": "Message Broker Apache Kafka",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Apache Kafka",
+          "logs": [
+            "[14:30:09] INFO: Topic 'indictments' partition 0 hoạt động bình thường",
+            "[14:30:10.150] WARN: Ngắt kết nối socket tạm thời trên pool kết nối client",
+            "[14:30:10.300] INFO: Client kết nối lại, nhưng không nhận được thông điệp nào cho ID 8819",
+            "[14:30:30] INFO: Tổng tin nhắn nhận được trên topic: 24 tin (thiếu 18 tin)"
+          ],
+          "data": {
+            "Topic": "indictments-stream",
+            "Tin Nhắn Nhận Được": "24",
+            "Tin Nhắn Kỳ Vọng": "42",
+            "Sự Kiện Bị Mất": "18 sự kiện chưa từng được phát đi"
+          },
+          "status": "Chưa từng nhận được 18 sự kiện do ứng dụng bị sập ngay sau khi commit DB."
+        }
+      },
+      {
+        "id": "elasticsearch-cluster",
+        "type": "server",
+        "label": "Chỉ Mục Tìm Kiếm Elasticsearch",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 340
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Tìm Kiếm Elasticsearch Hiện Trường",
+          "logs": [
+            "[14:30:15] INFO: Đã tiêu thụ 24 tin nhắn từ topic Kafka 'indictments'",
+            "[14:30:16] INFO: Đã lập chỉ mục cho 24 tài liệu nghi phạm",
+            "[14:50:00] INFO: Truy vấn tìm kiếm: 'Marcus Vance' -> 0 kết quả tìm thấy"
+          ],
+          "data": {
+            "Tài Liệu Đã Index": "24 / 42",
+            "Tra Cứu: Marcus Vance": "KHÔNG TÌM THẤY (0 kết quả)",
+            "Trạng Thái Đồng Bộ": "LỆCH PHA HOÀN TOÀN VỚI POSTGRESQL"
+          },
+          "status": "Chỉ mục tìm kiếm bị thiếu 18 nghi phạm do Kafka không nhận được sự kiện."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-det-api",
+        "source": "detective-terminal",
+        "target": "case-service",
+        "label": "POST /indictments",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-db",
+        "source": "case-service",
+        "target": "postgres-db",
+        "label": "1. COMMIT OK",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-kafka",
+        "source": "case-service",
+        "target": "kafka-broker",
+        "label": "2. đứt socket / mất tin",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-kafka-es",
+        "source": "kafka-broker",
+        "target": "elasticsearch-cluster",
+        "label": "luồng mất đồng bộ",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân cốt lõi khiến 18 hồ sơ cáo trạng bị mất tích trên hệ thống tìm kiếm Elasticsearch là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Vấn Đề Ghi Kép (The Dual-Write Problem): Việc cập nhật database và phát tin lên message broker bằng hai thao tác độc lập phi nguyên tử khiến sự cố sập máy chủ sau khi commit DB làm biến mất sự kiện vĩnh viễn",
+          "correct": true,
+          "feedback": "Chính xác! Đây là bài toán kinh điển về 'Vấn Đề Ghi Kép' (Dual-Write Problem). Trong hệ thống phân tán, việc cập nhật hai hệ thống lưu trữ độc lập (PostgreSQL và Kafka) mà không có tính nguyên tử là vô cùng nguy hiểm. Nếu giao dịch database đã commit thành công nhưng máy chủ ứng dụng bị sập hoặc mất mạng trước khi phát tin sang Kafka, sự kiện đó sẽ bị bốc hơi vĩnh viễn. Do PostgreSQL không tự động đồng bộ với Kafka, hai hệ thống sẽ bị lệch pha vĩnh viễn."
+        },
+        {
+          "id": "rc-2",
+          "text": "Elasticsearch bị lỗi hỏng phân đoạn chỉ mục đảo (inverted index segment corruption) khiến tài liệu của Marcus Vance bị xóa âm thầm",
+          "correct": false,
+          "feedback": "Nhật ký Elasticsearch xác nhận cụm hoạt động bình thường và đã lập chỉ mục đầy đủ cho toàn bộ 24 tin nhắn nhận được từ Kafka. Elasticsearch không làm mất dữ liệu; đơn giản là nó chưa từng nhận được tin nhắn về Marcus Vance từ Kafka."
+        },
+        {
+          "id": "rc-3",
+          "text": "Nhóm Consumer Kafka gặp sự cố xung đột offset commit và vô tình nhảy cóc bỏ qua 18 thông điệp trong quá trình rebalance",
+          "correct": false,
+          "feedback": "Nhật ký Kafka broker xác nhận rằng chỉ có đúng 24 tin nhắn từng được gửi tới topic. 18 tin nhắn bị thiếu vốn dĩ chưa bao giờ được đẩy lên Kafka do container ứng dụng đã bị sập."
+        },
+        {
+          "id": "rc-4",
+          "text": "Mức cô lập giao dịch của PostgreSQL bị đặt ở Read Uncommitted khiến các bản đọc bẩn bị biến mất khi giao dịch bị hủy bỏ",
+          "correct": false,
+          "feedback": "Các bản ghi không hề bị rollback! Cả 42 bản ghi, bao gồm cả hồ sơ của Marcus Vance (#8819), đều đang nằm bền vững trong bảng dữ liệu của PostgreSQL. Sự cố nằm ở chỗ các dịch vụ bên dưới không hề hay biết về sự tồn tại của chúng."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Mẫu thiết kế kiến trúc nào đảm bảo tuyệt đối rằng mọi bản ghi được commit vào cơ sở dữ liệu đều sẽ sinh ra sự kiện tương ứng trên Kafka?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Áp dụng Mẫu Hộp Thư Đi (Transactional Outbox Pattern): Lưu sự kiện vào một bảng 'outbox' trong CÙNG MỘT GIAO DỊCH với bản ghi nghiệp vụ, và dùng công cụ CDC (như Debezium) để quét và phát sang Kafka với cam kết ít nhất một lần",
+          "correct": true,
+          "feedback": "Chính xác! Mẫu thiết kế Transactional Outbox là giải pháp chuẩn mực của ngành công nghiệp. Bằng cách chèn thông điệp sự kiện vào bảng `outbox` ngay trong cùng một giao dịch ACID cục bộ với việc lưu cáo trạng, tính nguyên tử được bảo đảm tuyệt đối: hoặc cả hai cùng thành công, hoặc cả hai cùng bị hủy. Một tiến trình ngầm riêng hoặc công cụ Bắt Thay Đổi Dữ Liệu (Change Data Capture - CDC như Debezium đọc WAL của PostgreSQL) sẽ đọc bảng outbox và chuyển tiếp sự kiện sang Kafka với cam kết phân phối ít nhất một lần (at-least-once). Dù ứng dụng có sập ngay sau đó, sự kiện vẫn nằm an toàn trên đĩa cứng."
+        },
+        {
+          "id": "fix-2",
+          "text": "Đảo ngược thứ tự thực hiện: Bắn sự kiện lên Kafka trước, và chỉ thực hiện commit xuống PostgreSQL sau khi Kafka đã xác nhận nhận tin",
+          "correct": false,
+          "feedback": "Đảo ngược thứ tự không giải quyết được vấn đề mà chỉ tráo đổi kịch bản lỗi. Nếu bạn bắn Kafka trước mà sau đó lệnh ghi DB bị lỗi hoặc timeout, bạn sẽ phát đi một sự kiện cho một cáo trạng không hề tồn tại trong cơ sở dữ liệu (dữ liệu ma)."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấu hình một trigger stored procedure trong PostgreSQL để gọi lệnh curl bắn HTTP webhook trực tiếp sang cụm Kafka",
+          "correct": false,
+          "feedback": "Gọi lệnh mạng ra bên ngoài từ bên trong trigger của database là một sai lầm kiến trúc (anti-pattern). Nếu kết nối mạng bị nghẽn hoặc sập, nó sẽ giữ chặt khóa dòng (row locks) và làm sập toàn bộ giao dịch, kéo tụt hiệu năng của toàn bộ cơ sở dữ liệu."
+        },
+        {
+          "id": "fix-4",
+          "text": "Tăng số lần thử lại (retries) của thư viện Kafka Producer lên vô hạn để luồng xử lý tự động đứng chờ cho đến khi Kafka có mạng trở lại",
+          "correct": false,
+          "feedback": "Cơ chế thử lại trong bộ nhớ RAM không thể sống sót qua các đợt khởi động lại ứng dụng, sập container hoặc chết máy chủ. Nếu tiến trình bị hệ điều hành tiêu diệt (như sự cố đã diễn ra), toàn bộ hàng đợi thử lại trong bộ nhớ sẽ bốc hơi ngay lập tức."
+        }
+      ]
+    }
+  },
+  "conceptId": "transactional-outbox",
+  "badge": {
+    "name": "Thủ Thư Hộp Thư",
+    "icon": "📬"
+  }
+}

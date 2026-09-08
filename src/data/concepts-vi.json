@@ -874,5 +874,411 @@
         "definition": "Mã trạng thái chuẩn báo hiệu người dùng đã vượt quá giới hạn tần suất yêu cầu cho phép."
       }
     ]
+  },
+  {
+    "id": "cache-penetration",
+    "title": "Thủng Bộ Nhớ Đệm & Bộ Lọc Bloom (Cache Penetration & Bloom Filters)",
+    "summary": "Bảo vệ cơ sở dữ liệu khỏi các đợt sụp đổ do truy vấn các khóa không hề tồn tại bằng bộ lọc Bloom và lưu đệm giá trị rỗng.",
+    "explanation": [
+      "Hiện tượng Thủng Bộ Nhớ Đệm (Cache Penetration) xảy ra khi client liên tục truy vấn các bản ghi không hề tồn tại ở cả trong Cache lẫn Database. Mỗi request đều gây Cache Miss và đánh thẳng xuống Database.",
+      "Kẻ tấn công hoặc botnet độc hại thường lợi dụng điều này bằng cách bắn hàng triệu request chứa ID ngẫu nhiên hoặc ID âm, làm cạn kiệt pool kết nối và đè bẹp IOPS đĩa của DB.",
+      "Bộ Lọc Bloom (Bloom Filter) là cấu trúc dữ liệu xác suất siêu tiết kiệm bộ nhớ được đặt trước Cache. Nó khẳng định chắc chắn 100% nếu một phần tử KHÔNG tồn tại, giúp chặn đứng các truy vấn ma mà không tốn một lệnh đọc DB nào.",
+      "Một kỹ thuật phòng thủ bổ trợ khác là Lưu Đệm Giá Trị Rỗng (Null Caching) với TTL ngắn (ví dụ 60 giây), giúp các truy vấn lặp lại đối với khóa vừa tìm kiếm không tiếp tục làm phiền DB."
+    ],
+    "keyTerms": [
+      {
+        "term": "Thủng Bộ Nhớ Đệm (Cache Penetration)",
+        "definition": "Hiện tượng các truy vấn tìm kiếm dữ liệu không tồn tại vượt qua cache và tấn công thẳng vào cơ sở dữ liệu."
+      },
+      {
+        "term": "Bộ Lọc Bloom (Bloom Filter)",
+        "definition": "Cấu trúc dữ liệu xác suất kiểm tra tính thuộc tập hợp: có thể dương tính giả nhưng tuyệt đối không bao giờ âm tính giả."
+      },
+      {
+        "term": "Lưu Đệm Giá Trị Rỗng (Null Caching)",
+        "definition": "Lưu kết quả rỗng/null vào cache kèm thời gian sống (TTL) ngắn khi DB không tìm thấy bản ghi."
+      },
+      {
+        "term": "Dương Tính Giả (False Positive)",
+        "definition": "Hiện tượng bộ lọc Bloom báo phần tử có tồn tại dù thực tế không có (nhưng chiều ngược lại luôn chính xác 100%)."
+      }
+    ]
+  },
+  {
+    "id": "fencing-tokens",
+    "title": "Thẻ Phân Định & Leader Ngưng Trệ (Fencing Tokens & Leader Pauses)",
+    "summary": "Ngăn chặn các leader cũ bị ngưng trệ bởi GC thức dậy ghi đè dữ liệu mới bằng số epoch tăng đơn điệu.",
+    "explanation": [
+      "Trong kiến trúc Leader-Follower, Leader duy trì quyền lực thông qua hợp đồng thuê (lease) hoặc nhịp tim với dịch vụ đồng thuận (như ZooKeeper hay etcd). Nếu Leader bị ngưng trệ (ví dụ: JVM GC Stop-The-World kéo dài 15 giây hoặc trễ mạng), lease sẽ hết hạn.",
+      "Cụm máy chủ coi như Leader đã chết và tiến hành bầu ra Leader mới. Tuy nhiên, Leader cũ không hề chết — nó chỉ bị đóng băng tạm thời và sau đó tỉnh lại. Do không biết mình đã bị phế truất, nó tiếp tục xử lý các lệnh còn dang dở.",
+      "Nếu 'Leader xác sống' (Zombie Leader) này gửi lệnh ghi xuống bộ lưu trữ chung, nó có thể âm thầm ghi đè lên dữ liệu mới hơn vừa được tạo bởi Leader mới, gây hỏng dữ liệu nghiêm trọng.",
+      "Thẻ Phân Định (Fencing Tokens) giải quyết triệt để: mỗi khi bầu Leader, máy chủ khóa cấp một số token tăng đơn điệu (ví dụ: Token 34, rồi 35). Tầng lưu trữ lưu lại token cao nhất từng thấy và từ chối ngay lập tức mọi lệnh ghi mang token thấp hơn hoặc bằng."
+    ],
+    "keyTerms": [
+      {
+        "term": "Thẻ Phân Định (Fencing Token)",
+        "definition": "Số thứ tự tăng đơn điệu đi kèm khóa/lease mà tầng lưu trữ bắt buộc phải kiểm tra trước khi nhận lệnh ghi."
+      },
+      {
+        "term": "Ngưng Trệ GC (Stop-The-World Pause)",
+        "definition": "Thời điểm máy ảo Java đóng băng toàn bộ các luồng ứng dụng để dọn dẹp bộ nhớ."
+      },
+      {
+        "term": "Leader Xác Sống (Zombie Leader)",
+        "definition": "Một node leader đã bị truất quyền nhưng tỉnh lại sau ngưng trệ và tiếp tục thực thi các lệnh ghi sai lệch."
+      },
+      {
+        "term": "Ghi Đè Phân Não (Split-Brain Write)",
+        "definition": "Các thao tác ghi mâu thuẫn đồng thời do nhiều node cùng tưởng mình là Leader hợp pháp."
+      }
+    ]
+  },
+  {
+    "id": "consistent-hashing-vnodes",
+    "title": "Băm Nhất Quán & Node Ảo (Consistent Hashing & Virtual Nodes)",
+    "summary": "Phân bổ khóa đồng đều trên cụm máy chủ và ngăn chặn sự cố sập đổ domino dây chuyền bằng node ảo trên vòng băm.",
+    "explanation": [
+      "Băm nhất quán (Consistent Hashing) ánh xạ cả máy chủ và khóa dữ liệu lên cùng một vòng tròn định danh (ví dụ từ 0 đến 2^32 - 1). Một khóa sẽ thuộc về máy chủ đầu tiên xuất hiện theo chiều kim đồng hồ.",
+      "Ở mô hình cơ bản, mỗi máy vật lý chỉ có một vị trí trên vòng. Khi một node bị sập, 100% không gian khóa của nó sẽ dồn trọn vẹn sang duy nhất một node láng giềng kế tiếp.",
+      "Gánh nặng tải tăng gấp đôi tức thì thường làm node láng giềng đó cạn kiệt RAM và sập theo, gây ra hiệu ứng domino cuốn phăng toàn bộ cụm cache trong chốc lát.",
+      "Node ảo (Virtual Nodes / Vnodes) giải quyết vấn đề bằng cách gán cho mỗi máy vật lý hàng trăm điểm ảo phân bổ rải rác khắp vòng tròn. Khi một máy vật lý sập, các khóa của nó được chia đều cho TẤT CẢ các máy còn sống thay vì đè bẹp một máy duy nhất."
+    ],
+    "keyTerms": [
+      {
+        "term": "Băm Nhất Quán (Consistent Hashing)",
+        "definition": "Thuật toán băm giúp việc thêm/bớt máy chủ chỉ cần tái phân bổ trung bình K/N khóa."
+      },
+      {
+        "term": "Node Ảo (Virtual Node / Vnode)",
+        "definition": "Một token logic trên vòng băm đại diện cho một phần năng lực xử lý của máy vật lý."
+      },
+      {
+        "term": "Vòng Băm (Hash Ring)",
+        "definition": "Không gian định danh tuần hoàn tròn nơi khóa và máy chủ được băm vào các vị trí cố định."
+      },
+      {
+        "term": "Sụp Đổ Dây Chuyền (Cascading Failure)",
+        "definition": "Hiện tượng một thành phần sập khiến tải dồn sang thành phần kế tiếp và làm sập lần lượt toàn hệ thống."
+      }
+    ]
+  },
+  {
+    "id": "transactional-outbox",
+    "title": "Mẫu Thiết Kế Hộp Thư Đi (Transactional Outbox Pattern)",
+    "summary": "Đảm bảo phát sự kiện tin cậy sau khi cập nhật cơ sở dữ liệu mà không gặp rủi ro bất nhất của thao tác ghi kép (Dual-Write).",
+    "explanation": [
+      "Trong kiến trúc microservices và hướng sự kiện, một dịch vụ thường phải vừa cập nhật cơ sở dữ liệu vừa bắn sự kiện vào Message Broker (như Kafka hay RabbitMQ).",
+      "Cách làm ngây thơ là Ghi Kép (Dual-Write: sửa DB xong rồi gọi kafka.send()). Nếu ứng dụng sập hoặc mạng đứt sau khi DB commit nhưng trước khi Kafka nhận tin, sự kiện sẽ biến mất vĩnh viễn và các dịch vụ khác mất đồng bộ.",
+      "Mẫu Transactional Outbox lưu thông điệp cần phát vào một bảng chuyên dụng tên là 'outbox' ngay trong CÙNG MỘT GIAO DỊCH ACID với dữ liệu nghiệp vụ của cơ sở dữ liệu.",
+      "Một tiến trình ngầm riêng hoặc công cụ Bắt Thay Đổi Dữ Liệu (Change Data Capture - CDC như Debezium) sẽ đọc transaction log của database và chuyển tiếp sự kiện sang Kafka với cam kết ít nhất một lần (at-least-once delivery)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Transactional Outbox",
+        "definition": "Mẫu thiết kế lưu trạng thái nghiệp vụ và sự kiện cần phát trong cùng một giao dịch database mang tính nguyên tử."
+      },
+      {
+        "term": "Ghi Kép (Dual Write)",
+        "definition": "Hành động cập nhật hai hệ thống lưu trữ độc lập mà không có giao dịch phân tán, dẫn đến nguy cơ lệch pha dữ liệu."
+      },
+      {
+        "term": "Bắt Thay Đổi Dữ Liệu (CDC)",
+        "definition": "Kỹ thuật trích xuất các thay đổi trực tiếp từ nhật ký giao dịch ghi trước (WAL/binlog) của cơ sở dữ liệu."
+      },
+      {
+        "term": "Phân Phối Ít Nhất Một Lần (At-Least-Once)",
+        "definition": "Cam kết thông điệp luôn được gửi tới nơi ít nhất một lần, đòi hỏi bên nhận phải có tính lũy kế (idempotent)."
+      }
+    ]
+  },
+  {
+    "id": "read-your-own-writes",
+    "title": "Nhất Quán Đọc-Sau-Khi-Ghi (Read-Your-Own-Writes Consistency)",
+    "summary": "Đảm bảo người dùng luôn nhìn thấy ngay lập tức các cập nhật do chính mình thực hiện, kể cả khi đọc từ bản sao bất đồng bộ.",
+    "explanation": [
+      "Kiến trúc web hiện đại thường định tuyến lệnh ghi tới Database chính (Primary) và chia tải đọc cho các bản sao (Read Replicas) phân tán khắp các vùng địa lý.",
+      "Do quá trình nhân bản diễn ra bất đồng bộ, các bản sao replica thường bị trễ hàng trăm mili-giây đến vài giây so với bản chính.",
+      "Nếu người dùng vừa sửa trang cá nhân và trình duyệt tải lại ngay bằng cách đọc từ một replica đang trễ, họ sẽ thấy dữ liệu cũ chưa đổi. Người dùng tưởng lỗi và bấm lưu liên tiếp gây trùng lặp.",
+      "Tính nhất quán Đọc-Sau-Khi-Ghi (Read-Your-Own-Writes - RYOW) đảm bảo người dùng luôn thấy thay đổi của chính mình. Hệ thống đạt được điều này bằng cách ghim các yêu cầu đọc về Primary trong N giây sau khi ghi, hoặc kẹp LSN/phiên bản giao dịch trong Session Token."
+    ],
+    "keyTerms": [
+      {
+        "term": "Đọc-Sau-Khi-Ghi (RYOW)",
+        "definition": "Mô hình nhất quán đảm bảo một tác nhân luôn nhìn thấy ngay lập tức các cập nhật do chính mình vừa thực hiện."
+      },
+      {
+        "term": "Độ Trễ Nhân Bản (Replication Lag)",
+        "definition": "Khoảng thời gian chênh lệch giữa lúc dữ liệu được commit ở primary và lúc nó xuất hiện trên replica."
+      },
+      {
+        "term": "Đọc Đơn Điệu (Monotonic Reads)",
+        "definition": "Đảm bảo một khi client đã đọc được dữ liệu ở phiên bản T, các lần đọc sau sẽ không bao giờ thấy dữ liệu cũ hơn T."
+      },
+      {
+        "term": "Mã Phiên (Session Token)",
+        "definition": "Token phía client lưu trữ số thứ tự nhật ký giao dịch (LSN) hoặc dấu thời gian ghi gần nhất của người dùng."
+      }
+    ]
+  },
+  {
+    "id": "connection-pool-leaks",
+    "title": "Rò Rỉ Pool Kết Nối (Connection Pool Leaks & Starvation)",
+    "summary": "Phát hiện và ngăn ngừa tình trạng rò rỉ socket kết nối cơ sở dữ liệu làm tê liệt ứng dụng dù phần cứng DB hoàn toàn rảnh rỗi.",
+    "explanation": [
+      "Kết nối cơ sở dữ liệu là các socket hệ điều hành nặng nề đòi hỏi xác thực và tốn bộ nhớ. Ứng dụng duy trì một Connection Pool (như HikariCP, pgpool) để tái sử dụng kết nối hiệu quả.",
+      "Rò rỉ pool kết nối xảy ra khi mã nguồn mượn một kết nối từ pool nhưng quên giải phóng/đóng lại — thường do các lỗi ngoại lệ (Exception) không được bắt đúng cách hoặc thiếu khối finally.",
+      "Khi các socket bị rò rỉ tích tụ dần, pool sẽ cạn kiệt. Các request mới đến bị tắc nghẽn trong hàng đợi và cuối cùng báo lỗi Gateway Timeout, dù CPU của máy chủ Database đang nhàn rỗi ở mức 2%.",
+      "Phòng tránh rò rỉ bằng cách bắt buộc áp dụng mô hình RAII / try-with-resources, thiết lập timeout mượn kết nối ngắn (connectionTimeout), đặt maxLifetime và bật ngưỡng phát hiện rò rỉ (leakDetectionThreshold)."
+    ],
+    "keyTerms": [
+      {
+        "term": "Hồ Kết Nối (Connection Pool)",
+        "definition": "Tập hợp các kết nối cơ sở dữ liệu được duy trì sẵn để chia sẻ cho các luồng xử lý đồng thời."
+      },
+      {
+        "term": "Rò Rỉ Kết Nối (Connection Leak)",
+        "definition": "Lỗi lập trình khi một kết nối DB đã mượn không bao giờ được trả lại pool sau khi xử lý xong."
+      },
+      {
+        "term": "Nghẽn Hồ Kết Nối (Pool Starvation)",
+        "definition": "Trạng thái toàn bộ kết nối trong pool bị chiếm dụng hoặc rò rỉ, khiến mọi truy vấn tiếp theo bị chặn đứng."
+      },
+      {
+        "term": "Ngưỡng Phát Hiện Rò Rỉ",
+        "definition": "Cấu hình tự động in cảnh báo kèm stack trace nếu một kết nối bị giữ quá lâu vượt thời hạn cho phép."
+      }
+    ]
+  },
+  {
+    "id": "crdt-offline-sync",
+    "title": "Kiểu Dữ Liệu Tự Hợp Nhất (CRDTs & Offline Sync)",
+    "summary": "Hợp nhất mượt mà các chỉnh sửa ngoại tuyến đồng thời giữa các client phân tán mà không cần khóa tập trung hay lo ngại sai lệch đồng hồ.",
+    "explanation": [
+      "Các ứng dụng di động và thiết bị hiện trường thường xuyên hoạt động ở chế độ ngoại tuyến tại các vùng mất sóng, cho phép người dùng sửa dữ liệu cục bộ và đồng bộ khi có mạng.",
+      "Giải pháp giải quyết xung đột ngây thơ là Ghi-Sau-Cùng-Thắng (Last-Write-Wins - LWW) dựa trên dấu thời gian đồng hồ thiết bị. Do đồng hồ phần cứng của các thiết bị luôn bị sai lệch (clock drift), phiên bản của một máy có thể vô tình xóa sạch công sức của máy khác.",
+      "Kiểu Dữ Liệu Tự Do Nhân Bản Không Xung Đột (CRDTs) là các cấu trúc dữ liệu được thiết kế toán học để có thể nhân bản trên nhiều node và tự động hợp nhất đồng thời mà không cần điều phối tập trung.",
+      "Dù sử dụng State-based CRDTs hay Operation-based CRDTs, tất cả các bản sao đều được đảm bảo bằng toán học sẽ hội tụ về cùng một trạng thái duy nhất sau khi nhận đủ các bản cập nhật."
+    ],
+    "keyTerms": [
+      {
+        "term": "CRDT",
+        "definition": "Kiểu dữ liệu nhân bản không xung đột — cấu trúc dữ liệu tự động hợp nhất nhất quán mà không cần giao thức khóa."
+      },
+      {
+        "term": "Lệch Pha Đồng Hồ (Clock Skew / Drift)",
+        "definition": "Sự chênh lệch về thời gian vật lý giữa các đồng hồ máy tính không được đồng bộ chuẩn xác."
+      },
+      {
+        "term": "Ghi-Sau-Thắng (Last-Write-Wins - LWW)",
+        "definition": "Chiến lược giải quyết xung đột chọn dữ liệu có timestamp cao hơn, cực kỳ dễ tổn thương trước clock skew."
+      },
+      {
+        "term": "Tính Nhất Quán Hội Tụ Tuyệt Đối (Strong Eventual Consistency)",
+        "definition": "Đảm bảo rằng bất kỳ hai replica nào đã nhận cùng tập hợp cập nhật sẽ có trạng thái hoàn toàn giống hệt nhau."
+      }
+    ]
+  },
+  {
+    "id": "lsm-write-stalls",
+    "title": "Đình Trệ Ghi Cây LSM (LSM-Tree Write Stalls)",
+    "summary": "Ngăn ngừa sụp đổ băng thông ghi đột ngột khi tốc độ nạp dữ liệu vượt quá năng lực nén và gộp đĩa ngầm của cơ sở dữ liệu.",
+    "explanation": [
+      "Các công cụ lưu trữ dạng Cây Gộp Cấu Trúc Nhật Ký (LSM-tree như RocksDB, Cassandra, ScyllaDB) mang lại thông lượng ghi cực cao bằng cách ghi tạm vào bộ nhớ đệm (Memtable) và ghi tuần tự vào Write-Ahead Log (WAL).",
+      "Khi Memtable đầy, nó được xả (flush) xuống đĩa dưới dạng tệp SSTable bất biến tại Tầng 0 (Level 0). Các luồng chạy ngầm liên tục gộp và nén (compact) các SSTable nhỏ thành các tầng sâu hơn để loại bỏ dữ liệu đã xóa (tombstone) và sắp xếp lại khóa.",
+      "Nếu tốc độ ghi mới vượt quá năng lực I/O của đĩa, tiến trình nén ngầm sẽ bị tụt lại phía sau. Các tệp L0 tích tụ dồn dập khiến độ khuếch đại đọc (read amplification) tăng theo cấp số nhân.",
+      "Để ngăn ổ đĩa phình to vô hạn và truy vấn đọc bị sập, cơ sở dữ liệu sẽ kích hoạt cơ chế tự vệ 'Write Stall' — chủ động bóp nghẽn hoặc chặn đứng hoàn toàn các lệnh ghi mới của client cho đến khi tiến trình nén dọn dẹp xong."
+    ],
+    "keyTerms": [
+      {
+        "term": "Cây LSM (LSM-Tree)",
+        "definition": "Kiến trúc lưu trữ tối ưu hóa ghi bằng cách đệm trên RAM và ghi tuần tự vào các tệp SSTable bất biến trên đĩa."
+      },
+      {
+        "term": "Nén Gộp (Compaction)",
+        "definition": "Quá trình chạy ngầm để hợp nhất nhiều SSTable, dọn dẹp bản ghi đã xóa (tombstone) và sắp xếp lại khóa."
+      },
+      {
+        "term": "Đình Trệ Ghi (Write Stall)",
+        "definition": "Cơ chế tự vệ của database tạm dừng chấp nhận lệnh ghi mới khi hàng đợi nén đĩa vượt ngưỡng an toàn."
+      },
+      {
+        "term": "Chiến Lược Nén Phân Tầng (Tiered Compaction)",
+        "definition": "Chiến lược nén gộp các tệp SSTable có kích thước tương đồng, rất lý tưởng cho dữ liệu chuỗi thời gian ghi liên tục."
+      }
+    ]
+  },
+  {
+    "id": "hedged-requests-tail-latency",
+    "title": "Truy Vấn Phòng Ngừa & Khuếch Đại Độ Trễ Đuôi (Hedged Requests)",
+    "summary": "Triệt tiêu độ trễ đuôi p99 trong các kiến trúc phân tán phân mảnh bằng cách chủ động gửi truy vấn trùng lặp dự phòng.",
+    "explanation": [
+      "Trong cơ sở dữ liệu phân tán và vi dịch vụ, một truy vấn tổng hợp thường phải phát tán (scatter-gather) tới hàng chục phân mảnh (shard) và chờ tất cả phản hồi trước khi trả kết quả cho người dùng.",
+      "Độ trễ đuôi khuếch đại khủng khiếp qua cơ chế phát tán: nếu mỗi shard có 1% xác suất bị giật lag 200ms (mức p99), thì một truy vấn phát tới 50 shard sẽ có xác suất bị chậm lên tới (1 - 0.99^50) ≈ 40%!",
+      "Hiện tượng giật lag tức thời này thường do các đợt dọn rác bộ nhớ (GC pause), tranh chấp CPU trên máy chủ vật lý hơn là do toàn bộ hệ thống bị quá tải.",
+      "Truy vấn phòng ngừa (Hedged Requests) giải quyết vấn đề này: sau khi gửi yêu cầu tới bản sao A, client hẹn giờ ở mốc kỳ vọng p95 (ví dụ 15ms). Nếu máy A chưa kịp trả lời, client phát ngay một yêu cầu thứ hai tới máy B; bên nào trả về trước sẽ được lấy kết quả, bên chậm hơn sẽ bị hủy bỏ."
+    ],
+    "keyTerms": [
+      {
+        "term": "Truy Vấn Phòng Ngừa (Hedged Request)",
+        "definition": "Yêu cầu dự phòng được gửi tới bản sao khác khi truy vấn ban đầu vượt quá ngưỡng thời gian trễ chấp nhận."
+      },
+      {
+        "term": "Khuếch Đại Độ Trễ Đuôi (Tail Latency Amplification)",
+        "definition": "Hiện tượng xác suất chạm phải độ trễ cao tăng vọt theo cấp số mũ khi một tác vụ phân nhánh ra nhiều node."
+      },
+      {
+        "term": "Mô Hình Phát Tán - Gom Tụ (Scatter-Gather)",
+        "definition": "Mẫu kiến trúc trong đó một điều phối viên phát lệnh tới nhiều node con rồi tổng hợp kết quả trả về."
+      },
+      {
+        "term": "Node Chậm Chân (Straggler Node)",
+        "definition": "Một node hoặc bản sao phản hồi chậm chạp làm đình trệ toàn bộ tiến độ hoàn thành của tác vụ song song."
+      }
+    ]
+  },
+  {
+    "id": "head-of-line-blocking",
+    "title": "Nút Thắt Đầu Hàng Đợi (Head-of-Line Blocking & Segregated Queues)",
+    "summary": "Ngăn chặn các tác vụ khổng lồ làm tê liệt hàng ngàn tác vụ nhanh trong phân vùng FIFO bằng kỹ thuật tách biệt hàng đợi theo độ ưu tiên.",
+    "explanation": [
+      "Các hệ thống hàng đợi thông điệp như Kafka hay RabbitMQ luôn bảo đảm thứ tự nhập trước xuất trước (FIFO) nghiêm ngặt trong từng phân vùng (partition) hoặc hàng đợi đơn lẻ.",
+      "Nếu một tác vụ khổng lồ dạng 'con voi' (như bóc băng cuộc gọi kéo dài 4 tiếng) nằm ở ngay đầu phân vùng FIFO, thì toàn bộ các tác vụ nhỏ 'con chuột' (như cảnh báo khẩn cấp 30 giây) xếp hàng phía sau sẽ bị chặn đứng hoàn toàn cho đến khi con voi hoàn thành.",
+      "Hiện tượng này gọi là Tắc Nghẽn Đầu Hàng Đợi (Head-of-Line Blocking - HoL). Ngay cả khi các worker downstream còn thừa nhiều CPU, phân vùng vẫn không thể tăng offset lên tiếp.",
+      "Giải pháp kiến trúc là Phân Tách Hàng Đợi (Queue Segregation): phân loại tác vụ theo thời lượng ước tính ngay khi tiếp nhận, điều hướng các tác vụ hàng loạt dài hạn vào hàng đợi riêng biệt và ưu tiên hàng đợi cho các tác vụ tương tác tức thì."
+    ],
+    "keyTerms": [
+      {
+        "term": "Tắc Nghẽn Đầu Hàng Đợi (HoL Blocking)",
+        "definition": "Nút thắt cổ chai khi một phần tử duy nhất bị chậm ở đầu hàng đợi chặn đứng tất cả phần tử phía sau."
+      },
+      {
+        "term": "Tác Vụ Voi vs Chuột",
+        "definition": "Sự chênh lệch giữa các tác vụ xử lý tốn cực nhiều tài nguyên và các giao dịch ngắn yêu cầu độ trễ thấp."
+      },
+      {
+        "term": "Phân Tách Hàng Đợi (Queue Segregation)",
+        "definition": "Kỹ thuật chia tải vào các hàng đợi riêng biệt dựa trên SLA, thời gian thực thi hoặc tài nguyên cần dùng."
+      },
+      {
+        "term": "Vị Trí Tiêu Thụ (Consumer Offset)",
+        "definition": "Chỉ số tuần tự trong phân vùng ghi nhận tiến độ mà nhóm consumer đã xử lý thành công."
+      }
+    ]
+  },
+  {
+    "id": "jwt-revocation-blacklist",
+    "title": "Thu Hồi Token JWT & Danh Sách Đen Phân Tán",
+    "summary": "Bịt lỗ hổng bảo mật của token phi trạng thái bị lộ bằng cách rút ngắn thời hạn, xoay vòng token và bộ đệm thu hồi phân tán.",
+    "explanation": [
+      "JSON Web Token (JWT) rất phổ biến vì đặc tính phi trạng thái (stateless): các microservice có thể tự giải mã và kiểm tra chữ ký số cục bộ bằng public key mà không cần truy vấn cơ sở dữ liệu tập trung ở mỗi request.",
+      "Tuy nhiên, tính phi trạng thái lại tạo ra điểm mù bảo mật nghiêm trọng: khi người dùng đổi mật khẩu, đăng xuất hoặc bị khóa tài khoản khẩn cấp, các token JWT đã phát hành vẫn hoàn toàn hợp lệ cho đến khi chạm mốc thời gian hết hạn (exp).",
+      "Nếu đặt thời hạn token dài (như 24 tiếng), kẻ tấn công chiếm được token có thể thoải mái khai thác hệ thống ngay cả khi quản trị viên đã đình chỉ tài khoản.",
+      "Kiến trúc chuẩn giải quyết bằng chiến lược kết hợp: đặt thời hạn Access Token cực ngắn (5 đến 15 phút) đi kèm Refresh Token xoay vòng (rotation), đồng thời triển khai một Danh Sách Đen (Blocklist/Blacklist) phân tán siêu nhanh trên bộ nhớ RAM (như Redis với Bloom filter) để thu hồi khẩn cấp tức thì."
+    ],
+    "keyTerms": [
+      {
+        "term": "JWT Phi Trạng Thái (Stateless JWT)",
+        "definition": "Chứng chỉ số tự chứa thông tin danh tính và quyền hạn, xác thực được mà không cần tra cứu cơ sở dữ liệu."
+      },
+      {
+        "term": "Danh Sách Đen Thu Hồi (Revocation Blocklist)",
+        "definition": "Bộ nhớ đệm phân tán lưu trữ mã định danh của các token bị thu hồi (jti) cho đến khi chúng tự hết hạn."
+      },
+      {
+        "term": "Xoay Vòng Refresh Token (Token Rotation)",
+        "definition": "Mẫu bảo mật trong đó mỗi refresh token chỉ dùng được một lần duy nhất; nếu tái sử dụng sẽ vô hiệu hóa toàn bộ chuỗi token."
+      },
+      {
+        "term": "Cửa Sổ Hết Hạn Token",
+        "definition": "Khoảng thời gian mà một chứng chỉ số được tin cậy hợp lệ trước khi bắt buộc phải tái xác thực."
+      }
+    ]
+  },
+  {
+    "id": "ephemeral-port-exhaustion",
+    "title": "Cạn Kiệt Cổng Phù Du (TIME_WAIT Port Exhaustion)",
+    "summary": "Ngăn ngừa vi dịch vụ bị tê liệt các kết nối ra ngoài do tích tụ hàng chục ngàn socket TCP ngắn hạn bị kẹt trong trạng thái TIME_WAIT.",
+    "explanation": [
+      "Khi một vi dịch vụ mở kết nối TCP ra ngoài, hệ điều hành sẽ cấp phát một cổng nguồn tạm thời (ephemeral port) trong dải định sẵn (thường từ 32,768 đến 60,999, khoảng 28,000 cổng).",
+      "Mỗi kết nối TCP được định danh bởi bộ 4 thông số (4-tuple): (IP Nguồn, Cổng Nguồn, IP Đích, Cổng Đích). Khi gọi tới một địa chỉ Load Balancer cố định, số lượng kết nối tối đa bị giới hạn hoàn toàn bởi số cổng nguồn phù du còn trống.",
+      "Khi đóng kết nối HTTP, socket TCP phải nằm lại ở trạng thái `TIME_WAIT` trong thời gian 2 * MSL (thường là 60 đến 120 giây) để bảo đảm các gói tin mạng đến muộn không làm sai lệch kết nối sau đó.",
+      "Nếu ứng dụng tạo hàng ngàn kết nối HTTP ngắn hạn mỗi giây mà không tái sử dụng kết nối (không dùng Connection Pool hay Keep-Alive), toàn bộ dải cổng nguồn sẽ bị cạn kiệt nhanh hơn tốc độ dọn dẹp của kernel, gây lỗi sập hàng loạt `EADDRNOTAVAIL`."
+    ],
+    "keyTerms": [
+      {
+        "term": "Cổng Phù Du (Ephemeral Port)",
+        "definition": "Cổng mạng ngắn hạn do nhân hệ điều hành tự động cấp cho phía client khi khởi tạo kết nối TCP ra ngoài."
+      },
+      {
+        "term": "Trạng Thái TIME_WAIT",
+        "definition": "Giai đoạn chờ bắt buộc của giao thức TCP sau khi ngắt kết nối để các gói tin còn trôi nổi trên mạng tiêu biến an toàn."
+      },
+      {
+        "term": "HTTP Keep-Alive",
+        "definition": "Cơ chế duy trì một kết nối TCP liên tục để phục vụ nhiều lượt yêu cầu/phản hồi HTTP liên tiếp."
+      },
+      {
+        "term": "Bộ Tứ TCP (TCP 4-Tuple)",
+        "definition": "Tập hợp bốn giá trị: IP nguồn, cổng nguồn, IP đích, cổng đích dùng để nhận dạng duy nhất một phiên kết nối mạng."
+      }
+    ]
+  },
+  {
+    "id": "multi-leader-conflicts",
+    "title": "Xung Đột Nhân Bản Đa Leader & Ghim Vùng Dữ Liệu",
+    "summary": "Tránh trôi dạt và mất mát dữ liệu không thể cứu vãn giữa các trung tâm dữ liệu đa vùng bằng kỹ thuật ghim thực thể và đồng hồ vector.",
+    "explanation": [
+      "Trong các ứng dụng toàn cầu, kiến trúc Đa Leader (Multi-Leader hay Active-Active) cho phép các trung tâm dữ liệu ở từng châu lục đều có thể tiếp nhận lệnh ghi tại chỗ với độ trễ cực thấp.",
+      "Do dữ liệu được đồng bộ bất đồng bộ qua đường truyền xuyên đại dương, hai người dùng ở hai khu vực khác nhau có thể đồng thời chỉnh sửa cùng một bản ghi mà phía bên kia không hề hay biết.",
+      "Khi hai luồng nhân bản gặp nhau, xung đột ghi sẽ xảy ra. Chiến lược thô sơ Ghi-Sau-Cùng-Thắng (LWW) dựa trên đồng hồ vật lý NTP sẽ vô tình ghi đè và làm mất dữ liệu của người dùng do sai số lệch đồng hồ giữa các máy chủ.",
+      "Các kiến trúc chuẩn ngăn chặn xung đột bằng cách Tránh Xung Đột (Ghim Vùng - Geo-Pinning / Master-per-Entity: mọi thao tác ghi của một khách hàng luôn được điều hướng về đúng trung tâm dữ liệu quê nhà) hoặc sử dụng Đồng Hồ Vector (Vector Clocks) để phát hiện thứ tự nhân quả chính xác."
+    ],
+    "keyTerms": [
+      {
+        "term": "Nhân Bản Đa Leader (Multi-Leader)",
+        "definition": "Mô hình kiến trúc phân tán trong đó nhiều node độc lập đều có quyền tiếp nhận và phát tán các lệnh ghi."
+      },
+      {
+        "term": "Xung Đột Ghi Đồng Thời",
+        "definition": "Trạng thái khi hai máy chủ cùng chấp nhận hai bản cập nhật khác nhau cho một thực thể trước khi nhận được tin của nhau."
+      },
+      {
+        "term": "Ghim Vùng Dữ Liệu (Geo-Pinning)",
+        "definition": "Quy tắc định tuyến toàn bộ lệnh ghi của một thực thể hoặc tài khoản về một cụm trung tâm dữ liệu cố định."
+      },
+      {
+        "term": "Đồng Hồ Vector (Vector Clock)",
+        "definition": "Mảng các đồng hồ logic giúp hệ thống phân tán xác định quan hệ nhân quả và phát hiện xung đột dữ liệu."
+      }
+    ]
+  },
+  {
+    "id": "keyset-vs-offset-pagination",
+    "title": "Phân Trang Theo Con Trỏ (Keyset) vs Tắc Nghẽn OFFSET",
+    "summary": "Loại bỏ hoàn toàn chi phí quét cạn toàn bảng O(N) khi lật trang sâu bằng cách thay thế OFFSET bằng con trỏ chỉ mục.",
+    "explanation": [
+      "Cách phân trang truyền thống thường dùng câu truy vấn SQL: `SELECT * FROM orders ORDER BY created_at DESC LIMIT 50 OFFSET 5000000`.",
+      "Cơ sở dữ liệu không thể nhảy cóc trực tiếp đến dòng thứ 5.000.000. Động cơ lưu trữ bắt buộc phải duyệt qua 5.000.050 bản ghi từ đĩa hoặc index, sắp xếp chúng trong bộ nhớ, vứt bỏ 5.000.000 bản ghi đầu tiên và chỉ lấy ra 50 bản ghi cuối cùng.",
+      "Số trang càng sâu, độ trễ truy vấn càng tăng tuyến tính theo cấp số O(N), làm tê liệt đĩa I/O, tràn bộ nhớ đệm và chiếm cạn Connection Pool.",
+      "Phân trang Keyset (hay Cursor-based pagination) loại bỏ triệt để vấn đề này bằng cách dùng giá trị của bản ghi cuối cùng ở trang trước làm điểm neo tìm kiếm: `WHERE (created_at, id) < (:last_time, :last_id) ORDER BY created_at DESC, id DESC LIMIT 50`. Kỹ thuật này nhảy trực tiếp qua cây B-tree với độ phức tạp không đổi $O(1)$ ở bất kỳ độ sâu nào."
+    ],
+    "keyTerms": [
+      {
+        "term": "Nghẽn OFFSET (OFFSET Thrashing)",
+        "definition": "Tình trạng sụt giảm hiệu năng nghiêm trọng do database phải đọc và loại bỏ hàng triệu dòng để phục vụ các trang sâu."
+      },
+      {
+        "term": "Phân Trang Keyset / Con Trỏ (Cursor)",
+        "definition": "Phương pháp phân trang tìm kiếm trực tiếp trang tiếp theo bằng cách dựa vào giá trị chỉ mục của phần tử trước đó."
+      },
+      {
+        "term": "Dò Chỉ Mục vs Quét Toàn Bộ (Seek vs Scan)",
+        "definition": "Sự khác biệt giữa việc nhảy thẳng tới bản ghi mục tiêu (Seek) so với việc phải duyệt tuần tự qua hàng ngàn trang (Scan)."
+      },
+      {
+        "term": "Cột Phá Vỡ Cân Bằng (Tie-Breaker)",
+        "definition": "Một cột duy nhất (như khóa chính ID) bổ sung vào mệnh đề sắp xếp để đảm bảo thứ tự phân trang luôn ổn định và tất định."
+      }
+    ]
   }
 ]

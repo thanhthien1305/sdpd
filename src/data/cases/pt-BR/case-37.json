@@ -1,0 +1,250 @@
+{
+  "id": "case-37",
+  "number": 37,
+  "title": "O Despacho Fantasma",
+  "subtitle": "A gravação no banco é bem-sucedida mas a publicação no broker falha, dessincronizando serviços",
+  "brief": {
+    "narrative": "Ao registrar acusações de crimes graves, o serviço de Gestão de Casos do SDPD executa duas ações: (1) salvar a acusação no banco de dados primário PostgreSQL e (2) emitir um evento 'IndictmentFiled' no Apache Kafka para que o Elasticsearch e a Central de Alertas indexem o suspeito e alertem as viaturas. O código adota escrita dupla ingênua: executa `await db.save(indictment)` e em seguida `await kafka.send(event)`. Às 14:30:00, detetives cadastram 42 acusações em uma operação antidrogas. Para 18 desses registros, a transação no PostgreSQL é efetivada no disco com sucesso. Porém, logo após o commit, uma oscilação na rede redefine o socket TCP do Kafka e uma exceção não tratada derruba o container da aplicação. As 18 acusações estão salvas no banco, mas os eventos no Kafka nunca foram emitidos. Policiais que consultam o Elasticsearch pelo suspeito 'Marcus Vance' recebem 0 resultados. 20 minutos depois, Vance é parado em uma blitz e liberado porque a busca não encontrou seu mandado.",
+    "symptoms": [
+      "18 acusações de crimes graves existem no PostgreSQL mas não aparecem nas buscas do Elasticsearch",
+      "Offsets no tópico do Kafka confirmam 18 mensagens a menos do que as linhas gravadas no banco entre 14:30 e 14:35",
+      "Logs do container registram `Postgres COMMIT OK` seguido de `UnhandledPromiseRejection: Kafka broker unreachable, container exiting`",
+      "Suspeito perigoso liberado em abordagem de rotina por falta de sincronização do índice de busca"
+    ],
+    "objective": "Diagnosticar como escritas não atômicas entre banco de dados e broker geram perda irreversível de eventos e adotar um padrão atômico de publicação."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "detective-terminal",
+        "type": "client",
+        "label": "Terminal do Detetive",
+        "status": "healthy",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Portal de Casos",
+          "logs": [
+            "[14:30:10] INFO: Registrada acusação #8819 (Suspeito: Marcus Vance)",
+            "[14:30:11] INFO: Servidor retornou HTTP 200 OK — Acusação Salva",
+            "[14:30:20] INFO: Cadastradas 41 acusações adicionais de narcóticos"
+          ],
+          "data": {
+            "Total de Acusações": "42 registros",
+            "Resposta do Servidor": "HTTP 200 OK para todas",
+            "Expectativa do Usuário": "Suspeitos imediatamente consultáveis na cidade"
+          },
+          "status": "Detetives submeteram registros com sucesso e receberam confirmação."
+        }
+      },
+      {
+        "id": "case-service",
+        "type": "server",
+        "label": "API de Gestão de Casos",
+        "status": "degraded",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Container do Serviço de Casos",
+          "logs": [
+            "[14:30:10] INFO: BEGIN transaction no PostgreSQL",
+            "[14:30:10.050] INFO: INSERT INTO indictments ... COMMIT OK (id=8819)",
+            "[14:30:10.060] WARN: Tentando kafka.producer.send('indictments', {id: 8819})",
+            "[14:30:10.200] ERROR: SocketException: Conexão redefinida pelo Kafka (10.0.4.12:9092)",
+            "[14:30:10.210] CRITICAL: Exceção não tratada em callback assíncrono — Processo encerrado"
+          ],
+          "data": {
+            "Padrão Utilizado": "Escrita Dupla Ingênua (Banco depois Kafka)",
+            "Status Gravação Postgres": "COMMIT EFETIVADO",
+            "Status Publicação Kafka": "FALHOU / PERDIDO",
+            "Ciclo de Vida": "Caiu antes de tentar novamente"
+          },
+          "status": "Gravou no banco, mas caiu ao publicar no Kafka. Evento perdido definitivamente."
+        }
+      },
+      {
+        "id": "postgres-db",
+        "type": "database",
+        "label": "PostgreSQL Primário",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster Primário PostgreSQL",
+          "logs": [
+            "[14:30:10.050] INFO: COMMIT da transação tx_99210 — linha 8819 gravada em disco",
+            "[14:30:12.000] INFO: Total de acusações: 42 novas linhas salvas na tabela",
+            "[14:30:30] INFO: Estado do banco saudável, replicação nominal"
+          ],
+          "data": {
+            "Registro #8819": "PRESENTE na tabela de acusações",
+            "Nome do Suspeito": "Marcus Vance",
+            "Acusação": "Narcóticos Crime Grave Classe A",
+            "Status": "MANDADO ATIVO"
+          },
+          "status": "Dados gravados com segurança no PostgreSQL, mas isolados do sistema de busca."
+        }
+      },
+      {
+        "id": "kafka-broker",
+        "type": "server",
+        "label": "Broker Apache Kafka",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster Apache Kafka",
+          "logs": [
+            "[14:30:09] INFO: Partição 0 do tópico 'indictments' ativa",
+            "[14:30:10.150] WARN: Reset breve de socket na conexão do cliente",
+            "[14:30:10.300] INFO: Cliente reconectou, mas nenhuma mensagem para ID 8819",
+            "[14:30:30] INFO: Mensagens no tópico: 24 recebidas (18 ausentes)"
+          ],
+          "data": {
+            "Tópico": "indictments-stream",
+            "Mensagens Recebidas": "24",
+            "Mensagens Esperadas": "42",
+            "Eventos Perdidos": "18 eventos nunca publicados"
+          },
+          "status": "Nunca recebeu os 18 eventos devido à queda da aplicação após o commit do banco."
+        }
+      },
+      {
+        "id": "elasticsearch-cluster",
+        "type": "server",
+        "label": "Índice Elasticsearch",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 340
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Índice de Busca Elasticsearch",
+          "logs": [
+            "[14:30:15] INFO: Consumidas 24 mensagens do tópico 'indictments'",
+            "[14:30:16] INFO: Indexados 24 documentos de suspeitos",
+            "[14:50:00] INFO: Consulta: 'Marcus Vance' -> 0 resultados encontrados"
+          ],
+          "data": {
+            "Documentos Indexados": "24 / 42",
+            "Busca: Marcus Vance": "NÃO ENCONTRADO (0 resultados)",
+            "Status de Sincronia": "DESSINCRONIZADO COM O POSTGRESQL"
+          },
+          "status": "Faltam 18 suspeitos no índice porque o Kafka nunca recebeu os eventos."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-det-api",
+        "source": "detective-terminal",
+        "target": "case-service",
+        "label": "POST /indictments",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-db",
+        "source": "case-service",
+        "target": "postgres-db",
+        "label": "1. COMMIT OK",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-api-kafka",
+        "source": "case-service",
+        "target": "kafka-broker",
+        "label": "2. reset de socket / perda",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-kafka-es",
+        "source": "kafka-broker",
+        "target": "elasticsearch-cluster",
+        "label": "fluxo dessincronizado",
+        "animated": true,
+        "style": "slow"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz da ausência dos registros de acusação no índice do Elasticsearch?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "O Problema da Escrita Dupla (Dual-Write): Gravar no banco e publicar no broker em operações separadas não atômicas faz com que falhas após o commit do banco causem perda permanente de mensagens",
+          "correct": true,
+          "feedback": "Correto! Este é o clássico Problema da Escrita Dupla (Dual-Write). Em sistemas distribuídos, atualizar dois sistemas independentes (PostgreSQL e Kafka) sem atomicidade é arriscado. Se o banco efetiva a transação e o servidor da aplicação cai ou perde a rede antes de publicar no Kafka, a mensagem é perdida para sempre. Como o PostgreSQL não sincroniza sozinho com o Kafka, os dois sistemas divergem em definitivo."
+        },
+        {
+          "id": "rc-2",
+          "text": "Corrupção de segmento do Elasticsearch fez com que o motor descartasse silenciosamente o documento de Marcus Vance",
+          "correct": false,
+          "feedback": "O Elasticsearch operou normalmente e indexou todas as 24 mensagens recebidas do Kafka. O Elasticsearch não perdeu dados; ele simplesmente nunca recebeu a mensagem de Marcus Vance do Kafka."
+        },
+        {
+          "id": "rc-3",
+          "text": "O grupo de consumidores do Kafka sofreu conflito de commit de offset, ignorando 18 mensagens durante um rebalanceamento",
+          "correct": false,
+          "feedback": "Os logs do Kafka confirmam que apenas 24 mensagens foram recebidas no tópico. As 18 mensagens faltantes nunca chegaram a ser publicadas porque a aplicação caiu."
+        },
+        {
+          "id": "rc-4",
+          "text": "O nível de isolamento de transação do PostgreSQL foi configurado como Read Uncommitted, gerando leituras fantasmas",
+          "correct": false,
+          "feedback": "Os registros não sofreram rollback! Todos os 42 registros, inclusive Marcus Vance (#8819), estão persistidos no PostgreSQL. A questão é que os sistemas downstream nunca souberam disso."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Qual padrão arquitetural garante que todo registro com commit no banco produza com certeza um evento no Kafka?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar o padrão Transactional Outbox: Salvar o evento em uma tabela 'outbox' dentro da MESMA transação do banco e usar CDC (ex: Debezium) para publicar no Kafka com entrega at-least-once",
+          "correct": true,
+          "feedback": "Correto! O padrão Transactional Outbox é a solução de mercado. Ao gravar a mensagem na tabela `outbox` na mesma transação ACID que salva a acusação, a atomicidade é garantida: ambos são salvos ou nenhum é. Um processo dedicado ou ferramenta de Change Data Capture (como Debezium lendo o WAL do Postgres) lê a tabela outbox e envia ao Kafka com garantia de entrega de pelo menos uma vez. Mesmo que o app caia, o evento permanece seguro em disco."
+        },
+        {
+          "id": "fix-2",
+          "text": "Inverter a ordem de execução: Publicar primeiro no Kafka e só efetivar o commit no PostgreSQL após confirmação do Kafka",
+          "correct": false,
+          "feedback": "Inverter a ordem apenas muda o tipo de falha. Se você publicar no Kafka e a gravação no banco falhar em seguida, você terá emitido um evento para um registro que não existe no banco (dado fantasma)."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configurar uma trigger em stored procedure no PostgreSQL para disparar um comando curl chamando o Kafka diretamente",
+          "correct": false,
+          "feedback": "Chamadas de rede a partir de triggers de banco de dados são um anti-padrão prejudicial. Se a rede travar, os bloqueios de linha do banco permanecem presos, degradando gravemente o desempenho do banco."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configurar retentativas infinitas no produtor do Kafka para que a thread da aplicação aguarde o restabelecimento da rede",
+          "correct": false,
+          "feedback": "Retentativas em memória não sobrevivem a reinicializações ou quedas de containers. Se o processo é encerrado pelo sistema operacional, toda a fila de tentativas em memória é perdida."
+        }
+      ]
+    }
+  },
+  "conceptId": "transactional-outbox",
+  "badge": {
+    "name": "Guardião da Outbox",
+    "icon": "📬"
+  }
+}

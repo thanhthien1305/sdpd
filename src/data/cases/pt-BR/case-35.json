@@ -1,0 +1,229 @@
+{
+  "id": "case-35",
+  "number": 35,
+  "title": "O Líder Zumbi",
+  "subtitle": "Um líder congelado acorda de uma pausa de GC e sobrescreve o estado atual",
+  "brief": {
+    "narrative": "O sistema de Despacho de Emergência do SDPD usa uma trava distribuída no ZooKeeper para garantir que apenas um coordenador líder gerencie os chamados das viaturas. O Coordenador A operava como líder com um lease de 5 segundos. Às 08:00:00, uma grande alocação de memória disparou uma pausa Stop-The-World de Garbage Collection de 15 segundos no Coordenador A, paralisando todas as threads e heartbeats. Às 08:00:05, o ZooKeeper declarou o Coordenador A inativo e expirou o lease. Às 08:00:06, o Coordenador B foi eleito o novo líder, obteve o lease e despachou a unidade SWAT 4 para um roubo à mão armada (Despacho #9402). Porém, às 08:00:15, a pausa de GC do Coordenador A terminou. Sem saber que 15 segundos haviam se passado e que havia sido deposto, o Coordenador A retomou a execução e gravou o despacho desatualizado #9398 no armazenamento compartilhado, sobrescrevendo a ordem da SWAT.",
+    "symptoms": [
+      "O despacho prioritário #9402 (SWAT para assalto armado) foi substituído misteriosamente pelo despacho antigo #9398 no banco",
+      "Logs do ZooKeeper mostram lease do Coordenador A expirado às 08:00:05 e Coordenador B eleito às 08:00:06",
+      "Métricas da JVM no Coordenador A registram pausa Stop-The-World de 14.8 segundos de 08:00:01 a 08:00:15",
+      "Ordens conflitantes enviadas aos rádios das unidades táticas em intervalo de poucos segundos"
+    ],
+    "objective": "Identificar como um líder deposto que acorda após uma pausa pode corromper dados e aplicar validação de escritas com fencing tokens para protegê-los."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "zk-lock",
+        "type": "server",
+        "label": "Serviço de Trava ZooKeeper",
+        "status": "healthy",
+        "position": {
+          "x": 360,
+          "y": 40
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster de Consenso ZooKeeper",
+          "logs": [
+            "[07:59:55] INFO: Coordenador A obteve lease /locks/dispatch (TTL: 5s)",
+            "[08:00:00] INFO: Coordenador A renovou lease (TTL: 5s)",
+            "[08:00:05] WARN: Falha de heartbeat do Coordenador A — lease expirado!",
+            "[08:00:06] INFO: Coordenador B solicitou lease — eleito novo líder!",
+            "[08:00:15] WARN: Heartbeat recebido do Coordenador A — REJEITADO (lease pertence a B)"
+          ],
+          "data": {
+            "Líder Atual": "Coordenador B",
+            "Lease Válido": "Coordenador B (/locks/dispatch)",
+            "TTL do Lease": "5.000ms",
+            "Status Líder Anterior": "Expirado / Deposto"
+          },
+          "status": "O ZooKeeper expirou o lease de A e elegeu B corretamente."
+        }
+      },
+      {
+        "id": "coordinator-a",
+        "type": "server",
+        "label": "Coordenador A (Líder Antigo)",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 140
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Coordenador de Despacho A",
+          "logs": [
+            "[08:00:00] INFO: Preparando despacho #9398 para Viatura 4",
+            "[08:00:01] WARN: JVM GC: Pausa Stop-The-World iniciada",
+            "[08:00:01-08:00:15] [CONGELADO — TODAS AS THREADS PARADAS POR 14.800ms]",
+            "[08:00:15] INFO: GC concluído. Retomando execução sem verificar validade do lease",
+            "[08:00:15] INFO: Gravando despacho #9398 no banco... SUCESSO!"
+          ],
+          "data": {
+            "Duração da Pausa de GC": "14.800ms (Stop-The-World)",
+            "Crença de Liderança": "Acredita ainda ser líder legítimo",
+            "Status do Lease": "EXPIRADO (sem ciência)",
+            "Ação Executada": "Gravou despacho desatualizado #9398 às 08:00:15"
+          },
+          "status": "Acordou após 15s de congelamento de GC e enviou escritas inválidas como líder zumbi."
+        }
+      },
+      {
+        "id": "coordinator-b",
+        "type": "server",
+        "label": "Coordenador B (Novo Líder)",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Coordenador de Despacho B",
+          "logs": [
+            "[08:00:06] INFO: Obteve lease de liderança /locks/dispatch do ZooKeeper",
+            "[08:00:07] INFO: Processando despacho emergencial #9402 para Viatura 4 (Assalto Armado)",
+            "[08:00:08] INFO: Gravando despacho #9402 no banco... SUCESSO!",
+            "[08:00:16] ERROR: Status da Viatura 4 revertido para patrulha de rotina por atualização do banco"
+          ],
+          "data": {
+            "Estado de Liderança": "Líder Legítimo Ativo",
+            "Início do Mandato": "08:00:06",
+            "Despachos Enviados": "#9402 (Prioridade 1 - Roubo Armado)",
+            "Saúde": "Saudável, 0s de pausa de GC"
+          },
+          "status": "Líder legítimo. Despachou SWAT 4, mas sua escrita foi sobrescrita."
+        }
+      },
+      {
+        "id": "dispatch-storage",
+        "type": "database",
+        "label": "Banco de Despachos",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Mecanismo de Armazenamento de Despacho",
+          "logs": [
+            "[08:00:08] INFO: Recebida ESCRITA do despacho #9402 do Coordenador B -> EFETIVADA",
+            "[08:00:15] INFO: Recebida ESCRITA do despacho #9398 do Coordenador A -> EFETIVADA",
+            "[08:00:15] WARN: Registro 4 sobrescrito. Nenhuma validação de token ou época configurada!",
+            "[08:00:16] ERROR: Inconsistência detectada: ordem mais recente substituída por ordem antiga"
+          ],
+          "data": {
+            "Despacho Armazenado": "Despacho #9398 (OBSOLETO do Coordenador A)",
+            "Despacho Perdido": "Despacho #9402 (RECENTE do Coordenador B)",
+            "Validação de Época": "DESATIVADA / INEXISTENTE",
+            "Fencing Token Ativo": "NÃO"
+          },
+          "status": "Aceitou cegamente escritas de qualquer coordenador sem checar tokens de isolamento."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ca-zk",
+        "source": "coordinator-a",
+        "target": "zk-lock",
+        "label": "lease expirado (08:00:05)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-cb-zk",
+        "source": "coordinator-b",
+        "target": "zk-lock",
+        "label": "lease ativo (08:00:06)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-cb-storage",
+        "source": "coordinator-b",
+        "target": "dispatch-storage",
+        "label": "escrita #9402 (08:00:08)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-ca-storage",
+        "source": "coordinator-a",
+        "target": "dispatch-storage",
+        "label": "escrita antiga #9398 (08:00:15) [SOBRESCREVE]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz de o banco aceitar uma escrita obsoleta que apagou o despacho do novo líder?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "O armazenamento aceitou uma escrita de um líder deposto porque as requisições não possuíam Fencing Tokens monotônicos verificados pela camada de dados",
+          "correct": true,
+          "feedback": "Correto! Em sistemas distribuídos, um nó não pode saber se seu lease expirou enquanto esteve congelado (ex: durante pausa Stop-The-World de GC). Obter uma trava não é suficiente: o sistema de armazenamento deve validar fencing tokens (números de época crescentes). Como o banco não validou tokens, a escrita atrasada do Coordenador A foi aceita mesmo após o Coordenador B já ter escrito com um número de época maior."
+        },
+        {
+          "id": "rc-2",
+          "text": "O ZooKeeper sofreu um split-brain e permitiu que os Coordenadores A e B mantivessem a trava ao mesmo tempo",
+          "correct": false,
+          "feedback": "O ZooKeeper operou perfeitamente. O lease do Coordenador A expirou às 08:00:05 e o ZooKeeper concedeu a liderança exclusivamente ao Coordenador B. Quando A acordou às 08:00:15, o ZooKeeper rejeitou seu heartbeat. A falha ocorreu porque A enviou comandos ao banco sem reconsultar o ZooKeeper."
+        },
+        {
+          "id": "rc-3",
+          "text": "O Coordenador B sofreu deriva de relógio, datando o despacho #9402 no passado",
+          "correct": false,
+          "feedback": "O relógio do Coordenador B estava correto. A falha não decorreu de relógios, mas do congelamento de 15 segundos no Coordenador A e da falta de checagem de fencing tokens no armazenamento."
+        },
+        {
+          "id": "rc-4",
+          "text": "O switch de rede descartou pacotes multicast durante a fase de consenso dos líderes",
+          "correct": false,
+          "feedback": "O ZooKeeper utiliza TCP ponto a ponto (ZAB), não multicast. A rede estava operacional; o congelamento foi causado pelo coletor de lixo da JVM."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Qual é a correção arquitetural correta para evitar que líderes congelados corrompam o armazenamento compartilhado?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Emitir um Fencing Token incremental com cada trava de lease e exigir que o armazenamento rejeite escritas com tokens menores que o maior já processado",
+          "correct": true,
+          "feedback": "Correto! Fencing tokens resolvem o problema do líder zumbi: o ZooKeeper emite um número incremental com o lease (ex: Token 34 para A, Token 35 para B). Ao gravar, o banco registra que já viu o Token 35. Quando A acorda e tenta gravar com o Token 34, o banco verifica que 34 < 35 e rejeita a operação com erro de época desatualizada."
+        },
+        {
+          "id": "fix-2",
+          "text": "Aumentar o timeout de lease do ZooKeeper de 5 segundos para 30 minutos para que o Coordenador A nunca perca a liderança durante pausas de GC",
+          "correct": false,
+          "feedback": "Aumentar o timeout prejudica gravemente a disponibilidade. Se um líder cair de verdade, o sistema de emergência ficaria paralisado por 30 minutos sem eleger sucessor. Além disso, pausas imprevistas podem superar qualquer timeout."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configurar o Coordenador A para fazer ping no Coordenador B antes de qualquer escrita no banco",
+          "correct": false,
+          "feedback": "Checagens entre pares não garantem segurança. O Coordenador B pode demorar para responder ou o Coordenador A pode congelar novamente entre o ping e a escrita. A validação de fencing tokens na camada de dados de destino é mandatória."
+        },
+        {
+          "id": "fix-4",
+          "text": "Reescrever os serviços de coordenação de Java para C++ para eliminar completamente pausas de coleta de lixo",
+          "correct": false,
+          "feedback": "Embora C++ evite GC, sistemas distribuídos ainda enfrentam pausas por paginação de disco do SO, contenção de CPU ou suspensão do hipervisor de virtualização. O design precisa ser resiliente a pausas independentemente da linguagem."
+        }
+      ]
+    }
+  },
+  "conceptId": "fencing-tokens",
+  "badge": {
+    "name": "Exorcista Zumbi",
+    "icon": "🧟"
+  }
+}

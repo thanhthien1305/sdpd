@@ -1,0 +1,183 @@
+{
+  "id": "case-41",
+  "number": 41,
+  "title": "The Midnight Write Freeze",
+  "subtitle": "High-velocity telemetry ingestion triggers sudden storage engine write stalls",
+  "brief": {
+    "narrative": "During a massive citywide gang interdiction operation, 3,000 patrol cruisers, tactical vans, and aerial surveillance drones stream telemetry (GPS coordinates, biometric heart rates, dashcam telematics) at 120,000 writes/second into the department's distributed NoSQL LSM-tree cluster. Suddenly at 00:15, all write ingestion freezes. Inbound API gateways report 504 Gateway Timeouts, edge ingest buffers overflow, and real-time tactical tracking screens go pitch black. The storage engine has triggered an emergency Write Stall: incoming writes flushed Memtables to disk faster than background compaction threads could merge and compact Level 0 (L0) SSTables down to Level 1. To prevent catastrophic read amplification, the engine abruptly halted all client writes to let compaction catch up.",
+    "symptoms": [
+      "Write throughput dropped from 120,000 writes/s to 0 writes/s at 00:15",
+      "API gateways accumulating thousands of 504 Gateway Timeout errors",
+      "Storage engine metric `rocksdb.num-running-compactions` saturated at max thread limit",
+      "L0 SSTable file count exceeded threshold (reached 48 files, limit: 20), triggering hard write stall"
+    ],
+    "objective": "Diagnose why high write volume overwhelmed LSM compaction and implement a tiered compaction strategy with ingest buffering to prevent write stalls."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "fleet-drones",
+        "type": "client",
+        "label": "Tactical Fleet & Drones",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Patrol Fleet Ingest Streams",
+          "logs": [
+            "[00:14:55] INFO: Transmitting batch: 120,000 events/sec",
+            "[00:15:02] ERROR: POST /telemetry HTTP 504 Gateway Timeout",
+            "[00:15:05] WARN: Local circular buffer 85% full — dropping older telematics packets",
+            "[00:15:10] CRITICAL: Real-time GPS stream severed"
+          ],
+          "data": {
+            "Active Units": "3,000 cruisers + 150 drones",
+            "Target Rate": "120,000 writes/sec",
+            "Error Rate": "99.8% (HTTP 504)"
+          },
+          "status": "Fleet telematics buffered and dropping packets due to upstream storage freeze."
+        }
+      },
+      {
+        "id": "api-gateway",
+        "type": "server",
+        "label": "Telemetry Ingestion Gateway",
+        "status": "failed",
+        "position": {
+          "x": 300,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Ingestion Gateway Pool",
+          "logs": [
+            "[00:14:58] INFO: Upstream write latency: 2.1ms",
+            "[00:15:01] WARN: LSM cluster write latency spiked to 5,200ms",
+            "[00:15:03] ERROR: Connection pool to storage cluster exhausted (all 500 connections waiting)",
+            "[00:15:05] ERROR: Returning HTTP 504 to client fleet"
+          ],
+          "data": {
+            "Inbound QPS": "120,000",
+            "Active Connections": "500 / 500 (100% blocked in write)",
+            "Storage Engine State": "WRITE_STALL"
+          },
+          "status": "Gateway worker threads completely blocked waiting for storage writes to complete."
+        }
+      },
+      {
+        "id": "lsm-cluster",
+        "type": "database",
+        "label": "LSM-Tree Telemetry DB",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Distributed LSM Storage Engine",
+          "logs": [
+            "[00:14:50] INFO: Memtable flushed to L0 SSTable file #88412",
+            "[00:14:59] WARN: L0 file count = 24 (warning threshold = 12)",
+            "[00:15:00] CRITICAL: L0 file count = 48 (hard stop limit = 20) -> TRIGGERING WRITE STALL",
+            "[00:15:01] CRITICAL: Halting client writes until background compaction drains L0 queue",
+            "[00:15:10] INFO: Compaction threads 8/8 at 100% disk I/O utilization"
+          ],
+          "data": {
+            "L0 File Count": "48 (Max threshold: 20)",
+            "Write Stall Active": "YES (Hard Stop)",
+            "Compaction Strategy": "Leveled Compaction (Heavy I/O Write Amplification)",
+            "Disk IOPS": "100% Saturation"
+          },
+          "status": "Storage engine has locked incoming writes to prevent read amplification explosion."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-fleet-gw",
+        "source": "fleet-drones",
+        "target": "api-gateway",
+        "label": "120k writes/s [504 Timeout]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-gw-lsm",
+        "source": "api-gateway",
+        "target": "lsm-cluster",
+        "label": "flush [WRITE STALL]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the sudden complete write freeze across the telemetry cluster?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "LSM-tree compaction debt outpaced write ingestion, causing Level 0 (L0) SSTable files to accumulate past the safety threshold and trigger a hard write stall",
+          "correct": true,
+          "feedback": "Correct! In Log-Structured Merge-tree (LSM) engines, writes are appended to an in-memory Memtable and flushed to Level 0 SSTables. Leveled Compaction requires heavy disk I/O to sort and merge SSTables down to deeper levels. At 120k writes/second, disk I/O saturated, background compaction fell severely behind, and L0 files spiked to 48 (surpassing the hard limit of 20). The database activated its protective Write Stall, blocking all new writes."
+        },
+        {
+          "id": "rc-2",
+          "text": "The physical SSD drives ran out of raw storage space, causing the operating system filesystem to remount as read-only",
+          "correct": false,
+          "feedback": "Drive capacity telemetry shows 42TB of free disk space remaining. The issue is not raw capacity exhaustion, but compaction queue debt causing an internal software write stall."
+        },
+        {
+          "id": "rc-3",
+          "text": "A network switch port flapping between the API gateway and the database severed TCP connections",
+          "correct": false,
+          "feedback": "The network links are healthy with 0 dropped packets. The API gateway successfully maintains open TCP connections to the database, but those connections are frozen inside storage write-stall locks."
+        },
+        {
+          "id": "rc-4",
+          "text": "A distributed deadlock between row-level transactional locks on drone GPS identifiers halted thread execution",
+          "correct": false,
+          "feedback": "LSM telemetry ingestion uses blind append-only inserts without row-level read-modify-write locks or ACID transactions. Deadlocks do not apply to this workload."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the storage and ingestion architecture be reconfigured to eliminate write stalls under extreme ingestion spikes?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Switch to Size-Tiered Compaction Strategy (STCS) optimized for append-only time-series data, allocate dedicated I/O rate limits for compaction threads, and buffer ingest spikes through a distributed Kafka queue",
+          "correct": true,
+          "feedback": "Correct! For time-series and append-only write-heavy workloads, Size-Tiered Compaction (or Tiered Compaction) has dramatically lower write amplification and I/O overhead than Leveled Compaction because it merges SSTables of similar sizes without immediate cross-level sorting. Adding a Kafka buffer decouples rapid fleet ingest bursts from storage disk flush limits, allowing compaction to run smoothly without stalling client gateways."
+        },
+        {
+          "id": "fix-2",
+          "text": "Disable background compaction entirely to eliminate disk I/O contention during operational shifts",
+          "correct": false,
+          "feedback": "Disabling compaction would cause SSTable files to accumulate indefinitely. Every read query would have to inspect thousands of separate files on disk, causing catastrophic read amplification and memory exhaustion."
+        },
+        {
+          "id": "fix-3",
+          "text": "Replace the LSM-tree database with a traditional B-tree relational database using synchronous foreign key constraints",
+          "correct": false,
+          "feedback": "B-tree storage engines perform random disk writes for every insert, resulting in far worse write throughput than LSM-trees and collapsing under 120,000 writes/second."
+        },
+        {
+          "id": "fix-4",
+          "text": "Increase the write stall threshold to 10,000 files without changing the compaction strategy or adding ingress buffering",
+          "correct": false,
+          "feedback": "Permitting 10,000 L0 files would cause read latency to explode from milliseconds to dozens of seconds, as reading any single key would require checking thousands of overlapping SSTable bloom filters."
+        }
+      ]
+    }
+  },
+  "conceptId": "lsm-write-stalls",
+  "badge": {
+    "name": "Compactor Chief",
+    "icon": "🚜"
+  }
+}

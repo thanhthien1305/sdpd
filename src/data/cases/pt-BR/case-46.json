@@ -1,0 +1,182 @@
+{
+  "id": "case-46",
+  "number": 46,
+  "title": "A Divergência Transatlântica",
+  "subtitle": "Escritas concorrentes multi-leader entre Londres e Nova York causam perda irreparável de dados",
+  "brief": {
+    "narrative": "A Interpol e a SDPD operam um banco de dados distribuído ativo-ativo (multi-leader) sincronizado entre dois datacenters globais: Nova York (`us-east`) e Londres (`eu-west`). Cada datacenter aceita escritas locais para fornecer latência sub-milissegundo aos investigadores da sua região. Às 14:00:00.000 UTC, um detetive da SDPD em Nova York interroga o Suspeito #8812, confirma um álibi e atualiza seu nível de perigo para `CLEARED_OF_SUSPICION`. Exatamente 40 milissegundos depois, às 14:00:00.040 UTC, um agente da Interpol no aeroporto de Heathrow em Londres flagra o mesmo suspeito embarcando em um jato privado com fuzis automáticos e altera seu perfil para `ARMED_AND_DANGEROUS`. Como a replicação transoceânica leva 75ms de trânsito em fibra ótica, ambos os datacenters aceitaram escritas divergentes concorrentemente. Para resolver o conflito, o cluster utiliza Last-Write-Wins (LWW) baseado em relógios físicos NTP. No entanto, o relógio do servidor de Londres estava atrasado em -120ms, marcando a escrita com o timestamp 13:59:59.920. Ao chegar em Nova York, o banco comparou os timestamps (`14:00:00.000 > 13:59:59.920`), considerou a escrita de Nova York 'mais recente' e descartou silenciosamente o alerta de arma de Londres. Unidades táticas em Nova York baixam a guarda, deixando um criminoso fortemente armado transitar sem vigilância.",
+    "symptoms": [
+      "Atualização de suspeito armado enviada por Londres foi sobrescrita e apagada silenciosamente em Nova York",
+      "Logs de replicação indicam que a escrita de Londres foi rejeitada com `LWW_TIMESTAMP_STALE`",
+      "Auditoria de hardware revelou um desvio de sincronização NTP de -120ms entre os servidores europeus e norte-americanos",
+      "Equipes de campo em Londres e Nova York visualizaram dados contraditórios do suspeito por horas"
+    ],
+    "objective": "Diagnosticar a perda silenciosa de dados gerada por Last-Write-Wins com relógio físico em replicação multi-leader, e implementar Geo-Pinning (Home Region) e Vetores de Relógio (Vector Clocks)."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dc-london",
+        "type": "database",
+        "label": "Datacenter Londres (eu-west Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó Líder de Londres (eu-west)",
+          "logs": [
+            "[Real: 14:00:00.040 | Relógio: 13:59:59.920] ESCRITA: UPDATE suspect #8812 SET status = 'ARMED_AND_DANGEROUS'",
+            "[13:59:59.920] INFO: Commit local com SUCESSO no banco de Londres",
+            "[13:59:59.925] INFO: Transmitindo pacote assíncrono para Nova York via fibra submarina",
+            "[14:00:00.115] WARN: Pacote de Nova York recebido definindo status como 'CLEARED_OF_SUSPICION'"
+          ],
+          "data": {
+            "Região": "eu-west (Londres)",
+            "Status Local": "ARMED_AND_DANGEROUS",
+            "Desvio de Relógio NTP": "-120ms (Sincronização degradada)"
+          },
+          "status": "Aceitou a escrita local, mas carimbou um timestamp físico atrasado no tempo."
+        }
+      },
+      {
+        "id": "dc-newyork",
+        "type": "database",
+        "label": "Datacenter Nova York (us-east Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó Líder de Nova York (us-east)",
+          "logs": [
+            "[14:00:00.000] ESCRITA: UPDATE suspect #8812 SET status = 'CLEARED_OF_SUSPICION'",
+            "[14:00:00.001] INFO: Commit local com SUCESSO no banco de Nova York",
+            "[14:00:00.100] REPL: Pacote de replicação recebido de Londres (Timestamp: 13:59:59.920)",
+            "[14:00:00.101] WARN: Conflito de escrita concorrente detectado no Suspeito #8812",
+            "[14:00:00.102] ERROR: Resolução via LWW: 14:00:00.000 > 13:59:59.920 -> Escrita de Londres descartada!"
+          ],
+          "data": {
+            "Região": "us-east (Nova York)",
+            "Status Local": "CLEARED_OF_SUSPICION",
+            "Resolução de Conflitos": "Last-Write-Wins (Timestamp Físico NTP)"
+          },
+          "status": "Apagou silenciosamente o alerta crítico de Londres devido à comparação de relógios."
+        }
+      },
+      {
+        "id": "conflict-resolver",
+        "type": "server",
+        "label": "Canal de Replicação Multi-Leader",
+        "status": "failed",
+        "position": {
+          "x": 420,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Enlace de Replicação Transatlântico",
+          "logs": [
+            "[14:00:00.000] Latência de ida e volta transatlântica: 75ms",
+            "[14:00:00.040] Escritas em Londres e NY ocorreram antes da chegada dos pacotes de replicação",
+            "[14:00:00.102] CRITICAL: Resolução de conflitos descartou update de Londres sem emitir alerta",
+            "[14:00:00.105] ERROR: Datacenters divergentes: Londres exibe ARMED, NY exibe CLEARED"
+          ],
+          "data": {
+            "Topologia": "Multi-Leader Ativo-Ativo",
+            "Prevenção de Conflitos": "NENHUMA (Ambos aceitam escrita em qualquer registro)",
+            "Divergência de Dados": "ATIVA (Inconsistência entre Londres e NY)"
+          },
+          "status": "O motor de replicação multi-leader perdeu dados silenciosamente por usar LWW com relógio físico."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-lon-bus",
+        "source": "dc-london",
+        "target": "conflict-resolver",
+        "label": "replicar [ts: 13:59:59.920]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-ny-bus",
+        "source": "dc-newyork",
+        "target": "conflict-resolver",
+        "label": "replicar [ts: 14:00:00.000]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz arquitetural que provocou o descarte do alerta de suspeito armado de Londres?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Conflito de escrita concorrente em topologia multi-leader resolvido por Last-Write-Wins (LWW) com relógios físicos não sincronizados: o desvio no relógio NTP fez com que uma escrita mais recente em Londres fosse falsamente julgada como mais antiga e descartada",
+          "correct": true,
+          "feedback": "Correto! Na replicação ativo-ativo multi-leader, permitir que múltiplos datacenters aceitem escritas concorrentes na mesma entidade gera conflitos inevitáveis. Depender de timestamps de relógios de parede físicos (Last-Write-Wins) é uma armadilha em sistemas distribuídos, pois osciladores de quartzo sofrem derivação física, ajustes NTP têm imprecisões e saltos temporais desordenam eventos. Como o relógio de Londres estava 120ms atrasado, seu registro — embora 40ms mais novo no mundo real — recebeu um timestamp inferior e foi descartado pelo LWW."
+        },
+        {
+          "id": "rc-2",
+          "text": "O cabo de fibra ótica submarino transatlântico foi rompido por uma âncora de navio, perdendo 100% dos pacotes de replicação",
+          "correct": false,
+          "feedback": "A conexão de rede estava operando normalmente com 75ms de latência. Nova York recebeu o pacote de Londres às 14:00:00.100; o software do servidor o recebeu e o descartou deliberadamente devido à checagem falha de LWW."
+        },
+        {
+          "id": "rc-3",
+          "text": "O banco de dados de Londres utilizava um modelo relacional SQL enquanto Nova York utilizava um banco de documentos NoSQL",
+          "correct": false,
+          "feedback": "Ambos os datacenters executam exatamente o mesmo banco e o mesmo esquema. O problema reside na resolução distribuída de conflitos."
+        },
+        {
+          "id": "rc-4",
+          "text": "Uma vulnerabilidade de injeção de SQL no terminal de Londres definiu o status do suspeito como NULL",
+          "correct": false,
+          "feedback": "O log de auditoria de Londres mostra uma consulta UPDATE parametrizada e válida: `status = 'ARMED_AND_DANGEROUS'`. A escrita foi executada localmente antes de ser descartada por Nova York."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura global multi-datacenter deve ser reformulada para eliminar conflitos concorrentes e impedir perda silenciosa de dados?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar Prevenção de Conflitos via Geo-Pinning (Região-Mãe / Master-per-Entity): direcionar todas as escritas de um suspeito ou caso a um datacenter regional fixo, combinado com Vetores de Relógio (Vector Clocks) para rastrear ordenação causal entre regiões",
+          "correct": true,
+          "feedback": "Correto! A arquitetura mais sólida para sistemas multi-região é a Prevenção de Conflitos (Conflict Avoidance): direcionar todas as escritas de uma entidade específica para uma 'Região-Mãe' designada (via roteamento consistente por ID de suspeito ou localização). Isso transforma operações intercontinentais em fluxos determinísticos de líder único. Onde escritas concorrentes forem indispensáveis, deve-se substituir relógios físicos por Vetores de Relógio (Vector Clocks) ou CRDTs para capturar relações causais e manter versões conflitantes para revisão humana, em vez de descartar dados às cegas."
+        },
+        {
+          "id": "fix-2",
+          "text": "Forçar o protocolo Two-Phase Commit (2PC) síncrono com bloqueio de linhas distribuído através do Oceano Atlântico para cada comando de escrita",
+          "correct": false,
+          "feedback": "O protocolo 2PC síncrono transatlântico exige múltiplas viagens de rede consecutivas (latência > 200ms) e paralisa todo o banco de dados caso qualquer datacenter enfrente instabilidades de rede."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configurar servidores NTP para sincronizar o horário físico uma vez a cada milissegundo através de torres de telefonia 4G",
+          "correct": false,
+          "feedback": "Sincronização sem fio não garante precisão sub-milissegundo devido a oscilações de sinal. Relógios físicos em sistemas distribuídos nunca conseguem atingir precisão absoluta para ordenar eventos concorrentes com segurança."
+        },
+        {
+          "id": "fix-4",
+          "text": "Desativar em definitivo o datacenter de Londres e forçar as agências de polícia europeias a consultar Nova York pela internet pública",
+          "correct": false,
+          "feedback": "Centralizar tudo em Nova York imporia altíssima latência aos policiais europeus e violaria leis de soberania e conformidade de dados na Europa (GDPR)."
+        }
+      ]
+    }
+  },
+  "conceptId": "multi-leader-conflicts",
+  "badge": {
+    "name": "Árbitro do Meridiano",
+    "icon": "🌐"
+  }
+}

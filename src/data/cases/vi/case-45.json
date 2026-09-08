@@ -1,0 +1,183 @@
+{
+  "id": "case-45",
+  "number": 45,
+  "title": "Cơn Hạn Hán Cổng Ảo",
+  "subtitle": "Các kết nối HTTP không dùng pool khiến 28.000 socket kẹt trong TIME_WAIT làm sập toàn bộ dịch vụ",
+  "brief": {
+    "narrative": "Một cảnh báo khẩn cấp Amber Alert cấp độ đỏ được phát đi để tìm kiếm một bé gái 6 tuổi bị bắt cóc trên một chiếc xe minivan biển số lạ. Dịch Vụ Phát Cảnh Báo Khẩn Cấp của sở cảnh sát bắt đầu gửi tin nhắn SMS và thông báo đẩy tới 200.000 người dân trong khu vực với tốc độ 3.000 yêu cầu HTTP/giây thông qua cổng viễn thông của chính quyền tiểu bang (`api.telecom.state.gov:443`). Trong 10 giây đầu tiên, mọi thứ diễn ra trơn tru. Thế nhưng đúng ở giây thứ 15, toàn bộ hệ thống phát tin sụp đổ hoàn toàn. Từng lệnh gọi ra ngoài tiếp theo đều báo lỗi socket hệ điều hành ngay lập tức: `connect: cannot assign requested address (EADDRNOTAVAIL)`. Mã nguồn ứng dụng thông báo đã tạo một đối tượng HTTP client mới tinh với cờ `Connection: close` cho mỗi tin nhắn gửi đi. Trong giao thức TCP, bộ tứ (IP Nguồn, Cổng Nguồn, IP Đích, Cổng Đích) dùng để nhận dạng duy nhất một socket. Khi gọi tới một cổng đích cố định, nhân hệ điều hành đã cấp phát hết sạch toàn bộ ~28.232 cổng phù du (dải 32768 đến 60999). Khi đóng kết nối, các socket này bị giam giữ trong trạng thái chờ `TIME_WAIT` bắt buộc kéo dài 60 giây, làm cạn kiệt toàn bộ cổng mạng ra ngoài và khiến hệ thống cảnh báo bị tê liệt.",
+    "symptoms": [
+      "Hệ thống phát thông báo khẩn cấp bị sập đột ngột chỉ sau 15 giây phát tin ở tốc độ cao",
+      "Nhật ký ứng dụng tràn ngập lỗi hệ điều hành `EADDRNOTAVAIL: Cannot assign requested address`",
+      "Số lượng socket ở trạng thái TIME_WAIT trên máy chủ chạm mốc cực đại 28.232 cổng",
+      "Băng thông mạng ra ngoài và tải CPU gần như nhàn rỗi (< 5%) trong suốt thời gian xảy ra sự cố"
+    ],
+    "objective": "Chẩn đoán hiện tượng cạn kiệt cổng phù du do các socket TCP ngắn hạn không dùng pool bị kẹt trong TIME_WAIT và cấu hình cơ chế connection pool HTTP Keep-Alive cùng kỹ thuật tái sử dụng socket của kernel."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "alert-service",
+        "type": "server",
+        "label": "Dịch Vụ Phát Cảnh Báo Khẩn Cấp",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Phát Tin Ra Ngoài",
+          "logs": [
+            "[10:00:01] INFO: Đang phát cảnh báo Amber Alert #809 tới 200.000 thuê bao",
+            "[10:00:10] INFO: Đã gửi 30.000 tin nhắn thành công (trung bình 3.000 yêu cầu/giây)",
+            "[10:00:14] WARN: Độ trễ cấp phát cổng nguồn tăng vọt",
+            "[10:00:15] CRITICAL: Lệnh connect() thất bại: EADDRNOTAVAIL (Không thể cấp phát cổng yêu cầu)",
+            "[10:00:16] ERROR: Toàn bộ luồng phát tin bị tê liệt hoàn toàn (0 tin nhắn được gửi đi)"
+          ],
+          "data": {
+            "Chế độ HTTP Client": "Tạo mới cho từng request (Connection: close)",
+            "Cơ chế Pool Kết Nối": "TẮT (DISABLED)",
+            "Điểm đến": "api.telecom.state.gov:443 (1 Địa chỉ IP/Cổng duy nhất)"
+          },
+          "status": "Ứng dụng không thể mở socket mới vì hệ điều hành đã hết sạch cổng nguồn khả dụng."
+        }
+      },
+      {
+        "id": "os-network-stack",
+        "type": "server",
+        "label": "Tầng Mạng Nhân Hệ Điều Hành",
+        "status": "failed",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Hệ TCP Kernel Linux",
+          "logs": [
+            "[10:00:01] NET: Cấp phát cổng nguồn tạm thời từ dải [32768 - 60999]",
+            "[10:00:10] NET: 20.000 socket đã đóng -> chuyển sang TIME_WAIT (thời gian chờ: 60s)",
+            "[10:00:14] WARN: Số cổng nguồn tự do còn lại: 412",
+            "[10:00:15] CRITICAL: Toàn bộ dải cổng tạm thời đã cạn kiệt (28.232 socket kẹt trong TIME_WAIT)",
+            "[10:00:15] KERNEL: Trả về mã lỗi EADDRNOTAVAIL cho tiến trình người dùng"
+          ],
+          "data": {
+            "Dải cổng phù du (Ephemeral)": "32768 - 60999 (tổng cộng 28.232 cổng)",
+            "Socket kẹt trong TIME_WAIT": "28.232 (Bão hòa 100%)",
+            "Thời gian chờ TIME_WAIT": "60 giây (2 * MSL)",
+            "Cấu hình tcp_tw_reuse": "0 (Đang Tắt)"
+          },
+          "status": "Toàn bộ cổng mạng ra ngoài bị giam giữ trong trạng thái TIME_WAIT 60 giây."
+        }
+      },
+      {
+        "id": "telecom-gateway",
+        "type": "server",
+        "label": "Cổng Viễn Thông SMS Tiểu Bang",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cổng Viễn Thông Chính Quyền (api.telecom.state.gov)",
+          "logs": [
+            "[10:00:10] INFO: Tiếp nhận 3.000 yêu cầu/giây — xử lý bình thường",
+            "[10:00:15] WARN: Tốc độ kết nối đến giảm đột ngột về 0 yêu cầu/giây",
+            "[10:00:16] INFO: Cổng hoạt động bình thường, tải CPU 0%, sẵn sàng nhận tin nhắn"
+          ],
+          "data": {
+            "Trạng thái cổng": "HOÀN TOÀN KHỎE MẠNH",
+            "Giao thức hỗ trợ": "HTTP/1.1 (Keep-Alive), HTTP/2",
+            "IP Cổng": "198.51.100.45:443"
+          },
+          "status": "Cổng ngoại vi hoàn toàn khỏe mạnh; không nhận được lưu lượng vì máy khách không thể quay số."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-svc-kernel",
+        "source": "alert-service",
+        "target": "os-network-stack",
+        "label": "socket() [EADDRNOTAVAIL]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-kernel-gw",
+        "source": "os-network-stack",
+        "target": "telecom-gateway",
+        "label": "kết nối TCP ra ngoài [TÊ LIỆT]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ gây ra lỗi socket `EADDRNOTAVAIL` làm tê liệt việc phát cảnh báo khẩn cấp là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Hiện tượng cạn kiệt cổng phù du (Ephemeral Port Exhaustion) do tạo hàng ngàn kết nối HTTP ngắn hạn không dùng Keep-Alive: việc mở socket TCP mới cho từng tin nhắn đã ngốn sạch toàn bộ ~28.000 cổng nguồn của hệ điều hành, giam cầm chúng trong trạng thái TIME_WAIT 60 giây",
+          "correct": true,
+          "feedback": "Chính xác! Một kết nối TCP được định danh duy nhất bởi bộ tứ (IP Nguồn, Cổng Nguồn, IP Đích, Cổng Đích). Khi ứng dụng gọi tới một IP:Port đích cố định (Cổng Viễn Thông) mà không tái sử dụng kết nối (`Connection: close`), mỗi yêu cầu gửi đi sẽ tiêu tốn một cổng nguồn tạm thời (ephemeral port) trong dải của kernel (32768–60999, khoảng 28.000 cổng). Khi đóng kết nối, chuẩn RFC 793 bắt buộc socket phải nằm lại ở trạng thái `TIME_WAIT` trong thời gian 2*MSL (60 giây) để tránh gói tin lạc. Ở tốc độ 3.000 req/s, toàn bộ 28.000 cổng bị vắt kiệt trong chưa đầy 10 giây, khiến các lệnh gọi `connect()` tiếp theo chết đứng với lỗi `EADDRNOTAVAIL`."
+        },
+        {
+          "id": "rc-2",
+          "text": "Tường lửa của Cổng Viễn Thông phát hiện dấu hiệu tấn công từ chối dịch vụ (DDoS) nên đã đưa địa chỉ IP của sở cảnh sát vào danh sách đen",
+          "correct": false,
+          "feedback": "Nhật ký của cổng viễn thông xác nhận họ không hề chặn IP; lưu lượng chỉ đơn giản là ngừng đến. Hơn nữa, `EADDRNOTAVAIL` là lỗi cục bộ của hệ điều hành phía client trước khi gói tin kịp gửi ra khỏi máy."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dịch vụ phát cảnh báo bị cạn kiệt bộ mô tả tệp (File Descriptor - FD) do quên đóng các tệp tin lưu trên ổ cứng cục bộ",
+          "correct": false,
+          "feedback": "Nếu cạn kiệt file descriptor, hệ điều hành sẽ trả về lỗi `EMFILE: Too many open files`. Lỗi ghi nhận rõ ràng là `EADDRNOTAVAIL: Cannot assign requested address`, chỉ đích danh việc cạn kiệt cổng nguồn IP."
+        },
+        {
+          "id": "rc-4",
+          "text": "Chứng chỉ bảo mật SSL của cổng viễn thông bị hết hạn khiến quá trình bắt tay TLS bị hủy bỏ ngay lập tức",
+          "correct": false,
+          "feedback": "Lỗi chứng chỉ TLS sẽ trả về mã lỗi `CERT_HAS_EXPIRED` trong quá trình đàm phán mã hóa, chứ không gây lỗi cấp phát socket mạng ở tầng TCP ban đầu."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Dịch vụ phát tin và hệ điều hành máy chủ cần được cấu hình như thế nào để hỗ trợ gửi thông báo tốc độ cao mà không làm cạn kiệt cổng mạng?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Kích hoạt HTTP Keep-Alive kết hợp connection pooling trong HTTP client để tái sử dụng các socket TCP sẵn có cho nhiều lượt gửi, nâng cấp lên giao thức ghép kênh HTTP/2, và bật `tcp_tw_reuse` trong kernel",
+          "correct": true,
+          "feedback": "Chính xác! Bật HTTP Keep-Alive kết hợp connection pool (duy trì sẵn khoảng 200–500 kết nối TCP liên tục) cho phép hàng trăm ngàn yêu cầu HTTP chạy qua lại trên cùng một tập socket mà không cần liên tục tạo mới và hủy bỏ kết nối TCP. Nâng cấp lên HTTP/2 cho phép ghép kênh nhiều luồng đồng thời trên một vài socket duy nhất. Cuối cùng, bật `net.ipv4.tcp_tw_reuse = 1` trong sysctl cho phép hệ điều hành tái sử dụng an toàn các socket đang nằm trong `TIME_WAIT` cho các kết nối chiều ra."
+        },
+        {
+          "id": "fix-2",
+          "text": "Viết lại dịch vụ thông báo sử dụng các gói tin UDP thô không kiểm tra lỗi và không cần xác nhận nhận tin",
+          "correct": false,
+          "feedback": "Cổng Viễn Thông đối tác cung cấp dịch vụ qua giao diện HTTPS REST API. Việc gửi đơn phương các gói tin UDP vào cổng HTTPS sẽ bị máy chủ từ chối vì nó đòi hỏi bắt tay TLS trên nền TCP."
+        },
+        {
+          "id": "fix-3",
+          "text": "Bóp tốc độ gửi ra ngoài xuống mức tối đa 50 yêu cầu/giây để các socket có đủ thời gian tự thoát khỏi TIME_WAIT trước khi hết cổng",
+          "correct": false,
+          "feedback": "Bóp tốc độ xuống 50 req/s đồng nghĩa với việc gửi cảnh báo Amber Alert cho 200.000 người dân sẽ mất hơn 1 tiếng đồng hồ, làm vuột mất cơ hội vàng giải cứu nạn nhân bị bắt cóc."
+        },
+        {
+          "id": "fix-4",
+          "text": "Khởi động lại (reboot) máy chủ vật lý định kỳ mỗi 15 giây một lần để xả trắng bảng socket mạng của kernel",
+          "correct": false,
+          "feedback": "Khởi động lại máy chủ liên tục mỗi 15 giây sẽ gây gián đoạn dịch vụ nghiêm trọng, làm rơi rớt tin nhắn và không giải quyết được lỗ hổng kiến trúc thiếu connection pool."
+        }
+      ]
+    }
+  },
+  "conceptId": "ephemeral-port-exhaustion",
+  "badge": {
+    "name": "Người Giải Cứu Cổng Socket",
+    "icon": "🔌"
+  }
+}

@@ -1,0 +1,183 @@
+{
+  "id": "case-41",
+  "number": 41,
+  "title": "Cơn Đình Trệ Băng Thông Lúc Nửa Đêm",
+  "subtitle": "Thông lượng nạp dữ liệu định vị tốc độ cao kích hoạt cơ chế đình trệ ghi của ổ đĩa",
+  "brief": {
+    "narrative": "Trong một chiến dịch truy quét băng đảng quy mô lớn toàn thành phố, 3.000 xe tuần tra, xe đặc nhiệm và máy bay không người lái liên tục truyền dữ liệu định vị viễn thám (tọa độ GPS, nhịp tim sinh trắc học, thông số camera) với tốc độ 120.000 lượt ghi/giây vào cụm cơ sở dữ liệu LSM-tree NoSQL phân tán của sở cảnh sát. Bất ngờ vào lúc 00:15, toàn bộ luồng ghi dữ liệu bị đóng băng hoàn toàn. Cổng Inbound API Gateway báo lỗi hàng loạt 504 Gateway Timeout, bộ nhớ đệm tại các thiết bị đầu cuối tràn ngập, và màn hình tác chiến thời gian thực của trung tâm chỉ huy tối đen như mực. Động cơ lưu trữ đã kích hoạt cơ chế đình trệ ghi khẩn cấp (Write Stall): các lượt ghi ồ ạt đã xả Memtable xuống đĩa nhanh hơn tốc độ các luồng nén gộp ngầm (compaction) kịp hợp nhất các tệp SSTable Tầng 0 (Level 0) xuống Tầng 1. Để ngăn chặn thảm họa khuếch đại đọc phá hủy hệ thống, cơ sở dữ liệu đã chặn đứng toàn bộ lệnh ghi mới của client.",
+    "symptoms": [
+      "Băng thông ghi giảm đột ngột từ 120.000 lượt ghi/s xuống 0 lượt ghi/s vào lúc 00:15",
+      "API gateway tích tụ hàng ngàn lỗi 504 Gateway Timeout",
+      "Chỉ số động cơ lưu trữ `rocksdb.num-running-compactions` chạm kịch trần số luồng tối đa",
+      "Số lượng tệp SSTable L0 vượt ngưỡng an toàn (đạt 48 tệp, giới hạn dừng: 20), kích hoạt cơ chế dừng ghi cưỡng bức (hard write stall)"
+    ],
+    "objective": "Chẩn đoán nguyên nhân khối lượng ghi khổng lồ làm sập tiến trình nén gộp LSM và triển khai chiến lược nén gộp phân tầng kết hợp hàng đợi đệm để loại bỏ tình trạng đình trệ ghi."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "fleet-drones",
+        "type": "client",
+        "label": "Đội Xe Tuần Tra & Drone",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Luồng Truyền Viễn Thám Của Đội Xe",
+          "logs": [
+            "[00:14:55] INFO: Đang truyền theo lô: 120.000 sự kiện/giây",
+            "[00:15:02] ERROR: POST /telemetry HTTP 504 Gateway Timeout",
+            "[00:15:05] WARN: Bộ nhớ đệm vòng cục bộ đầy 85% — đang loại bỏ các gói tin cũ",
+            "[00:15:10] CRITICAL: Luồng GPS thời gian thực bị ngắt kết nối"
+          ],
+          "data": {
+            "Phương tiện hoạt động": "3.000 xe tuần tra + 150 drone",
+            "Tốc độ mục tiêu": "120.000 lượt ghi/giây",
+            "Tỷ lệ lỗi": "99.8% (HTTP 504)"
+          },
+          "status": "Dữ liệu viễn thám bị ứ đọng và làm rơi gói tin do kho lưu trữ phía trên bị đông cứng."
+        }
+      },
+      {
+        "id": "api-gateway",
+        "type": "server",
+        "label": "Cổng Tiếp Nhận Telemetry",
+        "status": "failed",
+        "position": {
+          "x": 300,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Cổng Tiếp Nhận Dữ Liệu",
+          "logs": [
+            "[00:14:58] INFO: Độ trễ ghi upstream: 2.1ms",
+            "[00:15:01] WARN: Độ trễ ghi cụm LSM tăng vọt lên 5.200ms",
+            "[00:15:03] ERROR: Cạn kiệt pool kết nối tới cụm storage (toàn bộ 500 kết nối đều đang chờ)",
+            "[00:15:05] ERROR: Trả về HTTP 504 cho toàn bộ hạm đội"
+          ],
+          "data": {
+            "QPS đầu vào": "120.000",
+            "Kết nối đang mở": "500 / 500 (100% bị chặn ở lệnh ghi)",
+            "Trạng thái động cơ lưu trữ": "WRITE_STALL"
+          },
+          "status": "Các luồng xử lý của gateway bị nghẽn hoàn toàn khi chờ đợi các lệnh ghi vào storage."
+        }
+      },
+      {
+        "id": "lsm-cluster",
+        "type": "database",
+        "label": "Cơ Sở Dữ Liệu LSM-Tree",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Động Cơ Lưu Trữ LSM Phân Tán",
+          "logs": [
+            "[00:14:50] INFO: Memtable được xả ra tệp L0 SSTable #88412",
+            "[00:14:59] WARN: Số tệp L0 = 24 (ngưỡng cảnh báo = 12)",
+            "[00:15:00] CRITICAL: Số tệp L0 = 48 (giới hạn chặn cứng = 20) -> KÍCH HOẠT WRITE STALL",
+            "[00:15:01] CRITICAL: Tạm dừng toàn bộ lệnh ghi client để compaction dọn hàng đợi L0",
+            "[00:15:10] INFO: 8/8 luồng nén gộp đang hoạt động ở mức 100% I/O đĩa"
+          ],
+          "data": {
+            "Số tệp L0 hiện tại": "48 (Ngưỡng tối đa: 20)",
+            "Trạng thái Write Stall": "BẬT (Chặn Cứng - Hard Stop)",
+            "Chiến lược nén": "Leveled Compaction (Khuếch đại ghi I/O rất nặng)",
+            "Băng thông đĩa IOPS": "Bão hòa 100%"
+          },
+          "status": "Động cơ lưu trữ đã khóa chặn các lệnh ghi mới để ngăn ngừa khuếch đại đọc bùng nổ."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-fleet-gw",
+        "source": "fleet-drones",
+        "target": "api-gateway",
+        "label": "120k ghi/s [504 Timeout]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-gw-lsm",
+        "source": "api-gateway",
+        "target": "lsm-cluster",
+        "label": "flush [WRITE STALL]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ dẫn đến việc toàn bộ cụm lưu trữ bị đóng băng ghi đột ngột là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Nợ nén gộp của cây LSM không theo kịp tốc độ nạp dữ liệu ghi, khiến số tệp SSTable Tầng 0 (L0) tích tụ vượt ngưỡng an toàn và kích hoạt cơ chế dừng ghi cưỡng bức (hard write stall)",
+          "correct": true,
+          "feedback": "Chính xác! Trong động cơ lưu trữ LSM-tree, các lệnh ghi được nạp vào Memtable trên RAM rồi xả xuống các tệp SSTable Tầng 0 (L0). Chiến lược Leveled Compaction đòi hỏi I/O đĩa cực nặng để sắp xếp và gộp các tệp xuống các tầng sâu hơn. Ở mức 120.000 lượt ghi/giây, băng thông đĩa bị bão hòa, tiến trình nén ngầm bị tụt lại nghiêm trọng, số tệp L0 vọt lên 48 (vượt ngưỡng chặn cứng 20). Cơ sở dữ liệu bắt buộc phải kích hoạt cơ chế tự vệ Write Stall để từ chối mọi lệnh ghi mới."
+        },
+        {
+          "id": "rc-2",
+          "text": "Các ổ cứng thể rắn SSD vật lý bị cạn kiệt hoàn toàn dung lượng trống, khiến hệ điều hành chuyển hệ thống tệp sang chế độ chỉ đọc (read-only)",
+          "correct": false,
+          "feedback": "Số liệu đo đạc cho thấy ổ đĩa vẫn còn hơn 42TB dung lượng khả dụng. Vấn đề không phải là hết dung lượng phần cứng mà do hàng đợi nén gộp phần mềm bị dồn ứ gây ra Write Stall."
+        },
+        {
+          "id": "rc-3",
+          "text": "Một cổng chuyển mạch mạng (switch port flapping) giữa API gateway và cơ sở dữ liệu làm đứt gãy kết nối TCP",
+          "correct": false,
+          "feedback": "Các đường truyền mạng hoàn toàn khỏe mạnh với 0 gói tin bị rơi. API gateway duy trì kết nối TCP bình thường nhưng các kết nối này bị đóng băng bên trong khóa đình trệ ghi của database."
+        },
+        {
+          "id": "rc-4",
+          "text": "Xung đột khóa chết (deadlock) phân tán giữa các khóa giao dịch cấp dòng trên định danh GPS của drone làm tê liệt thực thi",
+          "correct": false,
+          "feedback": "Hệ thống nạp dữ liệu định vị LSM sử dụng thao tác ghi nối tiếp đơn thuần (append-only), không sử dụng khóa đọc-sửa-ghi cấp dòng hay giao dịch ACID. Cơ chế deadlock không xảy ra ở đây."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Hệ thống lưu trữ và thu nạp dữ liệu cần được tái cấu trúc như thế nào để loại bỏ hoàn toàn tình trạng đình trệ ghi khi lưu lượng tăng đột biến?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Chuyển sang Chiến Lược Nén Phân Tầng Theo Kích Thước (Size-Tiered Compaction Strategy) tối ưu cho dữ liệu chuỗi thời gian ghi nối tiếp, thiết lập hạn mức I/O riêng cho luồng nén, và đệm dữ liệu nạp qua hàng đợi phân tán Kafka",
+          "correct": true,
+          "feedback": "Chính xác! Đối với dữ liệu chuỗi thời gian và tác vụ ghi nhiều, chiến lược Size-Tiered Compaction (hoặc Tiered Compaction) giảm thiểu đáng kể hệ số khuếch đại ghi và gánh nặng I/O đĩa so với Leveled Compaction vì nó gộp các tệp SSTable có kích cỡ tương đương mà không bắt buộc sắp xếp toàn bộ dữ liệu đa tầng ngay lập tức. Bổ sung hàng đợi phân tán Kafka giúp hấp thụ các đợt bùng nổ dữ liệu từ hạm đội xe mà không làm nghẽn cổng xả đĩa của cơ sở dữ liệu."
+        },
+        {
+          "id": "fix-2",
+          "text": "Vô hiệu hóa hoàn toàn tiến trình nén gộp ngầm (compaction) để giải phóng toàn bộ năng lực I/O đĩa trong các ca trực chiến dịch",
+          "correct": false,
+          "feedback": "Nếu tắt hoàn toàn tính năng nén, các tệp SSTable sẽ tích tụ vô tận trên đĩa. Khi đó mỗi câu truy vấn đọc sẽ phải duyệt qua hàng chục ngàn tệp khác nhau, khiến hệ thống cạn kiệt RAM và sập truy vấn đọc ngay lập tức."
+        },
+        {
+          "id": "fix-3",
+          "text": "Thay thế cơ sở dữ liệu LSM-tree bằng cơ sở dữ liệu quan hệ B-tree truyền thống có ràng buộc khóa ngoại đồng bộ",
+          "correct": false,
+          "feedback": "Động cơ lưu trữ B-tree thực hiện các thao tác ghi ngẫu nhiên xuống đĩa cho mỗi lệnh chèn, dẫn đến thông lượng ghi kém hơn nhiều so với LSM-tree và sẽ sụp đổ ngay lập tức dưới tải 120.000 lượt ghi/giây."
+        },
+        {
+          "id": "fix-4",
+          "text": "Nâng ngưỡng chặn ghi lên mức 10.000 tệp L0 mà không cần thay đổi chiến lược nén hay bổ sung bộ đệm hàng đợi",
+          "correct": false,
+          "feedback": "Cho phép 10.000 tệp L0 tồn tại đồng thời sẽ khiến độ trễ đọc bùng nổ từ vài mili-giây lên hàng chục giây, bởi mỗi thao tác đọc một khóa sẽ phải kiểm tra hàng ngàn bộ lọc bloom filter SSTable chồng chéo."
+        }
+      ]
+    }
+  },
+  "conceptId": "lsm-write-stalls",
+  "badge": {
+    "name": "Tổng Chỉ Huy Nén Đĩa",
+    "icon": "🚜"
+  }
+}

@@ -1,0 +1,185 @@
+{
+  "id": "case-39",
+  "number": 39,
+  "title": "Os Sockets Desaparecidos",
+  "subtitle": "Exceções de código não tratadas ignoram a liberação de conexões, paralisando um banco ocioso",
+  "brief": {
+    "narrative": "Durante a troca de turno às 17:00, policiais realizam a entrada de centenas de sacolas de evidências na API de Custódia. De repente, a API paralisa por completo: todas as consultas e registros sofrem timeout após 30 segundos com erro 'HTTP 504 Gateway Timeout'. A equipe de infraestrutura suspeita de queda do PostgreSQL, mas ao acessar o servidor do banco encontra-o totalmente ocioso: uso de CPU em 3%, memória em 18% e IOPS de disco em zero. O banco está praticamente dormindo. No entanto, as métricas da aplicação mostram que o pool de conexões HikariCP está 100% lotado (100 de 100 conexões presas) e 1.840 requisições aguardam na fila. Um novo leitor de código de barras portátil distribuído hoje ocasionalmente emite strings malformadas iniciadas por '#BAD#'. Quando isso ocorre, um erro de parse de JSON é disparado em uma Promise após o `pool.getConnection()`, pulando o bloco `conn.release()`. Cada leitura inválida vaza permanentemente um socket de banco até secar totalmente o pool.",
+    "symptoms": [
+      "Tempo de resposta da API de Custódia saltou de 25ms para 30.000ms (504 Gateway Timeout)",
+      "CPU do banco de dados ociosa em 3% com atividade de disco praticamente nula",
+      "Pool de conexões da aplicação 100% esgotado: ativas = 100/100, ociosas = 0, fila de espera = 1.840",
+      "Centenas de armários inteligentes de custódia em 5 delegacias travados sem conseguir protocolar evidências"
+    ],
+    "objective": "Diagnosticar por que um banco ocioso ficou inacessível por falta de conexões e implementar controles de ciclo de vida e prevenção a vazamentos no pool."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "precinct-scanners",
+        "type": "client",
+        "label": "Leitores de Código de Barras",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Leitores Portáteis das Delegacias",
+          "logs": [
+            "[17:00:10] INFO: Sacola #E-1002 lida (código válido)",
+            "[17:00:12] WARN: Sacola #E-1003 lida -> leitor emitiu '#BAD#RAW-BINARY'",
+            "[17:00:15] ERROR: Requisição sofreu timeout após 30.000ms",
+            "[17:00:30] ERROR: 100% das leituras seguintes sofrendo timeout em todas as delegacias"
+          ],
+          "data": {
+            "Leitores Ativos": "45 unidades portáteis",
+            "Taxa de Erro": "~5% das leituras geram prefixo '#BAD#'",
+            "Modelo": "LaserScan 4000 (implantado hoje)"
+          },
+          "status": "Emitindo leituras defeituosas que causam erros de decodificação na aplicação."
+        }
+      },
+      {
+        "id": "evidence-api",
+        "type": "server",
+        "label": "API de Custódia",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Servidor da API de Custódia",
+          "logs": [
+            "[17:00:12] INFO: conn = pool.getConnection() -> socket 88 obtido",
+            "[17:00:12.010] ERROR: Uncaught SyntaxError: Unexpected token # in JSON at position 0",
+            "[17:00:12.015] WARN: Exceção ignorou conn.release() — Socket 88 nunca mais devolvido!",
+            "[17:42:00] ERROR: HikariCP: Conexão indisponível, requisição expirou após 30000ms",
+            "[17:42:01] ERROR: Pool esgotado (ativas=100, ociosas=0, aguardando=1842)"
+          ],
+          "data": {
+            "Tamanho do Pool": "100 conexões máximas",
+            "Conexões Ativas": "100 (TODAS VAZADAS / ABANDONADAS)",
+            "Conexões Ociosas": "0",
+            "Requisições na Fila": "1.842 pendentes",
+            "Detecção de Vazamentos": "DESATIVADA (limiar 0ms)"
+          },
+          "status": "Pool de conexões completamente travado por sockets vazados devido a exceções não tratadas."
+        }
+      },
+      {
+        "id": "postgres-evidence",
+        "type": "database",
+        "label": "PostgreSQL de Custódia",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Mecanismo de Banco de Dados PostgreSQL",
+          "logs": [
+            "[17:00:00] INFO: CPU: 3.2%, Memória: 18.1%",
+            "[17:00:12] INFO: Conexão 88 aberta de 10.0.1.5 (estado: 'idle in transaction')",
+            "[17:42:00] INFO: 100 sockets TCP abertos, mas 0 consultas em execução. Banco dormindo",
+            "[17:45:00] INFO: IOPS de disco: 0 IOPS"
+          ],
+          "data": {
+            "CPU do Banco": "3.2% (Ocioso)",
+            "IOPS de Disco": "0 / 10.000",
+            "Conexões TCP Abertas": "100 (Abandonadas pelo cliente)",
+            "Consultas Ativas": "0 em execução"
+          },
+          "status": "Perfeitamente saudável e ocioso, mas incapaz de receber queries por esgotamento do pool."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-scan-api",
+        "source": "precinct-scanners",
+        "target": "evidence-api",
+        "label": "leituras (timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "evidence-api",
+        "target": "postgres-evidence",
+        "label": "pool esgotado (100 sockets vazados)",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz de a API de Custódia sofrer timeouts enquanto o banco de dados permanece ocioso?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Vazamento de Pool de Conexões: Uma exceção não tratada no parse de JSON pulou a liberação de conexões, retendo sockets permanentemente até esgotar todo o pool",
+          "correct": true,
+          "feedback": "Correto! Este é o problema clássico de Vazamento no Pool de Conexões. Quando o código obtém uma conexão via `pool.getConnection()`, uma exceção no parse do JSON foi disparada antes ou fora do bloco de limpeza. Como o `conn.release()` (ou `conn.close()`) nunca foi executado, o socket permaneceu preso em estado abandonado. Após 100 códigos defeituosos vazarem as 100 posições do pool, todas as novas requisições travaram na fila e sofreram timeout, mesmo sem o banco processar nada."
+        },
+        {
+          "id": "rc-2",
+          "text": "O PostgreSQL ficou sem espaço em disco na partição de logs de transação, rejeitando escritas",
+          "correct": false,
+          "feedback": "Os logs do PostgreSQL mostram amplo espaço em disco livre e IOPS próximo de zero. O banco estava saudável; o defeito residia inteiramente no pool de conexões do servidor da aplicação."
+        },
+        {
+          "id": "rc-3",
+          "text": "O novo modelo de leitor provocou sobrecarga elétrica na porta USB, danificando o roteador de rede",
+          "correct": false,
+          "feedback": "O roteador funcionava normalmente. O leitor apenas enviou uma sequência de texto inesperada (`#BAD#`) que provocou falha na decodificação de JSON no software."
+        },
+        {
+          "id": "rc-4",
+          "text": "Bloqueios de tabela no PostgreSQL foram retidos por verificação de chave estrangeira sem índice",
+          "correct": false,
+          "feedback": "Havia 0 consultas em execução e nenhum bloqueio disputado. As conexões estavam ociosas porque a thread da aplicação falhou sem devolver o socket ao pool."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Quais práticas arquiteturais e de configuração devem ser adotadas para evitar que vazamentos no pool travem o sistema?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Adotar gerenciamento automático de recursos com RAII / try-with-resources, configurar timeouts estritos de aquisição, definir maxLifetime e ativar registro de detecção de vazamentos",
+          "correct": true,
+          "feedback": "Correto! Uma gestão segura do pool de conexões requer múltiplas defesas: (1) Utilizar recursos de linguagem que garantam liberação automática (como try-with-resources no Java, RAII no C++ ou `try ... finally { conn.release() }` no TypeScript/Go) para que erros nunca ignorem a devolução. (2) Ativar o limiar de detecção de vazamentos no pool (ex: HikariCP `leakDetectionThreshold = 5000ms`), que registra automaticamente o stack trace caso uma thread retenha a conexão por mais de 5 segundos. (3) Definir `maxLifetime` e `connectionTimeout` estritos para expirar conexões abandonadas."
+        },
+        {
+          "id": "fix-2",
+          "text": "Aumentar o tamanho do pool de 100 para 10.000 conexões para que a aplicação nunca fique sem sockets",
+          "correct": false,
+          "feedback": "Aumentar o pool não resolve um vazamento; apenas posterga a pane por algumas horas enquanto prejudica o desempenho do banco. 10.000 conexões consumiriam gigabytes de memória no PostgreSQL."
+        },
+        {
+          "id": "fix-3",
+          "text": "Criar um cron job para reiniciar o container da aplicação a cada 60 minutos para limpar conexões presas",
+          "correct": false,
+          "feedback": "Reinicializações periódicas são um paliativo arriscado. No pico da troca de turno, 100 conexões podem vazar em menos de 10 minutos, gerando indisponibilidade muito antes do reinício."
+        },
+        {
+          "id": "fix-4",
+          "text": "Filtrar o prefixo '#BAD#' no código JavaScript do frontend para descartar leituras defeituosas antes do envio",
+          "correct": false,
+          "feedback": "Filtrar no cliente não blinda o backend contra outros erros imprevistos. O gerenciamento de recursos no backend precisa ser totalmente à prova de falhas."
+        }
+      ]
+    }
+  },
+  "conceptId": "connection-pool-leaks",
+  "badge": {
+    "name": "Encanador de Sockets",
+    "icon": "🔧"
+  }
+}

@@ -198,6 +198,8 @@
   "category.storage": "Armazenamento Distribuído",
   "category.network": "Rede & Comunicação",
   "category.advanced": "Padrões Avançados",
+  "category.coordination": "Coordenação & Arquitetura Distribuída",
+  "category.performance": "Alto Desempenho & Resiliência",
 
   "rankUp.title": "PROMOVIDO",
   "rankUp.subtitle": "Agora você é",
@@ -252,6 +254,8 @@
   "rank.sergeant": "Sargento",
   "rank.lieutenant": "Tenente",
   "rank.chief": "Chefe",
+  "rank.commissioner": "Comissário",
+  "rank.inspector_general": "Inspetor-Geral",
 
   "social.github": "Dar estrela no GitHub",
   "social.linkedin": "Me adicione no LinkedIn",

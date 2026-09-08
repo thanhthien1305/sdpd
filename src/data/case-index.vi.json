@@ -229,5 +229,103 @@
     "title": "Bộ Giới Hạn Tốc Độ (The Rate Limiter)",
     "subtitle": "Một dịch vụ tích hợp bên ngoài làm tràn ngập hệ thống, nhấn chìm tất cả mọi người",
     "conceptId": "rate-limiting"
+  },
+  {
+    "id": "case-34",
+    "number": 34,
+    "title": "Truy Vấn Ma",
+    "subtitle": "Các bản ghi không tồn tại lọt qua bộ đệm và đánh sập cơ sở dữ liệu chính",
+    "conceptId": "cache-penetration"
+  },
+  {
+    "id": "case-35",
+    "number": 35,
+    "title": "Thủ Lĩnh Xác Sống",
+    "subtitle": "Leader cũ thức dậy sau ngưng trệ GC và ghi đè trạng thái mới nhất",
+    "conceptId": "fencing-tokens"
+  },
+  {
+    "id": "case-36",
+    "number": 36,
+    "title": "Vòng Băm Sụp Đổ",
+    "subtitle": "Một máy chủ cache gặp sự cố kéo sập máy chủ láng giềng, kích hoạt hiệu ứng domino toàn hệ thống",
+    "conceptId": "consistent-hashing-vnodes"
+  },
+  {
+    "id": "case-37",
+    "number": 37,
+    "title": "Hồ Sơ Mồ Côi",
+    "subtitle": "Ghi cơ sở dữ liệu thành công nhưng phát tin nhắn thất bại, khiến các dịch vụ mất đồng bộ vĩnh viễn",
+    "conceptId": "transactional-outbox"
+  },
+  {
+    "id": "case-38",
+    "number": 38,
+    "title": "Hồ Sơ Dịch Chuyển",
+    "subtitle": "Nhân bản bất đồng bộ liên vùng khiến người dùng thấy dữ liệu cũ ngay sau khi vừa lưu",
+    "conceptId": "read-your-own-writes"
+  },
+  {
+    "id": "case-39",
+    "number": 39,
+    "title": "Lỗ Rò Kết Nối",
+    "subtitle": "Ngoại lệ mã nguồn không được bắt bỏ qua lệnh giải phóng kết nối, làm tê liệt cơ sở dữ liệu đang rảnh rỗi",
+    "conceptId": "connection-pool-leaks"
+  },
+  {
+    "id": "case-40",
+    "number": 40,
+    "title": "Mâu Thuẫn Dưới Hầm",
+    "subtitle": "Ghi chú hiện trường ngoại tuyến hợp nhất bằng dấu thời gian ngây thơ đã xóa sổ bằng chứng sống còn",
+    "conceptId": "crdt-offline-sync"
+  },
+  {
+    "id": "case-41",
+    "number": 41,
+    "title": "Cơn Đình Trệ Băng Thông Lúc Nửa Đêm",
+    "subtitle": "Thông lượng nạp dữ liệu định vị tốc độ cao kích hoạt cơ chế đình trệ ghi của ổ đĩa",
+    "conceptId": "lsm-write-stalls"
+  },
+  {
+    "id": "case-42",
+    "number": 42,
+    "title": "Cái Bẫy Phân Mảnh Số 50",
+    "subtitle": "Truy vấn phân tán phát tán - gom tụ khuếch đại độ trễ đuôi p99 qua 50 phân mảnh",
+    "conceptId": "hedged-requests-tail-latency"
+  },
+  {
+    "id": "case-43",
+    "number": 43,
+    "title": "Con Voi Trong Hàng Đợi",
+    "subtitle": "Tệp ghi âm 4 tiếng làm tê liệt hàng ngàn cảnh báo khẩn cấp 30 giây trong phân vùng FIFO",
+    "conceptId": "head-of-line-blocking"
+  },
+  {
+    "id": "case-44",
+    "number": 44,
+    "title": "Chiếc Thẻ Huy Hiệu Bị Đánh Cắp",
+    "subtitle": "Token JWT phi trạng thái vẫn có hiệu lực sau khi tài khoản bị khóa, làm rò rỉ hồ sơ mật",
+    "conceptId": "jwt-revocation-blacklist"
+  },
+  {
+    "id": "case-45",
+    "number": 45,
+    "title": "Cơn Hạn Hán Cổng Ảo",
+    "subtitle": "Các kết nối HTTP không dùng pool khiến 28.000 socket kẹt trong TIME_WAIT làm sập toàn bộ dịch vụ",
+    "conceptId": "ephemeral-port-exhaustion"
+  },
+  {
+    "id": "case-46",
+    "number": 46,
+    "title": "Xung Đột Dữ Liệu Xuyên Đại Tây Dương",
+    "subtitle": "Các thao tác ghi đồng thời đa leader giữa London và New York gây xung đột và mất dữ liệu vĩnh viễn",
+    "conceptId": "multi-leader-conflicts"
+  },
+  {
+    "id": "case-47",
+    "number": 47,
+    "title": "Hố Đen Phân Trang Hàng Triệu Dòng",
+    "subtitle": "Phân trang OFFSET trang sâu buộc database quét hàng triệu dòng, làm nghẽn đĩa và cạn kiệt kết nối",
+    "conceptId": "keyset-vs-offset-pagination"
   }
 ]

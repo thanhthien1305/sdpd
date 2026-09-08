@@ -1,0 +1,229 @@
+{
+  "id": "case-35",
+  "number": 35,
+  "title": "The Zombie Leader",
+  "subtitle": "A frozen leader wakes up from a long GC pause and overwrites fresh state",
+  "brief": {
+    "narrative": "The Emergency Dispatch Coordination system uses a distributed lock in ZooKeeper to ensure only one active leader coordinator manages squad car dispatches. Coordinator A was happily serving as leader with a 5-second lease. At 08:00:00, a massive memory allocation triggered a 15-second Stop-The-World Java Garbage Collection pause on Coordinator A. All application threads, including heartbeat threads, froze solid. At 08:00:05, ZooKeeper declared Coordinator A dead due to missed heartbeats and expired its lease. At 08:00:06, Coordinator B was elected as the new leader, acquired the lease, and dispatched SWAT Unit 4 to an active armed robbery (Dispatch #9402). But at 08:00:15, Coordinator A's GC pause ended. Completely unaware that 15 seconds had elapsed and that it had been deposed, Coordinator A resumed execution at the exact instruction where it paused — writing stale Dispatch #9398 for Unit 4 to the Dispatch Storage Cluster. The storage cluster accepted the write and overwrote Dispatch #9402. SWAT Unit 4 was diverted away from an active robbery to a false alarm.",
+    "symptoms": [
+      "Dispatch #9402 (SWAT armed robbery) was mysteriously replaced by stale Dispatch #9398 in database",
+      "ZooKeeper logs show Coordinator A lease expired at 08:00:05 and Coordinator B was elected at 08:00:06",
+      "JVM metrics on Coordinator A reveal a 14.8-second Stop-The-World GC pause from 08:00:01 to 08:00:15",
+      "Conflicting orders sent to tactical units on the radio within seconds of each other"
+    ],
+    "objective": "Identify how an uncoordinated leader waking from a pause can corrupt state, and enforce write validation to prevent zombie leaders from overwriting current data."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "zk-lock",
+        "type": "server",
+        "label": "ZooKeeper Lock Service",
+        "status": "healthy",
+        "position": {
+          "x": 360,
+          "y": 40
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "ZooKeeper Consensus Cluster",
+          "logs": [
+            "[07:59:55] INFO: Coordinator A acquired leader lease /locks/dispatch (TTL: 5s)",
+            "[08:00:00] INFO: Coordinator A renewed lease (TTL: 5s)",
+            "[08:00:05] WARN: Heartbeat missed from Coordinator A — lease expired!",
+            "[08:00:06] INFO: Coordinator B requested lease — elected new leader!",
+            "[08:00:15] WARN: Heartbeat received from Coordinator A — REJECTED (lease held by B)"
+          ],
+          "data": {
+            "Current Leader": "Coordinator B",
+            "Active Lease": "Coordinator B (/locks/dispatch)",
+            "Lease TTL": "5,000ms",
+            "Previous Leader Status": "Expired / Deposed"
+          },
+          "status": "ZooKeeper correctly expired Coordinator A's lease and elected Coordinator B."
+        }
+      },
+      {
+        "id": "coordinator-a",
+        "type": "server",
+        "label": "Coordinator A (Old Leader)",
+        "status": "failed",
+        "position": {
+          "x": 80,
+          "y": 140
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Coordinator A",
+          "logs": [
+            "[08:00:00] INFO: Preparing dispatch #9398 for Unit 4",
+            "[08:00:01] WARN: JVM GC: Major Stop-The-World allocation pause started",
+            "[08:00:01-08:00:15] [FROZEN — ALL THREADS HALTED FOR 14,800ms]",
+            "[08:00:15] INFO: GC finished. Resuming execution without checking lease validity",
+            "[08:00:15] INFO: Writing dispatch #9398 to storage... SUCCESS!"
+          ],
+          "data": {
+            "GC Pause Duration": "14,800ms (Stop-The-World)",
+            "Belief State": "Believes it is still leader",
+            "Lease Status": "EXPIRED (unaware)",
+            "Outbound Action": "Wrote stale dispatch #9398 at 08:00:15"
+          },
+          "status": "Woke up from 15s GC freeze. Acted as a zombie leader and sent stale writes."
+        }
+      },
+      {
+        "id": "coordinator-b",
+        "type": "server",
+        "label": "Coordinator B (New Leader)",
+        "status": "healthy",
+        "position": {
+          "x": 80,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Coordinator B",
+          "logs": [
+            "[08:00:06] INFO: Acquired leader lease /locks/dispatch from ZooKeeper",
+            "[08:00:07] INFO: Processing emergency dispatch #9402 for Unit 4 (Armed Robbery)",
+            "[08:00:08] INFO: Writing dispatch #9402 to storage... SUCCESS!",
+            "[08:00:16] ERROR: Unit 4 status unexpectedly flipped to routine patrol by storage update"
+          ],
+          "data": {
+            "Leadership State": "Legitimate Active Leader",
+            "Lease Start": "08:00:06",
+            "Dispatches Written": "#9402 (Priority 1 Armed Robbery)",
+            "Health": "Healthy, 0s GC pause"
+          },
+          "status": "Legitimate leader. Dispatched SWAT unit 4, but had its write overwritten."
+        }
+      },
+      {
+        "id": "dispatch-storage",
+        "type": "database",
+        "label": "Dispatch Storage DB",
+        "status": "degraded",
+        "position": {
+          "x": 600,
+          "y": 200
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Dispatch Storage Engine",
+          "logs": [
+            "[08:00:08] INFO: Received WRITE dispatch #9402 from Coordinator B -> COMMITTED",
+            "[08:00:15] INFO: Received WRITE dispatch #9398 from Coordinator A -> COMMITTED",
+            "[08:00:15] WARN: Record #4 overwritten. No token or epoch verification configured!",
+            "[08:00:16] ERROR: Data inconsistency detected: newer order was overwritten by older order"
+          ],
+          "data": {
+            "Current Stored Order": "Dispatch #9398 (STALE from Coordinator A)",
+            "Overwritten Order": "Dispatch #9402 (FRESH from Coordinator B)",
+            "Epoch Verification": "DISABLED / NONE",
+            "Fencing Token Enforced": "NO"
+          },
+          "status": "Blindly accepted writes from any coordinator without checking epoch or fencing tokens."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ca-zk",
+        "source": "coordinator-a",
+        "target": "zk-lock",
+        "label": "lease expired (08:00:05)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-cb-zk",
+        "source": "coordinator-b",
+        "target": "zk-lock",
+        "label": "active lease (08:00:06)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-cb-storage",
+        "source": "coordinator-b",
+        "target": "dispatch-storage",
+        "label": "write #9402 (08:00:08)",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-ca-storage",
+        "source": "coordinator-a",
+        "target": "dispatch-storage",
+        "label": "stale write #9398 (08:00:15) [OVERWRITE]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the storage engine accepting a stale write that overwrote the new leader's dispatch?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Storage accepted a write from a deposed leader because writes lacked monotonically increasing Fencing Tokens verified by the storage layer",
+          "correct": true,
+          "feedback": "Correct! In distributed systems, a node cannot reliably know if its lease expired while it was paused (e.g. during a Stop-The-World GC pause or network hiccup). Simply acquiring a lock or lease is insufficient: the storage system must enforce fencing tokens (monotonically increasing epoch numbers). Because storage did not verify fencing tokens, Coordinator A's stale write was accepted even though Coordinator B had already written with a higher epoch."
+        },
+        {
+          "id": "rc-2",
+          "text": "ZooKeeper suffered a split-brain condition and allowed both Coordinator A and B to hold the lock at 08:00:15",
+          "correct": false,
+          "feedback": "ZooKeeper operated correctly. Coordinator A's lease expired at 08:00:05 and ZooKeeper granted leadership exclusively to Coordinator B. When Coordinator A woke up at 08:00:15, ZooKeeper rejected its heartbeat. The failure occurred because Coordinator A wrote directly to storage without re-checking ZooKeeper."
+        },
+        {
+          "id": "rc-3",
+          "text": "Coordinator B experienced clock drift, causing it to timestamp dispatch #9402 in the past",
+          "correct": false,
+          "feedback": "The timestamps on Coordinator B were accurate. Clock drift did not cause this failure; the problem was a 15-second execution pause on Coordinator A followed by blind write acceptance by storage."
+        },
+        {
+          "id": "rc-4",
+          "text": "The network switch connecting Coordinator A and B dropped multicast packets during consensus",
+          "correct": false,
+          "feedback": "ZooKeeper does not rely on network multicast; it uses TCP consensus (ZAB). The network switch was operational; the pause was caused by JVM garbage collection."
+        }
+      ]
+    },
+    "fix": {
+      "question": "What is the correct architectural fix to prevent paused or deposed leaders from corrupting shared storage?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Issue a monotonically increasing Fencing Token with every lock lease, and require the storage layer to reject any write with a token lower than the highest token seen",
+          "correct": true,
+          "feedback": "Correct! Fencing tokens solve the zombie leader problem: ZooKeeper issues a monotonically increasing token (e.g., token 34 for Coordinator A, token 35 for Coordinator B). When Coordinator B writes, storage records that it has seen token 35. When Coordinator A awakens and tries to write with token 34, the storage engine checks: 34 < 35, and immediately rejects the write with an epoch mismatch error."
+        },
+        {
+          "id": "fix-2",
+          "text": "Increase ZooKeeper's lease timeout from 5 seconds to 30 minutes so Coordinator A's lease never expires during GC pauses",
+          "correct": false,
+          "feedback": "Extending lease timeouts severely degrades availability. If a leader actually crashes or power fails, the entire emergency dispatch system would be frozen for 30 minutes before electing a successor. Furthermore, a pause could always exceed the timeout."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configure Coordinator A to ping Coordinator B over the network before executing every database write",
+          "correct": false,
+          "feedback": "Point-to-point peer checks cannot guarantee safety. Coordinator B might be slow to respond, or another pause could occur between the ping and the write. Fencing tokens enforced at the destination storage layer are mandatory."
+        },
+        {
+          "id": "fix-4",
+          "text": "Switch from Java to C++ on all coordinator nodes to completely eliminate garbage collection pauses",
+          "correct": false,
+          "feedback": "While C++ avoids GC pauses, pauses in distributed systems can still happen due to OS paging, CPU starvation, virtualization hypervisor pauses, or network delays. Systems must be resilient to pauses regardless of programming language."
+        }
+      ]
+    }
+  },
+  "conceptId": "fencing-tokens",
+  "badge": {
+    "name": "Zombie Exorcist",
+    "icon": "🧟"
+  }
+}

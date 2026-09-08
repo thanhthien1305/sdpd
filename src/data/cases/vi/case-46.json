@@ -1,0 +1,182 @@
+{
+  "id": "case-46",
+  "number": 46,
+  "title": "Xung Đột Dữ Liệu Xuyên Đại Tây Dương",
+  "subtitle": "Các thao tác ghi đồng thời đa leader giữa London và New York gây xung đột và mất dữ liệu vĩnh viễn",
+  "brief": {
+    "narrative": "Interpol và Cảnh sát SDPD vận hành hệ thống cơ sở dữ liệu phân tán đa leader (active-active multi-leader) đồng bộ giữa hai trung tâm dữ liệu toàn cầu: New York (`us-east`) và London (`eu-west`). Mỗi trung tâm dữ liệu tiếp nhận các thao tác ghi tại chỗ để đảm bảo độ trễ dưới 1 mili-giây cho các điều tra viên sở tại. Vào lúc 14:00:00.000 UTC, một thám tử SDPD tại New York thẩm vấn Nghi phạm #8812, xác minh chứng cứ ngoại phạm và cập nhật mức độ đe dọa thành `CLEARED_OF_SUSPICION` (Đã loại trừ hiềm nghi). Đúng 40 mili-giây sau đó, lúc 14:00:00.040 UTC, một sĩ quan Interpol tại sân bay Heathrow (London) phát hiện chính nghi phạm này đang lên máy bay riêng mang theo vũ khí quân dụng và gắn cờ hồ sơ là `ARMED_AND_DANGEROUS` (Có vũ khí nguy hiểm). Do đường truyền cáp quang xuyên đại dương mất 75ms để truyền tin, cả hai trung tâm dữ liệu đều chấp nhận các thao tác ghi mâu thuẫn này một cách đồng thời. Để giải quyết xung đột, hệ thống áp dụng cơ chế Ghi-Sau-Thắng (LWW) dựa trên đồng hồ vật lý NTP. Tuy nhiên, đồng hồ của máy chủ London bị lệch lùi -120ms, gắn nhãn thời gian cho bản ghi tại London là 13:59:59.920. Khi gói tin của London sang đến New York, máy chủ so sánh timestamp (`14:00:00.000 > 13:59:59.920`), phán quyết bản ghi New York là 'mới hơn' và âm thầm vứt bỏ cảnh báo vũ trang nguy hiểm của London. Các đội đặc nhiệm tại New York hủy bỏ báo động, để lọt một tên tội phạm vũ trang tự do di chuyển.",
+    "symptoms": [
+      "Bản cập nhật trạng thái tội phạm nguy hiểm gửi từ London bị ghi đè và biến mất không dấu vết tại New York",
+      "Nhật ký giải quyết xung đột nhân bản báo lỗi bản ghi của London bị từ chối với mã `LWW_TIMESTAMP_STALE`",
+      "Kiểm tra phần cứng phát hiện đồng hồ NTP giữa cụm máy chủ châu Âu và Mỹ bị lệch nhau tới -120ms",
+      "Các điều tra viên tại London và New York nhìn thấy thông tin nghi phạm trái ngược nhau trong suốt nhiều giờ"
+    ],
+    "objective": "Chẩn đoán tình trạng hủy hoại dữ liệu âm thầm do dùng đồng hồ vật lý Last-Write-Wins trong nhân bản đa leader, và triển khai kỹ thuật Ghim Vùng (Geo-Pinning) cùng Đồng Hồ Vector (Vector Clocks) để bảo toàn thứ tự nhân quả."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dc-london",
+        "type": "database",
+        "label": "Trung Tâm Dữ Liệu London (eu-west Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Leader London (eu-west)",
+          "logs": [
+            "[Thực tế: 14:00:00.040 | Đồng hồ: 13:59:59.920] GHI: UPDATE suspect #8812 SET status = 'ARMED_AND_DANGEROUS'",
+            "[13:59:59.920] INFO: Commit cục bộ THÀNH CÔNG — cập nhật trạng thái tại cơ sở dữ liệu London",
+            "[13:59:59.925] INFO: Đang gửi gói tin nhân bản bất đồng bộ sang New York qua cáp quang biển",
+            "[14:00:00.115] WARN: Nhận gói tin nhân bản từ New York đổi trạng thái thành 'CLEARED_OF_SUSPICION'"
+          ],
+          "data": {
+            "Khu vực": "eu-west (London)",
+            "Trạng thái cục bộ": "ARMED_AND_DANGEROUS",
+            "Lệch pha đồng hồ phần cứng": "-120ms (NTP bị suy giảm)"
+          },
+          "status": "Tiếp nhận thao tác ghi cục bộ nhưng gắn nhãn thời gian vật lý bị lùi về quá khứ."
+        }
+      },
+      {
+        "id": "dc-newyork",
+        "type": "database",
+        "label": "Trung Tâm Dữ Liệu New York (us-east Leader)",
+        "status": "degraded",
+        "position": {
+          "x": 80,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Leader New York (us-east)",
+          "logs": [
+            "[14:00:00.000] GHI: UPDATE suspect #8812 SET status = 'CLEARED_OF_SUSPICION'",
+            "[14:00:00.001] INFO: Commit cục bộ THÀNH CÔNG tại cơ sở dữ liệu New York",
+            "[14:00:00.100] REPL: Nhận gói tin nhân bản gửi đến từ London (Dấu thời gian: 13:59:59.920)",
+            "[14:00:00.101] WARN: Phát hiện xung đột ghi đồng thời trên hồ sơ Nghi phạm #8812",
+            "[14:00:00.102] ERROR: Giải quyết theo LWW: 14:00:00.000 > 13:59:59.920 -> Bản ghi London bị vứt bỏ!"
+          ],
+          "data": {
+            "Khu vực": "us-east (New York)",
+            "Trạng thái cục bộ": "CLEARED_OF_SUSPICION",
+            "Chiến lược giải quyết xung đột": "Ghi-Sau-Thắng (Dựa trên timestamp NTP vật lý)"
+          },
+          "status": "Âm thầm tiêu hủy cảnh báo vũ trang khẩn cấp của London do so sánh đồng hồ client."
+        }
+      },
+      {
+        "id": "conflict-resolver",
+        "type": "server",
+        "label": "Đường Truyền Nhân Bản Đa Leader",
+        "status": "failed",
+        "position": {
+          "x": 420,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Kênh Kết Nối Nhân Bản Xuyên Khu Vực",
+          "logs": [
+            "[14:00:00.000] Độ trễ khứ hồi cáp quang xuyên Đại Tây Dương: 75ms",
+            "[14:00:00.040] Lệnh ghi tại London và New York chạy độc lập trước khi gói tin nhân bản kịp tới nơi",
+            "[14:00:00.102] CRITICAL: Bộ phân xử xung đột loại bỏ bản cập nhật của London mà không phát cảnh báo",
+            "[14:00:00.105] ERROR: Hai trung tâm dữ liệu rơi vào trạng thái phân rã: London báo ARMED, NY báo CLEARED"
+          ],
+          "data": {
+            "Mô hình kiến trúc": "Nhân bản Đa Leader Active-Active",
+            "Tránh xung đột": "KHÔNG CÓ (Cả 2 DC đều nhận lệnh ghi cho bất kỳ thực thể nào)",
+            "Phân rã dữ liệu": "ĐANG XẢY RA (Dữ liệu giữa London và NY bất nhất)"
+          },
+          "status": "Động cơ nhân bản đa leader làm mất dữ liệu âm thầm do cơ chế LWW theo đồng hồ vật lý."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-lon-bus",
+        "source": "dc-london",
+        "target": "conflict-resolver",
+        "label": "nhân bản [ts: 13:59:59.920]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-ny-bus",
+        "source": "dc-newyork",
+        "target": "conflict-resolver",
+        "label": "nhân bản [ts: 14:00:00.000]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân kiến trúc gốc rễ khiến cảnh báo vũ trang nguy hiểm của văn phòng London bị xóa bỏ là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Xung đột ghi đồng thời trong mô hình nhân bản đa leader được phân xử bằng cơ chế Last-Write-Wins ngây thơ dựa trên đồng hồ vật lý không đồng bộ: độ lệch đồng hồ NTP khiến bản ghi thực sự mới hơn tại London bị coi là cũ hơn và âm thầm bị loại bỏ",
+          "correct": true,
+          "feedback": "Chính xác! Trong mô hình đa leader active-active, việc cho phép nhiều trung tâm dữ liệu cùng chấp nhận lệnh ghi cho một thực thể chắc chắn sẽ tạo ra xung đột ghi đồng thời. Dựa vào dấu thời gian của đồng hồ vật lý (Last-Write-Wins) là một sai lầm chết người trong các hệ thống phân tán vì tinh thể thạch anh của đồng hồ phần cứng luôn bị trôi dạt (drift), các gói tin đồng bộ NTP luôn có sai số và giây nhuận làm thời gian nhảy lùi. Do đồng hồ của máy chủ London bị chậm 120ms, lệnh ghi của nó—dù xảy ra sau 40ms trong thế giới thực—lại mang timestamp thấp hơn và bị cơ chế LWW vứt bỏ không thương tiếc."
+        },
+        {
+          "id": "rc-2",
+          "text": "Tuyến cáp quang ngầm dưới đáy biển Đại Tây Dương bị mỏ neo tàu kéo đứt, làm rơi rớt 100% các gói tin nhân bản",
+          "correct": false,
+          "feedback": "Đường truyền mạng hoàn toàn bình thường với độ trễ 75ms. New York đã nhận được gói tin của London vào lúc 14:00:00.100; phần mềm máy chủ đã chủ động vứt bỏ gói tin này do thuật toán LWW sai lầm."
+        },
+        {
+          "id": "rc-3",
+          "text": "Cơ sở dữ liệu của London sử dụng mô hình quan hệ SQL trong khi New York sử dụng kho tài liệu NoSQL phi cấu trúc",
+          "correct": false,
+          "feedback": "Cả hai cụm máy chủ đều chạy phần mềm và cấu trúc bảng giống hệt nhau. Vấn đề thuần túy nằm ở thuật toán giải quyết xung đột của hệ thống phân tán."
+        },
+        {
+          "id": "rc-4",
+          "text": "Một lỗ hổng SQL Injection trên máy trạm London đã gán trường trạng thái nghi phạm thành giá trị NULL",
+          "correct": false,
+          "feedback": "Nhật ký kiểm toán của London cho thấy câu lệnh UPDATE tham số hóa hoàn toàn hợp lệ: `status = 'ARMED_AND_DANGEROUS'`. Dữ liệu được ghi thành công tại chỗ trước khi bị New York bác bỏ."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Kiến trúc đa trung tâm dữ liệu toàn cầu cần được tái thiết kế như thế nào để triệt tiêu xung đột ghi đồng thời và ngăn ngừa mất mát dữ liệu?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai Kỹ Thuật Tránh Xung Đột Bằng Cách Ghim Vùng Dữ Liệu (Geo-Pinning / Master-per-Entity): điều hướng mọi thao tác ghi của một nghi phạm hoặc vụ án về một trung tâm dữ liệu quê nhà cố định, kết hợp Đồng Hồ Vector (Vector Clocks) để bảo toàn thứ tự nhân quả khi đồng bộ xuyên vùng",
+          "correct": true,
+          "feedback": "Chính xác! Kiến trúc mạnh mẽ nhất cho hệ thống đa khu vực là Chủ Động Tránh Xung Đột (Conflict Avoidance): điều hướng toàn bộ lệnh ghi của một đối tượng (như mã nghi phạm hoặc số vụ án) về một 'Trung Tâm Dữ Liệu Mẹ' duy nhất (thông qua định tuyến DNS/Anycast thông minh hoặc ghim theo vị trí địa lý). Điều này biến các thao tác ghi xuyên vùng thành luồng single-leader tất định. Trong trường hợp bắt buộc phải cho phép ghi đồng thời đa vùng, hãy thay thế đồng hồ vật lý bằng Đồng Hồ Vector (Vector Clocks) hoặc CRDTs để lưu lại cả hai phiên bản xung đột cho con người can thiệp thay vì âm thầm ghi đè làm mất dữ liệu."
+        },
+        {
+          "id": "fix-2",
+          "text": "Bắt buộc áp dụng giao thức Cam Kết Hai Pha (Two-Phase Commit - 2PC) đồng bộ với khóa dòng phân tán xuyên Đại Tây Dương cho từng lệnh ghi đơn lẻ",
+          "correct": false,
+          "feedback": "Giao thức 2PC đồng bộ xuyên đại dương đòi hỏi nhiều chặng trao đổi mạng liên tiếp (độ trễ > 200ms) và sẽ làm đóng băng toàn bộ cơ sở dữ liệu toàn cầu mỗi khi một trong hai trung tâm dữ liệu bảo trì hoặc mạng bị trễ."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấu hình máy chủ NTP đồng bộ thời gian vật lý với tần suất 1 mili-giây một lần qua các trạm phát sóng di động 4G",
+          "correct": false,
+          "feedback": "NTP qua sóng không dây không thể đảm bảo độ chính xác dưới 1 mili-giây do độ chập chờn của sóng vô tuyến. Các đồng hồ vật lý trong hệ thống phân tán không bao giờ có thể đồng bộ tuyệt đối để xác định thứ tự sự kiện đồng thời."
+        },
+        {
+          "id": "fix-4",
+          "text": "Đóng cửa vĩnh viễn trung tâm dữ liệu London và ép toàn bộ các cơ quan cảnh sát châu Âu gửi truy vấn sang New York qua mạng internet công cộng",
+          "correct": false,
+          "feedback": "Tập trung hóa về New York sẽ khiến các cơ quan châu Âu gánh chịu độ trễ mạng xuyên lục địa rất cao và vi phạm nghiêm trọng các quy định pháp luật về chủ quyền dữ liệu (GDPR/Data Residency)."
+        }
+      ]
+    }
+  },
+  "conceptId": "multi-leader-conflicts",
+  "badge": {
+    "name": "Trọng Tài Kinh Tuyến",
+    "icon": "🌐"
+  }
+}

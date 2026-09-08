@@ -1,0 +1,215 @@
+{
+  "id": "case-42",
+  "number": 42,
+  "title": "Cái Bẫy Phân Mảnh Số 50",
+  "subtitle": "Truy vấn phân tán phát tán - gom tụ khuếch đại độ trễ đuôi p99 qua 50 phân mảnh",
+  "brief": {
+    "narrative": "Một tên cướp ngân hàng có vũ trang đang phóng xe bạt mạng về phía đường cao tốc liên bang trong sự truy đuổi gắt gao của các đội tuần tra. Nhân viên điều phối sử dụng công cụ nhận diện khuôn mặt tự động để đối chiếu nghi phạm trên 50 phân mảnh cơ sở dữ liệu vùng (shards) song song. Từng phân mảnh đơn lẻ xử lý cực nhanh: thời gian truy vấn trung vị chỉ 8ms, và 99% truy vấn hoàn tất dưới 20ms. Tuy nhiên, trong 1% trường hợp, một phân mảnh cá biệt bị khựng lại tới 300ms do các đợt dọn rác bộ nhớ JVM (GC pause) hoặc hiện tượng tranh chấp I/O trên máy chủ ảo. Do điều phối viên trung tâm phải phát tán truy vấn tới cả 50 phân mảnh và đợi tất cả phản hồi trước khi trả kết quả (mô hình scatter-gather), xác suất toán học để đụng phải ít nhất một phân mảnh bị chậm lên tới `1 - (0.99^50) ≈ 39.5%`. Hơn một phần ba các lượt tra cứu sinh trắc học trực tiếp bị khựng lại hơn 300ms, khiến tổng đài lỡ mất thời cơ chặn xe tại các lối thoát hiểm.",
+    "symptoms": [
+      "Truy vấn tra cứu của điều phối viên bị trễ hơn 300ms trong gần 40% trường hợp dù từng phân mảnh đơn lẻ chạy rất nhanh",
+      "CPU của điều phối viên phát tán - gom tụ nhàn rỗi trong khi phải đợi duy nhất một phân mảnh chậm nhất trả về",
+      "Số liệu giám sát cho thấy mỗi phân mảnh đơn lẻ có mức p99 là 250ms do các đợt dừng hệ thống dọn rác GC kéo dài 200ms",
+      "Các đơn vị truy đuổi tốc độ cao lỡ mất thời điểm lập chốt chặn trên cao tốc vì kết quả xác minh danh tính trả về quá muộn"
+    ],
+    "objective": "Chẩn đoán hiện tượng khuếch đại độ trễ đuôi trong truy vấn phát tán - gom tụ và triển khai kỹ thuật Truy Vấn Phòng Ngừa (Hedged Requests) để triệt tiêu ảnh hưởng của node chậm chân."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dispatch-ui",
+        "type": "client",
+        "label": "Màn Hình Điều Phối Tác Chiến",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Bàn Điều Khiển Đón Chặn Nghi Phạm",
+          "logs": [
+            "[14:22:01.002] SEARCH: Tra cứu sinh trắc học khuôn mặt qua 50 phân mảnh khu vực",
+            "[14:22:01.320] WARN: Lượt tìm kiếm mất 318ms (Mục tiêu SLA: < 30ms)",
+            "[14:22:05.100] SEARCH: Tra cứu đối chiếu biển số xe",
+            "[14:22:05.312] WARN: Lượt tìm kiếm mất 212ms — cửa sổ chặn bắt sắp đóng lại"
+          ],
+          "data": {
+            "Tổng số yêu cầu": "1.420 truy vấn/phút",
+            "Độ trễ p99 quan sát": "340ms",
+            "Tỷ lệ truy vấn vượt ngưỡng SLA": "39.2%"
+          },
+          "status": "Nhân viên trực ban báo cáo cứ 10 truy vấn thì có tới 4 truy vấn bị giật lag bất thường."
+        }
+      },
+      {
+        "id": "scatter-coordinator",
+        "type": "server",
+        "label": "Điều Phối Viên Phát Tán - Gom Tụ",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Động Cơ Truy Vấn Scatter-Gather",
+          "logs": [
+            "[14:22:01.005] INFO: Phát tán truy vấn song song tới Phân Mảnh 1 đến 50",
+            "[14:22:01.014] INFO: Các phân mảnh 1-49 đã trả về kết quả trong thời gian trung bình 9.2ms",
+            "[14:22:01.015] WARN: Vẫn đang mòn mỏi đợi Phân Mảnh 37...",
+            "[14:22:01.315] INFO: Phân Mảnh 37 cuối cùng đã trả lời (thời gian chạy: 310ms)",
+            "[14:22:01.316] ERROR: Tổng thời gian hoàn thành bị ấn định bởi node chậm nhất (311ms)"
+          ],
+          "data": {
+            "Số phân mảnh gọi song song": "50 Shards",
+            "Chiến lược chờ đợi": "Bắt buộc đợi đủ 100% phân mảnh (không có dự phòng)",
+            "Tác động của node chậm": "1 - (0.99)^50 = 39.5% xác suất bị lag"
+          },
+          "status": "Bộ tổng hợp kết quả bị trói chân chờ đợi duy nhất một bản sao chậm chạp trong số 50 node."
+        }
+      },
+      {
+        "id": "shard-fast",
+        "type": "database",
+        "label": "Phân Mảnh 1-49 (Cụm Bình Thường)",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 70
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nhóm Phân Mảnh Khỏe Mạnh (49 Node)",
+          "logs": [
+            "[14:22:01.008] INFO: Shard 01 thực hiện tìm kiếm vector trong 6.4ms",
+            "[14:22:01.009] INFO: Shard 12 thực hiện tìm kiếm vector trong 7.1ms",
+            "[14:22:01.012] INFO: Shard 48 thực hiện tìm kiếm vector trong 8.3ms"
+          ],
+          "data": {
+            "Độ trễ trung vị": "8.1ms",
+            "Mức phân vị 99th": "19.5ms",
+            "Tải CPU": "24% (Bình thường)"
+          },
+          "status": "49 trên 50 phân mảnh phản hồi siêu tốc dưới 10ms mà không hề bị nghẽn."
+        }
+      },
+      {
+        "id": "shard-straggler",
+        "type": "database",
+        "label": "Phân Mảnh 37 (Node Chậm Chân - Bản Sao A)",
+        "status": "degraded",
+        "position": {
+          "x": 640,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Node Chậm Chân (Phân Mảnh 37)",
+          "logs": [
+            "[14:22:01.006] WARN: Tạm dừng dọn rác JVM: Stop-The-World (295ms)",
+            "[14:22:01.301] INFO: Đợt dọn rác hoàn tất, tiếp tục chạy luồng truy vấn",
+            "[14:22:01.310] INFO: Đã trả kết quả cho điều phối viên sau 304ms",
+            "[14:22:01.312] NOTE: Bản sao dự phòng B của Phân Mảnh 37 đang rảnh rỗi 100% với 0% GC"
+          ],
+          "data": {
+            "Trạng thái node": "GC Pause (STW)",
+            "Thời gian thực thi truy vấn": "304ms",
+            "Tình trạng bản sao": "Bản sao dự phòng 37-B hoàn toàn rảnh rỗi"
+          },
+          "status": "Đợt dừng dọn rác tạm thời trên bản sao chính đã làm đình trệ toàn bộ câu truy vấn 50 phân mảnh."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ui-coord",
+        "source": "dispatch-ui",
+        "target": "scatter-coordinator",
+        "label": "tra cứu sinh trắc học [318ms]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-coord-fast",
+        "source": "scatter-coordinator",
+        "target": "shard-fast",
+        "label": "phát tán x49 [8ms]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-coord-slow",
+        "source": "scatter-coordinator",
+        "target": "shard-straggler",
+        "label": "phát tán x1 [304ms STW]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Tại sao có tới 40% các lượt tra cứu sinh trắc học bị tăng vọt độ trễ lên hơn 300ms trong khi 99% các truy vấn phân mảnh đơn lẻ hoàn tất dưới 20ms?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Hiện tượng khuếch đại độ trễ đuôi trong mô hình phát tán - gom tụ (scatter-gather): việc truy vấn đồng thời 50 phân mảnh độc lập làm lũy thừa các đỉnh trễ p99 cá lẻ (1 - 0.99^50 ≈ 40%), khiến node phản hồi chậm nhất trở thành nút thắt cổ chai quyết định độ trễ tổng thể",
+          "correct": true,
+          "feedback": "Chính xác! Khi một hệ thống phát tán truy vấn tới 50 phân mảnh và bắt buộc phải đợi toàn bộ các phân mảnh phản hồi, thời gian chờ đợi tổng thể sẽ bằng `max(shard_1, shard_2, ..., shard_50)`. Dù mỗi phân mảnh chỉ có 1% xác suất bị dính đợt dọn rác GC 300ms (mức p99), xác suất để *có ít nhất một phân mảnh* trong số 50 phân mảnh bị chậm trong một lượt tra cứu là `1 - (0.99)^50 ≈ 39.5%`. Chỉ một node cá biệt bị lag cũng đủ biến cả truy vấn thành thảm họa độ trễ."
+        },
+        {
+          "id": "rc-2",
+          "text": "Card mạng của node điều phối viên chỉ đạt băng thông 100Mbps nên bị nghẽn đường truyền khi tiếp nhận các gói tin hình ảnh",
+          "correct": false,
+          "feedback": "Băng thông mạng trên node điều phối viên chỉ sử dụng dưới 12% trên đường truyền quang 10Gbps. Dữ liệu truyền đi chỉ là các vector đặc trưng kích thước rất nhỏ (~4KB), do đó mạng không hề bị quá tải."
+        },
+        {
+          "id": "rc-3",
+          "text": "Mô hình nhận diện khuôn mặt sinh trắc học đang chạy không tối ưu hóa vector trên nhân CPU thay vì dùng GPU",
+          "correct": false,
+          "feedback": "49 trên 50 phân mảnh trả về kết quả chỉ trong chưa đầy 8ms, chứng tỏ mô hình và phần cứng tăng tốc vector đang hoạt động cực kỳ mượt mà trên toàn cụm."
+        },
+        {
+          "id": "rc-4",
+          "text": "Trình duyệt tại máy trạm điều phối bị bóp nghẽn do cơ chế dọn rác bộ nhớ JavaScript trên ứng dụng Electron client",
+          "correct": false,
+          "feedback": "Số liệu đo đạc tại máy chủ điều phối viên ghi nhận rõ ràng 311ms chờ đợi node Phân Mảnh 37 ở tầng backend. Nút thắt hoàn toàn nằm ở kiến trúc truy vấn phân tán phía server."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Cần thiết kế lại động cơ truy vấn phân tán như thế nào để loại bỏ triệt để hiệu ứng node chậm chân và duy trì độ trễ p99 ở mức thấp ổn định?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai kỹ thuật Truy Vấn Phòng Ngừa (Hedged Requests): sau khi phát tán truy vấn tới các bản sao chính, kích hoạt bộ đếm giờ ở mốc kỳ vọng p95 (15ms); nếu bất kỳ phân mảnh nào chưa phản hồi, lập tức gửi một truy vấn trùng lặp dự phòng tới bản sao phụ của phân mảnh đó và nhận kết quả từ bên nào trả về trước",
+          "correct": true,
+          "feedback": "Chính xác! Kỹ thuật Truy Vấn Phòng Ngừa (Hedged Requests - được đề xuất bởi bài báo nổi tiếng 'The Tail at Scale' của Google) triệt tiêu hoàn toàn sự khuếch đại độ trễ đuôi với chi phí tài nguyên phát sinh cực nhỏ (~2-5% truy vấn phụ). Vì các đợt giật lag thường có tính cục bộ (như đợt dọn rác GC trên bản sao 37-A), bản sao dự phòng 37-B gần như luôn ở trạng thái khỏe mạnh. Bắn thêm một truy vấn dự phòng sau 15ms giúp bỏ qua ngay node chậm chạp, kéo độ trễ tổng thể p99 từ hơn 300ms xuống dưới 25ms."
+        },
+        {
+          "id": "fix-2",
+          "text": "Gộp toàn bộ 50 phân mảnh vào một cơ sở dữ liệu nguyên khối 100TB duy nhất chạy trên một máy chủ vật lý để loại bỏ việc phân tán mạng",
+          "correct": false,
+          "feedback": "Gộp 50 shard về một máy chủ nguyên khối tạo ra điểm lỗi đơn cực kỳ nguy hiểm (single point of failure) và triệt tiêu khả năng mở rộng ngang cũng như năng lực tính toán vector song song."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cấu hình điều phối viên trả về kết quả ngay sau khi nhận được 10 phản hồi đầu tiên, vứt bỏ dữ liệu của 40 phân mảnh còn lại",
+          "correct": false,
+          "feedback": "Vứt bỏ 40 trên 50 phân mảnh đồng nghĩa với việc bỏ sót tới 80% hồ sơ tội phạm của các khu vực, khiến cảnh sát bỏ lọt các tên tội phạm nguy hiểm có vũ trang."
+        },
+        {
+          "id": "fix-4",
+          "text": "Biên dịch lại phần mềm cơ sở dữ liệu để tắt hoàn toàn cơ chế dọn rác bộ nhớ bằng cách cấp phát một vùng heap cố định 2TB và không bao giờ giải phóng RAM",
+          "correct": false,
+          "feedback": "Tắt dọn dẹp bộ nhớ sẽ dẫn đến lỗi tràn bộ nhớ (Out-Of-Memory Panic) không thể tránh khỏi ngay khi vùng nhớ heap cố định bị đầy, làm sập hoàn toàn máy chủ cơ sở dữ liệu."
+        }
+      ]
+    }
+  },
+  "conceptId": "hedged-requests-tail-latency",
+  "badge": {
+    "name": "Thợ Săn Độ Trễ Đuôi",
+    "icon": "🎯"
+  }
+}

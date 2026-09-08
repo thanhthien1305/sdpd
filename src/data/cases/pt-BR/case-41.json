@@ -1,0 +1,183 @@
+{
+  "id": "case-41",
+  "number": 41,
+  "title": "O Congelamento de Escrita da Meia-Noite",
+  "subtitle": "Ingestão massiva de telemetria dispara write stalls repentinos no motor de armazenamento",
+  "brief": {
+    "narrative": "Durante uma operação policial de grande porte pela cidade, 3.000 viaturas, vans táticas e drones transmitem telemetria (coordenadas GPS, batimentos cardíacos, dados de telemetria veicular) a 120.000 escritas/segundo em um cluster NoSQL baseado em LSM-tree. Subitamente às 00:15, toda a ingestão congela. Gateways de entrada retornam erros HTTP 504 Gateway Timeout, os buffers de borda transbordam e os monitores de rastreamento tático em tempo real ficam completamente pretos. O motor de banco de dados ativou um Write Stall emergencial: as escritas despejaram Memtables no disco mais rápido do que as threads de compactação conseguiam mesclar os arquivos SSTable do Nível 0 (L0) para o Nível 1. Para impedir uma explosão na amplificação de leitura, o banco suspendeu todas as escritas para drenar a fila.",
+    "symptoms": [
+      "Vazão de escrita despencou de 120.000 para 0 escritas/s às 00:15",
+      "Gateways de API acumulando milhares de erros HTTP 504 Gateway Timeout",
+      "Métrica `rocksdb.num-running-compactions` saturada no limite máximo de threads",
+      "Contagem de arquivos SSTable L0 atingiu 48 (limite crítico: 20), disparando um hard write stall"
+    ],
+    "objective": "Diagnosticar a sobrecarga na compactação de LSM-tree sob alta vazão e implantar compactação em camadas com buffer de ingestão para eliminar write stalls."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "fleet-drones",
+        "type": "client",
+        "label": "Frota Tática & Drones",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Fluxos de Telemetria da Frota",
+          "logs": [
+            "[00:14:55] INFO: Transmitindo lote: 120.000 eventos/s",
+            "[00:15:02] ERROR: POST /telemetry HTTP 504 Gateway Timeout",
+            "[00:15:05] WARN: Buffer circular local em 85% — descartando pacotes antigos",
+            "[00:15:10] CRITICAL: Conexão de GPS em tempo real perdida"
+          ],
+          "data": {
+            "Unidades Ativas": "3.000 viaturas + 150 drones",
+            "Taxa Alvo": "120.000 escritas/s",
+            "Taxa de Erros": "99.8% (HTTP 504)"
+          },
+          "status": "Telemetria acumulada descartando pacotes devido ao travamento no armazenamento."
+        }
+      },
+      {
+        "id": "api-gateway",
+        "type": "server",
+        "label": "Gateway de Ingestão",
+        "status": "failed",
+        "position": {
+          "x": 300,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Pool de Gateways de Ingestão",
+          "logs": [
+            "[00:14:58] INFO: Latência de escrita upstream: 2.1ms",
+            "[00:15:01] WARN: Latência no cluster LSM saltou para 5.200ms",
+            "[00:15:03] ERROR: Pool de conexões esgotado (500/500 bloqueadas em escrita)",
+            "[00:15:05] ERROR: Retornando HTTP 504 para a frota"
+          ],
+          "data": {
+            "QPS de Entrada": "120.000",
+            "Conexões Ativas": "500 / 500 (100% bloqueadas)",
+            "Estado do Motor": "WRITE_STALL"
+          },
+          "status": "Threads do gateway bloqueadas aguardando respostas de escrita do banco."
+        }
+      },
+      {
+        "id": "lsm-cluster",
+        "type": "database",
+        "label": "Cluster LSM-Tree",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Motor de Armazenamento LSM",
+          "logs": [
+            "[00:14:50] INFO: Memtable descarregada no arquivo L0 SSTable #88412",
+            "[00:14:59] WARN: Arquivos L0 = 24 (limite de alerta = 12)",
+            "[00:15:00] CRITICAL: Arquivos L0 = 48 (limite de parada = 20) -> ATIVANDO WRITE STALL",
+            "[00:15:01] CRITICAL: Bloqueando escritas até que a compactação reduza L0",
+            "[00:15:10] INFO: 8/8 threads de compactação operando com 100% de I/O em disco"
+          ],
+          "data": {
+            "Arquivos L0": "48 (Limite: 20)",
+            "Write Stall Ativo": "SIM (Bloqueio Total)",
+            "Estratégia": "Leveled Compaction (Alto custo de I/O)",
+            "Uso de IOPS": "100% Saturação"
+          },
+          "status": "O banco bloqueou novas escritas para evitar explosão na amplificação de leitura."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-fleet-gw",
+        "source": "fleet-drones",
+        "target": "api-gateway",
+        "label": "120k escritas/s [504 Timeout]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-gw-lsm",
+        "source": "api-gateway",
+        "target": "lsm-cluster",
+        "label": "flush [WRITE STALL]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz do congelamento repentino de escritas no cluster de telemetria?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "O acúmulo de trabalho de compactação da LSM-tree ficou para trás da taxa de ingestão, fazendo os arquivos SSTable L0 ultrapassarem o limite seguro e dispararem um write stall",
+          "correct": true,
+          "feedback": "Correto! Em motores baseados em LSM-tree, escritas entram no Memtable em RAM e são descarregadas em SSTables no Nível 0 (L0). A estratégia Leveled Compaction exige intensa atividade de I/O para mesclar dados em níveis inferiores. Sob 120.000 escritas/s, o disco saturou, a compactação atrasou e os arquivos L0 saltaram para 48 (superando o limite crítico de 20). O banco ativou o Write Stall para se autoproteger, bloqueando qualquer nova escrita de clientes."
+        },
+        {
+          "id": "rc-2",
+          "text": "As unidades SSD físicas ficaram sem espaço livre, forçando o sistema de arquivos a remontar em modo somente leitura (read-only)",
+          "correct": false,
+          "feedback": "Os dados de telemetria de hardware confirmam mais de 42TB livres nos discos. A causa não foi falta de espaço, mas sim uma fila de compactação de software que excedeu o limite de segurança."
+        },
+        {
+          "id": "rc-3",
+          "text": "Uma porta com defeito no switch de rede entre o gateway e o banco causou quedas contínuas de pacotes TCP",
+          "correct": false,
+          "feedback": "A conectividade física de rede está operando perfeitamente com 0 perdas de pacotes. As conexões TCP estão ativas, porém travadas aguardando o fim do write stall no banco."
+        },
+        {
+          "id": "rc-4",
+          "text": "Um deadlock distribuído entre travas transacionais de linha nas chaves de GPS paralisou a execução das threads",
+          "correct": false,
+          "feedback": "A ingestão de telemetria em LSM utiliza operações simples de append-only, sem travas pessimistas de linha ou transações ACID. Deadlocks não se aplicam a esse cenário."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de armazenamento e ingestão deve ser reconfigurada para evitar write stalls sob picos extremos de tráfego?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Migrar para a Estratégia de Compactação em Camadas por Tamanho (STCS) otimizada para dados temporais sequenciais, definir limites de taxa de I/O para compactação e absorver picos com uma fila Kafka",
+          "correct": true,
+          "feedback": "Correto! Para cargas intensivas de escrita e séries temporais, a estratégia Size-Tiered Compaction possui amplificação de escrita e sobrecarga de I/O muito menores que Leveled Compaction, pois agrupa arquivos SSTables de tamanho semelhante sem forçar ordenação multinível imediata. Adicionar um buffer no Kafka desacopla os picos repentinos da frota dos limites físicos de gravação em disco."
+        },
+        {
+          "id": "fix-2",
+          "text": "Desativar completamente a compactação em segundo plano para liberar 100% da banda de I/O de disco durante as operações",
+          "correct": false,
+          "feedback": "Desativar a compactação faria os arquivos SSTable se acumularem indefinidamente. Qualquer leitura posterior precisaria vasculhar milhares de arquivos em disco, colapsando o tempo de resposta e esgotando a memória."
+        },
+        {
+          "id": "fix-3",
+          "text": "Substituir o banco LSM-tree por um banco relacional B-tree convencional com restrições síncronas de chave estrangeira",
+          "correct": false,
+          "feedback": "Motores B-tree executam escritas aleatórias em disco para cada inserção, o que oferece desempenho de escrita muito inferior ao de LSM-trees e não suportaria 120.000 escritas/s."
+        },
+        {
+          "id": "fix-4",
+          "text": "Aumentar o limite de parada do write stall para 10.000 arquivos L0 sem alterar a estratégia de compactação ou incluir fila de entrada",
+          "correct": false,
+          "feedback": "Permitir 10.000 arquivos em L0 faria a latência de leitura explodir de milissegundos para dezenas de segundos, já que cada consulta teria de checar milhares de filtros bloom em disco."
+        }
+      ]
+    }
+  },
+  "conceptId": "lsm-write-stalls",
+  "badge": {
+    "name": "Mestre da Compactação",
+    "icon": "🚜"
+  }
+}

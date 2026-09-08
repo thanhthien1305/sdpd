@@ -1,0 +1,186 @@
+{
+  "id": "case-43",
+  "number": 43,
+  "title": "Con Voi Trong Hàng Đợi",
+  "subtitle": "Tệp ghi âm 4 tiếng làm tê liệt hàng ngàn cảnh báo khẩn cấp 30 giây trong phân vùng FIFO",
+  "brief": {
+    "narrative": "Trung tâm điều phối triển khai dịch vụ bóc băng giọng nói tự động bằng AI nhằm chuyển đổi các cuộc hội thoại bộ đàm và cuộc gọi khẩn cấp 911 thành văn bản. Mọi tác vụ âm thanh nạp vào đều được đẩy chung vào một phân vùng hàng đợi thông điệp duy nhất (`audio-transcription-events`). Vào lúc 19:00:00, Thám tử Briggs tải lên một tệp ghi âm theo dõi băng đảng nghe lén kéo dài liên tục 4 tiếng để đối chiếu giọng nói tội phạm. Do phân vùng này áp dụng cơ chế Nhập trước - Xuất trước (FIFO) nghiêm ngặt và vị trí offset chỉ được cam kết (commit) sau khi tác vụ hoàn thành, Máy chủ Worker 1 bắt đầu nhận và xử lý tệp 4 tiếng này. Kể từ 19:01:00, hơn 1.400 đoạn ghi âm khẩn cấp 30 giây của người dân gọi cầu cứu 911 được đẩy vào ngay phía sau tệp nghe lén. Bị mắc kẹt sau 'tác vụ con voi' ở đầu hàng đợi (hiện tượng Head-of-Line Blocking), không một cảnh báo khẩn cấp nào được bóc băng hay xử lý. Dù có tới 5 máy chủ worker khác trong cụm đang nhàn rỗi ở mức 0% CPU, phân vùng vẫn không thể tăng offset, khiến các điều phối viên mất hoàn toàn công cụ hỗ trợ xử lý khẩn cấp trong suốt nhiều giờ.",
+    "symptoms": [
+      "Độ trễ bóc băng âm thanh cuộc gọi 911 tăng vọt từ 3 giây lên hơn 3.5 tiếng",
+      "Hơn 1.400 cuộc gọi khẩn cấp 30 giây bị ứ đọng phía sau một tệp nghe lén 4 tiếng duy nhất",
+      "Độ trễ tiêu thụ (consumer lag) trên phân vùng `audio-transcription-events-0` tăng liên tục theo thời gian",
+      "5 máy chủ worker trong nhóm xử lý hoàn toàn ngồi chơi (0% CPU) do bị khóa phân vùng FIFO"
+    ],
+    "objective": "Chẩn đoán hiện tượng tắc nghẽn đầu hàng đợi (Head-of-Line Blocking) trên các phân vùng FIFO và triển khai kỹ thuật phân tách hàng đợi để cô lập các tác vụ nặng khỏi các yêu cầu khẩn cấp."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audio-ingest",
+        "type": "client",
+        "label": "Nguồn Tiếp Nhận Âm Thanh",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nguồn Nạp Tác Vụ Âm Thanh",
+          "logs": [
+            "[19:00:00] INGEST: Thám tử Briggs tải lên ghi âm theo dõi 4 tiếng (dung lượng: 2.1GB)",
+            "[19:00:01] PUBLISH: Đã đẩy vào phân vùng `audio-transcription-events-0` tại offset 10420",
+            "[19:01:15] INGEST: Cuộc gọi khẩn cấp 911 #4811 (thời lượng: 25s, ưu tiên: KHẨN CẤP)",
+            "[19:01:15] PUBLISH: Đã đẩy vào cùng phân vùng tại offset 10421",
+            "[19:05:00] WARN: 1.420 cuộc gọi khẩn cấp đang xếp hàng chờ sau offset 10420"
+          ],
+          "data": {
+            "Tác vụ con voi": "Tệp nghe lén #901 (thời gian xử lý ước tính 4 giờ)",
+            "Tác vụ con chuột": "1.420 cuộc gọi (trung bình 25 giây mỗi cuộc)",
+            "Chủ đề hàng đợi": "audio-transcription-events (Chỉ 1 Phân Vùng)"
+          },
+          "status": "Các tác vụ có chênh lệch thời gian xử lý cực lớn bị nhồi chung vào một luồng FIFO."
+        }
+      },
+      {
+        "id": "fifo-queue",
+        "type": "server",
+        "label": "Phân Vùng FIFO (Offset 10420)",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Phân Vùng Hàng Đợi Message Broker",
+          "logs": [
+            "[19:00:02] CONSUMER: Worker 1 đã nhận offset 10420 (Ghi âm 4h)",
+            "[19:00:05] INFO: Offset 10420 đang trong quá trình bóc băng...",
+            "[19:05:00] WARN: Tạm dừng commit offset cho đến khi tệp 10420 hoàn tất",
+            "[19:30:00] CRITICAL: Độ trễ tiêu thụ = 1.420 thông điệp; đầu hàng đợi bị nghẽn cứng",
+            "[19:30:01] WARN: Các offset từ 10421-11840 không thể được xử lý do ràng buộc thứ tự FIFO"
+          ],
+          "data": {
+            "Offset đang xử lý": "10420 (Ghi âm theo dõi 4h)",
+            "Thông điệp chờ phía sau": "1.420",
+            "Tiến độ tăng offset": "BỊ ĐÓNG BĂNG (Đang chờ Worker 1)",
+            "Hiện tượng nghẽn đầu hàng (HoL)": "ĐANG XẢY RA"
+          },
+          "status": "Một tác vụ khổng lồ ở đầu phân vùng chặn đứng toàn bộ các thông điệp tiếp theo."
+        }
+      },
+      {
+        "id": "transcription-pool",
+        "type": "server",
+        "label": "Cụm Worker Bóc Băng AI",
+        "status": "degraded",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cụm Máy Chủ Xử Lý (6 Node)",
+          "logs": [
+            "[19:00:05] Worker 1 (Gán phân vùng 0): 100% CPU (Đang chạy mô hình Whisper bóc băng)",
+            "[19:05:00] Worker 2: RẢNH RỖI (0% CPU - không được chia phân vùng)",
+            "[19:05:00] Worker 3: RẢNH RỖI (0% CPU - không được chia phân vùng)",
+            "[19:05:00] Worker 4: RẢNH RỖI (0% CPU - không được chia phân vùng)",
+            "[19:05:00] Worker 5: RẢNH RỖI (0% CPU - không được chia phân vùng)",
+            "[19:05:00] Worker 6: RẢNH RỖI (0% CPU - không được chia phân vùng)"
+          ],
+          "data": {
+            "Worker đang chạy": "Worker 1 (Bị trói vào tệp 4 tiếng)",
+            "Worker rảnh rỗi": "5 node (Lãng phí 100% năng lực tính toán)",
+            "Mô hình đồng thời": "1 Consumer duy nhất trên mỗi Phân vùng"
+          },
+          "status": "5 trên 6 máy chủ worker bị bỏ đói tài nguyên do cơ chế khóa phân vùng đơn lẻ."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ingest-queue",
+        "source": "audio-ingest",
+        "target": "fifo-queue",
+        "label": "âm thanh hỗn hợp [Bị Nghẽn Đầu Hàng]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-queue-workers",
+        "source": "fifo-queue",
+        "target": "transcription-pool",
+        "label": "mắc kẹt tại offset 10420",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân kiến trúc gốc rễ khiến hơn 1.400 cuộc gọi cấp cứu 911 bị đóng băng trong nhiều giờ là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Nút thắt tắc nghẽn đầu hàng đợi (Head-of-Line Blocking) trên một phân vùng FIFO duy nhất: việc đẩy chung một tác vụ hàng loạt 4 tiếng với các cuộc gọi khẩn cấp độ trễ thấp đã buộc tiến trình cam kết offset phải dừng lại cho đến khi tác vụ khổng lồ hoàn tất, làm mắc kẹt toàn bộ thông điệp phía sau",
+          "correct": true,
+          "feedback": "Chính xác! Trong các hệ thống message broker theo phân vùng (như Kafka hoặc RabbitMQ FIFO), các thông điệp trong cùng một partition được tiêu thụ theo đúng thứ tự tuần tự, và offset thể hiện mốc xử lý thành công mới nhất. Việc nhét một tác vụ 'con voi' dài 4 tiếng vào chung phân vùng phía trước các tác vụ 'con chuột' 30 giây gây ra hiện tượng Tắc Nghẽn Đầu Hàng Đợi (Head-of-Line Blocking): các worker khác không thể nhảy cóc để nhận hoặc commit các cuộc gọi khẩn cấp phía sau, khiến tài nguyên worker bị lãng phí trong khi các cuộc gọi cấp cứu bị đình trệ nghiêm trọng."
+        },
+        {
+          "id": "rc-2",
+          "text": "Mạng nơ-ron nhận dạng giọng nói AI bị sập do lỗi tràn bộ nhớ khi giải mã định dạng container của tệp ghi âm nghe lén",
+          "correct": false,
+          "feedback": "Worker 1 không hề bị sập; CPU của nó vẫn đang hoạt động ở mức 100% để bóc băng tệp âm thanh. Vấn đề là tác vụ này kéo dài tới 4 tiếng, trong suốt thời gian đó phân vùng bị khóa cứng."
+        },
+        {
+          "id": "rc-3",
+          "text": "Hệ thống message broker bị cạn kiệt inode trên ổ cứng, khiến nó không thể ghi thêm các offset mới vào nhật ký commit",
+          "correct": false,
+          "feedback": "Các cuộc gọi mới vẫn được ghi nhận thành công từ offset 10421 đến 11840. Lỗi nằm ở cơ chế tiêu thụ (consumer) bị nghẽn đầu hàng chứ không phải do ổ cứng của broker bị đầy."
+        },
+        {
+          "id": "rc-4",
+          "text": "Thiết bị ghi âm của tổng đài đã mã hóa các cuộc gọi 911 bằng tần số lấy mẫu không hợp lệ khiến consumer từ chối phân tích cú pháp",
+          "correct": false,
+          "feedback": "Các tệp âm thanh khẩn cấp hoàn toàn hợp lệ. Các worker thậm chí còn chưa chạm tới các tệp này vì vẫn đang bị tắc lại ở offset 10420."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Kiến trúc hàng đợi và nạp tác vụ cần được tái cấu trúc như thế nào để đảm bảo các cuộc gọi khẩn cấp không bao giờ bị trì hoãn bởi các tác vụ xử lý hàng loạt dài hạn?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Triển khai Kỹ Thuật Phân Tách Hàng Đợi (Queue Segregation): phân loại tác vụ âm thanh theo thời lượng ước tính ngay khi tiếp nhận, điều hướng tệp nghe lén dài hạn vào hàng đợi xử lý ngầm và đưa các cuộc gọi 911 ngắn vào hàng đợi ưu tiên cao riêng biệt có nhóm worker độc lập",
+          "correct": true,
+          "feedback": "Chính xác! Kỹ thuật Phân Tách Hàng Đợi theo thời lượng và độ ưu tiên (mô hình hàng đợi Voi vs Chuột) triệt tiêu hoàn toàn hiện tượng tắc nghẽn đầu hàng đợi. Các cuộc gọi khẩn cấp 911 được đưa vào hàng đợi ưu tiên cao riêng có cụm worker phản hồi nhanh túc trực (đạt thời gian bóc băng chỉ 3 giây), trong khi các tệp nghe lén hàng giờ được xử lý ngầm trên các worker riêng biệt mà không bao giờ ảnh hưởng đến công tác cứu nạn khẩn cấp."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng thời gian timeout của message broker lên 24 giờ để các cơ chế kiểm tra sức khỏe không kích hoạt cân bằng lại nhóm (rebalance)",
+          "correct": false,
+          "feedback": "Tăng timeout chỉ giúp worker giữ khóa phân vùng lâu hơn mà không bị ngắt kết nối; nó hoàn toàn không giải quyết được việc giải phóng cho 1.400 cuộc gọi đang chờ phía sau."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cắt gọt tất cả các tệp ghi âm điều tra xuống độ dài tối đa 30 giây để ép chúng có cùng kích thước với các cuộc gọi khẩn cấp",
+          "correct": false,
+          "feedback": "Cắt gọt tệp ghi âm điều tra sẽ vứt bỏ 3 giờ 59 phút chứng cứ tội phạm vô giá, phá hủy các tài liệu phục vụ truy tố trước tòa án."
+        },
+        {
+          "id": "fix-4",
+          "text": "Cấu hình consumer tự động commit vị trí offset của tệp 4 tiếng trước khi bắt đầu xử lý và bỏ qua nếu gặp lỗi",
+          "correct": false,
+          "feedback": "Commit offset trước khi xử lý sẽ gây mất mát dữ liệu nếu worker bị sập nguồn giữa chừng, và không giải quyết được bài toán 1 worker đơn lẻ phải ôm đồm tệp nặng làm lãng phí cụm máy chủ."
+        }
+      ]
+    }
+  },
+  "conceptId": "head-of-line-blocking",
+  "badge": {
+    "name": "Người Gác Hàng Đợi",
+    "icon": "🚦"
+  }
+}

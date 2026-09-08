@@ -13,6 +13,8 @@ export const CATEGORIES: CategoryDef[] = [
   { key: 'category.storage', range: [22, 25], color: 'cyan' },
   { key: 'category.network', range: [26, 29], color: 'amber' },
   { key: 'category.advanced', range: [30, 33], color: 'cyan' },
+  { key: 'category.coordination', range: [34, 40], color: 'amber' },
+  { key: 'category.performance', range: [41, 47], color: 'cyan' },
 ];
 
 /** Category-suffix track key (e.g. 'caching') for a given case number, if any. */

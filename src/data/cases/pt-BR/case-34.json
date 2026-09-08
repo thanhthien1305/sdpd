@@ -1,0 +1,255 @@
+{
+  "id": "case-34",
+  "number": 34,
+  "title": "As Consultas Fantasma",
+  "subtitle": "Registros inexistentes ignoram o cache e sobrecarregam o banco de dados principal",
+  "brief": {
+    "narrative": "Às 03:00 da manhã, uma botnet automatizada começa a sondar o portal de Consulta de Incidentes do SDPD. Os scripts disparam mais de 3.000 requisições por segundo com UUIDs aleatórios e IDs negativos que não existem no banco de dados. Como essas chaves fantasmas não constam no cache Redis, todas as requisições geram Cache Miss. Os servidores de aplicação repassam as consultas ao banco primário PostgreSQL. O banco executa milhões de buscas inúteis em índices tentando encontrar linhas inexistentes. Em poucos minutos, a CPU do banco atinge 100%, os IOPS de leitura de disco se esgotam e todas as 150 conexões do pool ficam travadas. Detetives em campo tentando consultar suspeitos recebem erros 504 Gateway Timeout, enquanto o cache permanece com memória ociosa.",
+    "symptoms": [
+      "CPU do PostgreSQL sustentada em 100% com esgotamento do pool de conexões (150/150 conexões ocupadas)",
+      "Taxa de acertos do Redis caiu de 94% para menos de 6%",
+      "Detetives em campo recebendo 504 Gateway Timeout em consultas críticas de mandados",
+      "Logs de acesso à API revelam milhões de consultas para IDs como -9999 e hashes aleatórios"
+    ],
+    "objective": "Diagnosticar por que chaves inexistentes burlam a proteção do cache e implementar uma estratégia de filtragem prévia antes do banco de dados."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "botnet-crawler",
+        "type": "client",
+        "label": "Botnet de Raspagem",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Tráfego da Botnet",
+          "logs": [
+            "[03:00:01] INFO: Botnet iniciou 3.200 req/s em /api/v1/incidents/{id}",
+            "[03:00:05] INFO: IDs alvo: UUIDs aleatórios, IDs negativos (-1, -404, -9999)",
+            "[03:00:30] WARN: Resposta 404 NOT FOUND para 99.8% das consultas",
+            "[03:01:00] INFO: Aumentando concorrência para 5.000 workers"
+          ],
+          "data": {
+            "Taxa de Requisições": "3.200 req/s",
+            "Padrão de ID": "Hashes inexistentes & IDs negativos",
+            "Existência Esperada": "0%",
+            "Protocolo": "HTTP/2 REST"
+          },
+          "status": "Inundando o sistema com buscas por dados que nunca existiram."
+        }
+      },
+      {
+        "id": "field-units",
+        "type": "client",
+        "label": "Unidades Policiais em Campo",
+        "status": "failed",
+        "position": {
+          "x": 60,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Terminais Móveis de Campo",
+          "logs": [
+            "[03:01:10] INFO: Viatura 12 consultando mandado do suspeito #88219",
+            "[03:01:40] ERROR: Timeout após 30.000ms (HTTP 504 Gateway Timeout)",
+            "[03:02:00] ERROR: Viatura 7 falha em busca de emergência — sem resposta da API",
+            "[03:02:15] WARN: Policiais incapazes de confirmar mandados no local"
+          ],
+          "data": {
+            "Oficiais Ativos": "180 unidades em campo",
+            "Latência de Consulta": "30.000ms+ (timeout)",
+            "Taxa de Sucesso": "0% durante o incidente",
+            "Risco à Segurança": "CRÍTICO"
+          },
+          "status": "Policiais incapazes de checar suspeitos devido à queda da API."
+        }
+      },
+      {
+        "id": "lookup-api",
+        "type": "server",
+        "label": "API de Consulta de Incidentes",
+        "status": "degraded",
+        "position": {
+          "x": 360,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster Gateway de API",
+          "logs": [
+            "[03:00:02] INFO: Vazão de entrada: 3.400 req/s",
+            "[03:00:05] WARN: Cache MISS no Redis: 3.180 req/s",
+            "[03:00:10] WARN: Encaminhando falhas de cache diretamente ao PostgreSQL",
+            "[03:00:45] ERROR: Pool de conexões esgotado: 150/150 em uso, 1.420 aguardando",
+            "[03:01:00] ERROR: Rejeitando requisições com HTTP 504"
+          ],
+          "data": {
+            "Tráfego Recebido": "3.400 req/s",
+            "Acertos no Redis": "6.2% (queda de 94%)",
+            "Consultas ao Banco": "3.189 req/s",
+            "Fila de Espera do Pool": "1.420 pendentes"
+          },
+          "status": "Falhas de cache são repassadas ao banco, esgotando conexões."
+        }
+      },
+      {
+        "id": "redis-cache",
+        "type": "server",
+        "label": "Cluster de Cache Redis",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cluster Redis em Memória",
+          "logs": [
+            "[03:00:00] INFO: Utilização de memória: 12.4 GB / 64 GB (19.3%)",
+            "[03:00:05] INFO: Consultas de chave: 3.400/s",
+            "[03:00:06] INFO: Chaves ausentes: 3.180/s — chaves fora do índice",
+            "[03:00:30] INFO: Memória estável, CPU 15% — Redis totalmente saudável"
+          ],
+          "data": {
+            "Memória Usada": "12.4 GB (64 GB máx)",
+            "Uso de CPU": "15%",
+            "Chaves Descartadas": "0 chaves",
+            "Valores Nulos em Cache": "0 (cache nulo desativado)"
+          },
+          "status": "Redis saudável e ocioso, recebendo buscas por chaves que nunca existiram."
+        }
+      },
+      {
+        "id": "primary-db",
+        "type": "database",
+        "label": "PostgreSQL Primário",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 280
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Instância Primária PostgreSQL",
+          "logs": [
+            "[03:00:10] WARN: Pico de consultas ativas: 3.100 SELECT ... WHERE incident_id = $1",
+            "[03:00:25] ERROR: Varreduras de índice B-tree retornam 0 linhas para 99.8% das queries",
+            "[03:00:40] ERROR: IOPS de leitura de disco saturados (10.000 / 10.000 IOPS)",
+            "[03:00:55] ERROR: CPU em 100% — conexões do pool esgotadas (150/150)"
+          ],
+          "data": {
+            "Uso de CPU": "100%",
+            "IOPS de Disco": "10.000 (100% da capacidade)",
+            "Conexões Ativas": "150/150 (esgotado)",
+            "Duração Média de Consulta": "4.200ms (normal: 3ms)"
+          },
+          "status": "Esmagado por consultas a registros inexistentes que ignoram o cache."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-bot-api",
+        "source": "botnet-crawler",
+        "target": "lookup-api",
+        "label": "3.200 req/s (IDs fantasma)",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-officers-api",
+        "source": "field-units",
+        "target": "lookup-api",
+        "label": "consultas reais (timeout)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-redis",
+        "source": "lookup-api",
+        "target": "redis-cache",
+        "label": "94% cache miss",
+        "animated": true,
+        "style": "slow"
+      },
+      {
+        "id": "e-api-db",
+        "source": "lookup-api",
+        "target": "primary-db",
+        "label": "3.100 consultas/s (esmagando banco)",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a causa raiz da falha do sistema sob as consultas da botnet?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Penetração de Cache (Cache Penetration): A botnet consulta IDs inexistentes, contornando o cache Redis e roteando milhares de buscas inúteis direto ao banco primário",
+          "correct": true,
+          "feedback": "Correto! Este é o problema clássico de Penetração de Cache. Quando consultas buscam chaves inexistentes tanto no cache quanto no banco, toda requisição gera um cache miss e atinge o banco de dados. Como o banco nada retorna, o cache não armazena nenhuma resposta, fazendo com que requisições repetidas para os mesmos IDs inválidos castiguem o banco até travar o pool de conexões."
+        },
+        {
+          "id": "rc-2",
+          "text": "Expulsão de Cache: O Redis ficou sem memória e está expulsando agressivamente registros sob a política LRU",
+          "correct": false,
+          "feedback": "A inspeção do Redis mostra apenas 12.4 GB usados de 64 GB disponíveis (menos de 20%) e zero expulsões. O Redis está saudável; o problema é que as chaves consultadas nunca existiram."
+        },
+        {
+          "id": "rc-3",
+          "text": "Corrupção de Índice: A coluna de ID de incidente perdeu seu índice B-tree, forçando varreduras sequenciais completas",
+          "correct": false,
+          "feedback": "Os logs do banco confirmam que as varreduras de índice B-tree estão ativas. O problema é que varrer o índice 3.000 vezes por segundo para chaves inexistentes em milhões de linhas ainda satura CPU e IOPS de disco."
+        },
+        {
+          "id": "rc-4",
+          "text": "Partição de Rede: Uma falha de rede desconectou a comunicação entre o API Gateway e o cluster Redis",
+          "correct": false,
+          "feedback": "A API comunica-se normalmente com o Redis, com respostas em menos de 1ms. O problema é que a aplicação repassa cegamente todo cache miss para o banco de dados."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura deve ser atualizada para proteger o banco de dados contra a penetração de cache?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar um Filtro de Bloom antes do banco para rejeitar IDs inexistentes sem consultas SQL, e armazenar resultados vazios/nulos com TTL curto",
+          "correct": true,
+          "feedback": "Correto! O filtro de Bloom é uma estrutura probabilística rápida e compacta capaz de dizer se um ID definitivamente NÃO existe. Se rejeitado pelo filtro, a requisição é cancelada sem tocar no Redis ou PostgreSQL. Além disso, armazenar valores nulos com TTL curto (ex: 60s) no Redis absorve consultas repetidas sem sobrecarregar o banco de dados."
+        },
+        {
+          "id": "fix-2",
+          "text": "Escalar o Redis horizontalmente adicionando 10 réplicas para aumentar a vazão de leitura",
+          "correct": false,
+          "feedback": "Adicionar réplicas no Redis não ajudará. O Redis opera com folga a 15% de CPU. O problema é que o Redis não possui as chaves solicitadas, portanto mais réplicas apenas reportarão mais cache misses."
+        },
+        {
+          "id": "fix-3",
+          "text": "Aumentar o pool de conexões do PostgreSQL de 150 para 3.000 conexões",
+          "correct": false,
+          "feedback": "Aumentar o pool piorará o cenário. 3.000 consultas simultâneas causarão troca excessiva de contexto de CPU e esgotamento violento de IOPS, levando ao travamento do kernel."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configurar o API Gateway para retornar HTTP 200 com dados fictícios sempre que uma consulta sofrer timeout",
+          "correct": false,
+          "feedback": "Retornar dados falsos a policiais em serviço coloca vidas em risco e gera sérias consequências legais, sem resolver a sobrecarga do banco de dados."
+        }
+      ]
+    }
+  },
+  "conceptId": "cache-penetration",
+  "badge": {
+    "name": "Caçador Fantasma",
+    "icon": "🛡️"
+  }
+}

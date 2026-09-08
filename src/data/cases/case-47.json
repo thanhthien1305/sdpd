@@ -1,0 +1,184 @@
+{
+  "id": "case-47",
+  "number": 47,
+  "title": "The Fifty-Millionth Mile",
+  "subtitle": "Deep OFFSET pagination forces full-index scans and disk thrashing on forensic audit queries",
+  "brief": {
+    "narrative": "A federal judicial oversight commission arrives at the precinct to audit historical Automated License Plate Reader (ALPR) records spanning 50,000,000 vehicle scans. The internal forensic audit portal displays 50 records per page. On Page 1, queries execute in 2ms. However, the auditor jumps to Page 240,000 to inspect traffic patterns from six months prior. The application executes: `SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000`. The database engine cannot jump directly to row 12,000,000; it is forced to scan and traverse 12,000,050 B-tree index entries and data pages from disk, sort them in memory, discard the first 12,000,000 rows, and return only the last 50. The query runs for 52 seconds, driving storage disk I/O to 100% saturation and evicting the database buffer pool cache. As the auditor clicks through several deep pages, long-running audit queries hoard every available connection in the database pool, causing critical real-time 911 dispatch queries to stall and crash across the city.",
+    "symptoms": [
+      "Audit portal query latency degraded from 2ms on page 1 to 52,000ms on deep offset pages",
+      "Database host disk I/O pegged at 100% with massive read thrashing ($O(N)$ row traversal)",
+      "Database buffer pool hit ratio collapsed from 99.4% to 18.2% as deep scans flushed hot cached pages",
+      "Application connection pool exhausted, causing 504 Gateway Timeouts for live 911 emergency dispatches"
+    ],
+    "objective": "Diagnose the performance collapse of deep OFFSET pagination on massive datasets and implement Keyset (cursor-based) pagination to achieve constant O(1) index seek performance."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "audit-portal",
+        "type": "client",
+        "label": "Federal Audit Portal",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Auditor Browser Session",
+          "logs": [
+            "[11:15:00] Page 1: GET /api/alpr?page=1 -> 2ms (HTTP 200)",
+            "[11:15:20] Page 240000: GET /api/alpr?page=240000 -> WAITING...",
+            "[11:16:12] Page 240000: Completed in 52,140ms (HTTP 200)",
+            "[11:16:15] Page 240001: GET /api/alpr?page=240001 -> WAITING...",
+            "[11:16:45] ERROR: HTTP 504 Gateway Timeout (Connection pool timeout)"
+          ],
+          "data": {
+            "Total Table Rows": "50,000,000",
+            "Target Page": "Page 240,000 (Offset: 12,000,000)",
+            "Query SLA Target": "< 100ms"
+          },
+          "status": "Auditor clicking deep pages triggers cascading timeouts across the department."
+        }
+      },
+      {
+        "id": "alpr-backend",
+        "type": "server",
+        "label": "ALPR Audit API Service",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "ALPR API Backend",
+          "logs": [
+            "[11:15:20] DB QUERY: SELECT * FROM alpr_scans ORDER BY captured_at DESC LIMIT 50 OFFSET 12000000",
+            "[11:15:45] WARN: Connection checkout time: 24,000ms",
+            "[11:16:15] ERROR: HikariCP connection pool exhausted (30/30 connections active, 142 waiting)",
+            "[11:16:20] CRITICAL: Dispatch 911 queries blocked behind long-running audit query"
+          ],
+          "data": {
+            "Pagination Method": "LIMIT 50 OFFSET N",
+            "Active DB Connections": "30 / 30 (100% saturated by audit threads)",
+            "Queue Depth": "142 queued queries"
+          },
+          "status": "All database connections monopolized by long-running offset discard queries."
+        }
+      },
+      {
+        "id": "alpr-db",
+        "type": "database",
+        "label": "Master ALPR Database (50M Rows)",
+        "status": "failed",
+        "position": {
+          "x": 620,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "PostgreSQL ALPR Engine",
+          "logs": [
+            "[11:15:20] EXPLAIN ANALYZE: Limit (cost=342918.22..342919.65 rows=50)",
+            "[11:15:20] -> Index Scan Backward using idx_captured_at on alpr_scans",
+            "[11:15:20] DETAIL: Scanning 12,000,050 rows; discarding 12,000,000 rows",
+            "[11:15:50] DISK I/O: 100% utilization (Reading 4.2GB of disk blocks into RAM)",
+            "[11:16:12] BUFFER CACHE: Hit ratio dropped to 18% (Evicted hot dispatch tables)"
+          ],
+          "data": {
+            "Execution Plan": "Index Scan -> Read 12,000,050 -> Discard 12,000,000",
+            "Execution Time": "52,118ms",
+            "Disk Read Volume": "4.2 GB per query",
+            "Complexity": "O(OFFSET + LIMIT) = O(N)"
+          },
+          "status": "Engine forced to read and throw away millions of disk records on every query."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-audit-api",
+        "source": "audit-portal",
+        "target": "alpr-backend",
+        "label": "OFFSET 12M [52s]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "alpr-backend",
+        "target": "alpr-db",
+        "label": "scan 12M rows [DISK 100%]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the severe database degradation and connection pool exhaustion on deep audit pages?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Deep OFFSET pagination scalability failure: `OFFSET 12000000 LIMIT 50` forces the database engine to traverse, sort, and discard 12,000,000 rows on disk ($O(N)$), causing massive disk I/O thrashing and evicting cached buffer pages",
+          "correct": true,
+          "feedback": "Correct! SQL `OFFSET N` is not an indexed seek; it is a sequential traversal discard. To satisfy `OFFSET 12,000,000 LIMIT 50`, the database engine must traverse 12,000,050 index entries or rows, load gigabytes of disk pages into memory, discard the first 12,000,000, and keep only 50. This creates linear $O(N)$ complexity with page depth. At millions of rows, each page flip takes nearly a minute, saturates disk IOPS, evicts vital buffer pool cache, and starves the connection pool."
+        },
+        {
+          "id": "rc-2",
+          "text": "The ALPR table is missing a primary key constraint, causing the database to execute a Cartesian product join",
+          "correct": false,
+          "feedback": "The table has a primary key and an index on `captured_at`. The problem is that B-tree indexes cannot jump directly to an arbitrary offset count without traversing all prior keys."
+        },
+        {
+          "id": "rc-3",
+          "text": "The auditor's browser opened 10,000 concurrent WebSocket connections that saturated the web server thread pool",
+          "correct": false,
+          "feedback": "The auditor is issuing standard sequential HTTP GET requests. The connection exhaustion occurred on the internal database pool because each single query held a database connection for over 50 seconds."
+        },
+        {
+          "id": "rc-4",
+          "text": "A corrupt RAID disk controller caused read parity checksum re-calculations on every storage block",
+          "correct": false,
+          "feedback": "Storage hardware health is 100% normal. Page 1 returns in 2ms. The 52-second latency on page 240,000 is purely algorithmic $O(N)$ overhead from reading and discarding 12 million index rows."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the forensic pagination architecture be re-engineered to achieve constant O(1) query latency regardless of page depth?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Migrate to Keyset (Cursor-based) pagination: index `(captured_at DESC, id DESC)` and seek directly using the previous page's last record: `WHERE (captured_at, id) < (:last_captured_at, :last_id) ORDER BY captured_at DESC, id DESC LIMIT 50`",
+          "correct": true,
+          "feedback": "Correct! Keyset (cursor-based) pagination eliminates the offset completely. Instead of telling the database to count and throw away 12 million rows, the client provides the values of the last item seen on the previous page as an indexed cursor. The database uses a fast B-tree index seek to jump directly to the target record in $O(1)$ constant time (typically < 3ms), regardless of whether the user is on page 1 or page 500,000. Disk I/O drops to near zero and the buffer cache remains untouched."
+        },
+        {
+          "id": "fix-2",
+          "text": "Increase the database connection pool from 30 to 5,000 connections so that slow audit queries do not block other threads",
+          "correct": false,
+          "feedback": "Opening thousands of concurrent connections running 50-second disk-thrashing queries would amplify CPU context switching and disk contention, crashing the database server completely."
+        },
+        {
+          "id": "fix-3",
+          "text": "Load all 50,000,000 license plate rows into the web browser's local memory and paginate using client-side JavaScript array slicing",
+          "correct": false,
+          "feedback": "Downloading 50,000,000 rows would require transmitting over 15 gigabytes of JSON across the network, immediately crashing the client browser with an out-of-memory error."
+        },
+        {
+          "id": "fix-4",
+          "text": "Delete historical records older than 30 days so that the total table count never exceeds 500,000 rows",
+          "correct": false,
+          "feedback": "Purging investigative evidence violates federal record retention laws and prevents investigators from solving cold cases or tracking historical fugitive movements."
+        }
+      ]
+    }
+  },
+  "conceptId": "keyset-vs-offset-pagination",
+  "badge": {
+    "name": "Deep Dive Navigator",
+    "icon": "⚓"
+  }
+}

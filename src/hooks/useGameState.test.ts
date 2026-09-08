@@ -22,13 +22,16 @@ describe('deriveRank', () => {
     [17, 'sergeant'],
     [25, 'lieutenant'],
     [33, 'chief'],
+    [40, 'commissioner'],
+    [47, 'inspector_general'],
   ])('completedCases=%i derives rank %s', (completed, expectedId) => {
     expect(deriveRank(completed).id).toBe(expectedId);
   });
 
   it('picks the highest rank not exceeding completedCases', () => {
     expect(deriveRank(4).id).toBe('cadet');
-    expect(deriveRank(100).id).toBe('chief');
+    expect(deriveRank(46).id).toBe('commissioner');
+    expect(deriveRank(100).id).toBe('inspector_general');
   });
 });
 

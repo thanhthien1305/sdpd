@@ -1,0 +1,215 @@
+{
+  "id": "case-42",
+  "number": 42,
+  "title": "A Emboscada do 50º Shard",
+  "subtitle": "Consulta scatter-gather amplifica a latência de cauda p99 através de 50 partições",
+  "brief": {
+    "narrative": "Um assaltante de banco armado foge em direção à rodovia enquanto viaturas táticas iniciam perseguição. Operadores do despacho usam o sistema de reconhecimento facial automatizado para identificar o suspeito em 50 partições regionais (shards) em paralelo. Cada partição individual é extremamente rápida: a latência mediana é de 8ms e 99% das consultas terminam em menos de 20ms. No entanto, em 1% das vezes, um shard individual sofre um pico transitório de 300ms de latência devido a pausas de garbage collection (GC) na JVM ou ruídos de I/O em máquinas virtuais vizinhas. Como o coordenador central precisa disparar a busca para todos os 50 shards e aguardar a resposta de cada partição antes de retornar (scatter-gather), a probabilidade matemática de atingir pelo menos um shard lento é `1 - (0.99^50) ≈ 39.5%`. Quase 40% das consultas de identificação travam por mais de 300ms, fazendo o despacho perder a janela de bloqueio nos acessos da rodovia.",
+    "symptoms": [
+      "Consultas do despacho sofrem picos de 300ms+ em 40% dos casos, apesar de os shards individuais serem rápidos",
+      "CPU do coordenador scatter-gather fica ociosa aguardando o único shard mais lento responder",
+      "Métricas mostram que cada partição tem p99 de 250ms causado por pausas transitórias de GC de 200ms",
+      "Unidades de perseguição perdem o momento ideal de interceptação devido ao atraso na confirmação biométrica"
+    ],
+    "objective": "Diagnosticar a amplificação de latência de cauda em consultas scatter-gather e implementar Hedged Requests para eliminar o efeito do nó retardatário."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "dispatch-ui",
+        "type": "client",
+        "label": "Terminal de Despacho",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Console de Interceptação Tática",
+          "logs": [
+            "[14:22:01.002] SEARCH: Buscando biometria facial do suspeito em 50 shards regionais",
+            "[14:22:01.320] WARN: Busca levou 318ms (Meta de SLA: < 30ms)",
+            "[14:22:05.100] SEARCH: Consultando correspondência de placa veicular",
+            "[14:22:05.312] WARN: Busca levou 212ms — janela de interceptação se fechando"
+          ],
+          "data": {
+            "Total de Consultas": "1.420 consultas/min",
+            "Latência p99 Observada": "340ms",
+            "Consultas Acima do SLA": "39.2%"
+          },
+          "status": "Operadores relatam que 4 em cada 10 buscas congelam inesperadamente."
+        }
+      },
+      {
+        "id": "scatter-coordinator",
+        "type": "server",
+        "label": "Coordenador Scatter-Gather",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Motor de Busca Distribuída",
+          "logs": [
+            "[14:22:01.005] INFO: Disparando consulta paralela para os Shards de 1 a 50",
+            "[14:22:01.014] INFO: Shards 1-49 responderam em média em 9.2ms",
+            "[14:22:01.015] WARN: Aguardando resposta do Shard 37...",
+            "[14:22:01.315] INFO: Shard 37 finalmente respondeu (duração: 310ms)",
+            "[14:22:01.316] ERROR: Tempo total ditado pelo nó mais lento (311ms)"
+          ],
+          "data": {
+            "Contagem de Shards": "50 Shards",
+            "Estratégia de Espera": "Aguardar 100% dos shards sem contingência",
+            "Impacto Estatístico": "1 - (0.99)^50 = 39.5% de chance de lentidão"
+          },
+          "status": "Agregador forçado a aguardar a réplica mais lenta entre as 50 consultadas."
+        }
+      },
+      {
+        "id": "shard-fast",
+        "type": "database",
+        "label": "Shards 1-49 (Nós Saudáveis)",
+        "status": "healthy",
+        "position": {
+          "x": 640,
+          "y": 70
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Grupo de Shards Saudáveis (49 Nós)",
+          "logs": [
+            "[14:22:01.008] INFO: Shard 01 executou busca vetorial em 6.4ms",
+            "[14:22:01.009] INFO: Shard 12 executou busca vetorial em 7.1ms",
+            "[14:22:01.012] INFO: Shard 48 executou busca vetorial em 8.3ms"
+          ],
+          "data": {
+            "Latência Mediana": "8.1ms",
+            "Percentil 99": "19.5ms",
+            "Uso de CPU": "24% (Normal)"
+          },
+          "status": "49 dos 50 shards respondem em menos de 10ms sem contenção."
+        }
+      },
+      {
+        "id": "shard-straggler",
+        "type": "database",
+        "label": "Shard 37 (Nó Lento - Réplica A)",
+        "status": "degraded",
+        "position": {
+          "x": 640,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Nó Retardatário (Shard 37)",
+          "logs": [
+            "[14:22:01.006] WARN: Pausa de Garbage Collection JVM: Stop-The-World (295ms)",
+            "[14:22:01.301] INFO: GC concluído, retomando execução da thread de consulta",
+            "[14:22:01.310] INFO: Resposta enviada ao coordenador após 304ms",
+            "[14:22:01.312] NOTE: Réplica de backup 37-B estava 100% ociosa com 0% de GC"
+          ],
+          "data": {
+            "Estado do Nó": "Pausa de GC (STW)",
+            "Duração da Consulta": "304ms",
+            "Disponibilidade": "Réplica de backup 37-B ociosa"
+          },
+          "status": "Pausa transitória de GC na réplica primária atrasou toda a consulta scatter-gather."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-ui-coord",
+        "source": "dispatch-ui",
+        "target": "scatter-coordinator",
+        "label": "busca biométrica [318ms]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-coord-fast",
+        "source": "scatter-coordinator",
+        "target": "shard-fast",
+        "label": "scatter x49 [8ms]",
+        "animated": true,
+        "style": "normal"
+      },
+      {
+        "id": "e-coord-slow",
+        "source": "scatter-coordinator",
+        "target": "shard-straggler",
+        "label": "scatter x1 [304ms STW]",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Por que 40% das buscas biométricas sofrem picos de 300ms quando 99% das consultas individuais levam menos de 20ms?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Amplificação da latência de cauda em scatter-gather: consultar 50 partições independentes em paralelo multiplica a probabilidade de picos p99 individuais (1 - 0.99^50 ≈ 40%), fazendo com que o nó mais lento defina a latência total da consulta",
+          "correct": true,
+          "feedback": "Correto! Quando um sistema divide uma busca entre 50 shards e precisa aguardar todas as respostas, a latência total é `max(shard_1, shard_2, ..., shard_50)`. Mesmo que cada shard tenha apenas 1% de chance de sofrer uma pausa de GC de 300ms (p99), a probabilidade de que *pelo menos um* dos 50 sofra esse atraso em qualquer busca é `1 - (0.99)^50 ≈ 39.5%`. Um único nó lento torna toda a busca inaceitavelmente demorada."
+        },
+        {
+          "id": "rc-2",
+          "text": "A placa de rede do nó coordenador é de 100Mbps e satura durante a transmissão dos dados de imagens faciais",
+          "correct": false,
+          "feedback": "O uso de rede no coordenador está abaixo de 12% em uma conexão de fibra de 10Gbps. Os dados transmitidos são apenas vetores matemáticos compactos (~4KB), logo a rede não é o gargalo."
+        },
+        {
+          "id": "rc-3",
+          "text": "O modelo de reconhecimento facial está sendo executado sem vetorização na CPU em vez de núcleos de GPU",
+          "correct": false,
+          "feedback": "49 dos 50 shards respondem em menos de 8ms, comprovando que a aceleração e a vetorização do modelo estão operando com altíssimo desempenho."
+        },
+        {
+          "id": "rc-4",
+          "text": "O terminal do operador no navegador sofre gargalo devido ao coletor de lixo de JavaScript no frontend Electron",
+          "correct": false,
+          "feedback": "As métricas do servidor registram expressamente 311ms gastos no backend aguardando o Shard 37. O gargalo reside integralmente na topologia da consulta distribuída."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de consulta distribuída deve ser reformulada para eliminar nós retardatários e garantir latência p99 consistentemente baixa?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implementar Hedged Requests: após enviar consultas às réplicas primárias, iniciar um temporizador no percentil p95 esperado (15ms); se algum shard não responder a tempo, disparar uma requisição duplicada para a réplica de backup desse shard e aproveitar a resposta mais rápida",
+          "correct": true,
+          "feedback": "Correto! Hedged Requests (técnica consagrada pelo artigo 'The Tail at Scale' do Google) eliminam a amplificação de cauda com custo mínimo de recursos adicionais (~2-5% de requisições extras). Como picos transitórios são localizados (ex.: uma breve pausa de GC na réplica 37-A), a réplica de backup (37-B) quase sempre está desimpedida. Enviar uma requisição preventiva aos 15ms contorna o nó retardatário, reduzindo o p99 agregado de mais de 300ms para menos de 25ms."
+        },
+        {
+          "id": "fix-2",
+          "text": "Consolidar todos os 50 shards em uma única instância monolítica de 100TB rodando em um único servidor físico",
+          "correct": false,
+          "feedback": "Consolidar 50 shards em um servidor monolítico cria um ponto único de falha crítico e destrói a escalabilidade horizontal e a capacidade de processamento paralelo."
+        },
+        {
+          "id": "fix-3",
+          "text": "Configurar o coordenador para retornar assim que receber as primeiras 10 respostas, descartando os outros 40 shards",
+          "correct": false,
+          "feedback": "Descartar 40 de 50 partições significaria omitir 80% da base criminal regional, fazendo a polícia perder registros vitais de foragidos perigosos."
+        },
+        {
+          "id": "fix-4",
+          "text": "Recompilar o banco de dados para desativar a coleta de lixo, alocando um heap fixo de 2TB que nunca libera memória",
+          "correct": false,
+          "feedback": "Desativar o gerenciamento de memória gera um Out-Of-Memory (OOM) inevitável assim que o heap encher, provocando a queda irrecuperável do nó do banco."
+        }
+      ]
+    }
+  },
+  "conceptId": "hedged-requests-tail-latency",
+  "badge": {
+    "name": "Caçador de Latência",
+    "icon": "🎯"
+  }
+}

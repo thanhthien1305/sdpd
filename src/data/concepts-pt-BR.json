@@ -559,5 +559,243 @@
       { "term": "HTTP 429", "definition": "O código de status 'Too Many Requests' indicando limitação de taxa." },
       { "term": "Throttling", "definition": "Desacelerar ou rejeitar requisições que excedem a taxa permitida." }
     ]
+  },
+  {
+    "id": "cache-penetration",
+    "title": "Penetração de Cache & Filtros de Bloom (Cache Penetration & Bloom Filters)",
+    "summary": "Proteja o banco de dados contra falhas massivas de cache causadas por chaves inexistentes usando filtros de Bloom e cache nulo.",
+    "explanation": [
+      "A penetração de cache ocorre quando consultas buscam chaves que não existem nem no cache nem no banco de dados. Cada requisição passa direto pelo cache e atinge a camada de armazenamento.",
+      "Atacantes maliciosos ou scrapers com bugs exploram isso enviando grandes volumes de IDs aleatórios ou negativos, esgotando pools de conexão e IOPS do disco do banco de dados.",
+      "Um Filtro de Bloom é uma estrutura de dados probabilística e altamente eficiente em memória colocada na frente do cache. Ele informa com 100% de certeza se um elemento NÃO existe, rejeitando consultas inválidas sem qualquer acesso ao banco.",
+      "Outra defesa complementar é o armazenamento em cache de valores nulos/vazios com um TTL curto (ex: 60 segundos), evitando que consultas repetidas sobre chaves ausentes atinjam o banco repetidamente."
+    ],
+    "keyTerms": [
+      { "term": "Penetração de Cache (Cache Penetration)", "definition": "Consultas por dados inexistentes que ignoram o cache e atingem diretamente o banco de dados." },
+      { "term": "Filtro de Bloom (Bloom Filter)", "definition": "Estrutura probabilística eficiente em espaço que testa pertinência a um conjunto sem falsos negativos." },
+      { "term": "Cache de Nulos (Null Caching)", "definition": "Armazenar temporariamente valores nulos no cache com TTL curto para chaves que não existem no banco." },
+      { "term": "Falso Positivo", "definition": "O filtro de Bloom indicar que um elemento existe quando na verdade ele não existe." }
+    ]
+  },
+  {
+    "id": "fencing-tokens",
+    "title": "Fencing Tokens & Pausas de Líder (Fencing Tokens & Leader Pauses)",
+    "summary": "Evite que líderes depostos que acordam de pausas de GC corrompam o armazenamento compartilhado usando números de época monotônicos.",
+    "explanation": [
+      "Em sistemas distribuídos líder-seguidor, o líder mantém um lease ou heartbeat com um serviço de consenso (como ZooKeeper ou etcd). Se o líder pausar (ex: pausa Stop-The-World de GC de 15 segundos), o lease expira.",
+      "O cluster assume que o líder morreu e elege um novo líder. Contudo, o líder antigo não morreu — ele apenas descongelou. Sem saber que foi deposto, continua executando suas instruções pendentes.",
+      "Se esse 'líder zumbi' tentar escrever no armazenamento compartilhado, ele pode sobrescrever silenciosamente escritas mais recentes do novo líder, corrompendo o estado do cluster.",
+      "Fencing Tokens resolvem isso: a cada eleição de líder, o servidor de travas emite um token incremental monotônico (ex: Token 34, depois 35). A camada de armazenamento rejeita qualquer escrita com token menor ou igual ao maior já visto."
+    ],
+    "keyTerms": [
+      { "term": "Fencing Token", "definition": "Número monotônico incremental emitido com o lease que o armazenamento valida antes de aceitar escritas." },
+      { "term": "Pausa de GC (GC Pause)", "definition": "Evento Stop-The-World onde todas as threads da aplicação congelam para coleta de lixo de memória." },
+      { "term": "Líder Zumbi (Zombie Leader)", "definition": "Um nó líder deposto que acorda após uma pausa e tenta executar escritas inválidas." },
+      { "term": "Escrita Split-Brain", "definition": "Escritas concorrentes e conflitantes causadas por múltiplos nós que acreditam ser o líder simultaneamente." }
+    ]
+  },
+  {
+    "id": "consistent-hashing-vnodes",
+    "title": "Hashing Consistente & Nós Virtuais (Consistent Hashing & Virtual Nodes)",
+    "summary": "Distribua chaves uniformemente pelos clusters e previna falhas em cascata no anel de hash usando nós virtuais.",
+    "explanation": [
+      "O hashing consistente mapeia servidores e chaves de dados em um anel circular (ex: 0 a 2^32 - 1). Uma chave pertence ao primeiro servidor encontrado no sentido horário.",
+      "No modelo ingênuo, cada máquina física ocupa apenas uma posição no anel. Se um nó falhar, 100% de suas chaves caem inteiramente sobre seu vizinho imediato.",
+      "Dobrar a carga instantaneamente sobre um único vizinho frequentemente esgota sua memória, fazendo-o cair e disparando um colapso em efeito dominó por todo o anel.",
+      "Nós Virtuais (vnodes) resolvem isso atribuindo centenas de pontos virtuais a cada máquina física espalhados pelo anel. Quando um nó físico cai, suas chaves são distribuídas igualmente entre TODOS os nós sobreviventes."
+    ],
+    "keyTerms": [
+      { "term": "Hashing Consistente", "definition": "Esquema de hashing onde adicionar ou remover nós exige remapear em média apenas K/N chaves." },
+      { "term": "Nó Virtual (Vnode)", "definition": "Um token lógico no anel de hash que representa uma fração da capacidade de uma máquina física." },
+      { "term": "Anel de Hash (Hash Ring)", "definition": "Espaço circular de identificadores onde chaves e servidores são mapeados." },
+      { "term": "Falha em Cascata", "definition": "Cenário onde a falha de um nó sobrecarrega seus vizinhos, causando quedas sequenciais." }
+    ]
+  },
+  {
+    "id": "transactional-outbox",
+    "title": "Padrão Transactional Outbox",
+    "summary": "Garanta publicação confiável de eventos após atualizações no banco de dados sem inconsistências de escrita dupla (Dual-Write).",
+    "explanation": [
+      "Em microsserviços e arquiteturas orientadas a eventos, serviços frequentemente precisam atualizar um banco de dados e publicar um evento em um broker (como Kafka ou RabbitMQ).",
+      "A escrita dupla ingênua (atualizar o banco e depois publicar o evento) não garante atomicidade. Se a aplicação falhar entre o commit e a publicação, a mensagem é perdida para sempre.",
+      "O padrão Transactional Outbox armazena as mensagens a serem enviadas em uma tabela 'outbox' dedicada dentro da MESMA transação ACID do banco de dados.",
+      "Um processo em segundo plano ou ferramenta de Captura de Dados de Alteração (CDC, como Debezium) lê o log de transações do banco e garante entrega at-least-once ao broker."
+    ],
+    "keyTerms": [
+      { "term": "Transactional Outbox", "definition": "Gravação do estado de domínio e de eventos na mesma transação atômica do banco de dados." },
+      { "term": "Escrita Dupla (Dual Write)", "definition": "Tentativa de atualizar dois sistemas independentes sem transações distribuídas, arriscando inconsistência." },
+      { "term": "Change Data Capture (CDC)", "definition": "Leitura de alterações diretamente dos logs de transação (WAL/binlog) do banco de dados." },
+      { "term": "Entrega Pelo Menos Uma Vez (At-Least-Once)", "definition": "Garantia de que a mensagem será entregue uma ou mais vezes, exigindo consumidores idempotentes." }
+    ]
+  },
+  {
+    "id": "read-your-own-writes",
+    "title": "Consistência Read-Your-Own-Writes",
+    "summary": "Assegure que usuários sempre vejam suas próprias atualizações recentes imediatamente, mesmo lendo de réplicas assíncronas.",
+    "explanation": [
+      "Arquiteturas web modernas direcionam escritas ao banco primário e distribuem leituras entre réplicas geograficamente dispersas para escalar a vazão.",
+      "Como a replicação é assíncrona, réplicas sofrem atraso (lag) de centenas de milissegundos ou até segundos em relação ao primário.",
+      "Se um usuário atualiza seu perfil e o recarregamento imediato lê de uma réplica atrasada, ele verá dados antigos. Usuários supõem que a ação falhou e enviam edições duplicadas.",
+      "A consistência Read-Your-Own-Writes (RYOW) garante que um usuário sempre veja suas próprias alterações. Os sistemas alcançam isso roteando leituras ao primário por N segundos após uma escrita ou gravando a versão LSN em um token de sessão."
+    ],
+    "keyTerms": [
+      { "term": "Read-Your-Own-Writes (RYOW)", "definition": "Modelo de consistência que garante que um ator veja imediatamente as alterações feitas por si próprio." },
+      { "term": "Atraso de Replicação (Replication Lag)", "definition": "Diferença de tempo entre o commit no primário e sua aplicação na réplica." },
+      { "term": "Leituras Monotônicas", "definition": "Garantia de que, uma vez lido um valor na versão T, leituras futuras nunca verão versões anteriores a T." },
+      { "term": "Token de Sessão", "definition": "Token do cliente que armazena a versão ou timestamp da escrita mais recente do usuário." }
+    ]
+  },
+  {
+    "id": "connection-pool-leaks",
+    "title": "Vazamento de Pool de Conexões (Connection Pool Leaks)",
+    "summary": "Detecte e previna conexões de banco de dados vazadas que travam a aplicação enquanto o hardware do banco permanece ocioso.",
+    "explanation": [
+      "Conexões de banco de dados são sockets pesados do sistema operacional que exigem autenticação e memória. Aplicações mantêm pools de conexão para reutilizá-las eficientemente.",
+      "Um vazamento de conexão ocorre quando o código obtém uma conexão do pool mas não a libera/fecha — geralmente devido a exceções não tratadas ou ausência de blocos finally.",
+      "Conforme sockets vazados se acumulam, o pool se esgota. Novas requisições se enfileiram e sofrem timeout de gateway, mesmo com a CPU do banco em 2% de ociosidade.",
+      "Previna vazamentos adotando padrões RAII / try-with-resources, configurando timeouts estritos de aquisição (connectionTimeout), definindo maxLifetime e ativando detecção de vazamentos (leakDetectionThreshold)."
+    ],
+    "keyTerms": [
+      { "term": "Pool de Conexões", "definition": "Cache de conexões de banco de dados abertas mantidas para reuso por threads concorrentes." },
+      { "term": "Vazamento de Conexão", "definition": "Falha onde uma conexão de banco emprestada nunca é devolvida ao pool após o uso." },
+      { "term": "Esgotamento do Pool (Pool Starvation)", "definition": "Estado onde todas as conexões do pool estão ocupadas ou vazadas, bloqueando novas requisições." },
+      { "term": "Limiar de Detecção de Vazamento", "definition": "Configuração que emite aviso no log com stack trace se uma conexão for retida por tempo excessivo." }
+    ]
+  },
+  {
+    "id": "crdt-offline-sync",
+    "title": "Tipos de Dados Replicados Sem Conflitos (CRDTs)",
+    "summary": "Mescle edições concorrentes offline perfeitamente entre clientes distribuídos sem bloqueios centrais ou corrupção por deriva de relógio.",
+    "explanation": [
+      "Aplicações móveis e de campo frequentemente operam offline em áreas sem sinal, permitindo aos usuários editar dados localmente e sincronizar quando houver conexão.",
+      "A resolução ingênua Last-Write-Wins (LWW) baseada no relógio do dispositivo é perigosa: relógios sofrem desvio (drift), e um relógio adiantado pode apagar silenciosamente edições válidas de outro dispositivo.",
+      "CRDTs (Conflict-Free Replicated Data Types) são estruturas projetadas matematicamente para que possam ser replicadas em múltiplos nós e mescladas concorrentemente sem coordenação central.",
+      "Seja usando CRDTs baseados em estado ou em operações, todas as réplicas convergem matematicamente para o mesmo estado final ao receberem todos os updates."
+    ],
+    "keyTerms": [
+      { "term": "CRDT", "definition": "Tipo de Dado Replicado Livre de Conflitos — estruturas que convergem automaticamente sem bloqueio central." },
+      { "term": "Desvio de Relógio (Clock Skew / Drift)", "definition": "Diferença física de tempo entre relógios de computadores não sincronizados perfeitamente." },
+      { "term": "Last-Write-Wins (LWW)", "definition": "Estratégia de resolução de conflitos que escolhe a versão com maior timestamp, vulnerável a desvios de relógio." },
+      { "term": "Consistência Eventual Forte", "definition": "Garantia de que quaisquer duas réplicas que receberam o mesmo conjunto de atualizações têm estados idênticos." }
+    ]
+  },
+  {
+    "id": "lsm-write-stalls",
+    "title": "Write Stalls em LSM-Tree & Compactação em Níveis",
+    "summary": "Evite colapsos repentinos de vazão de escrita quando a ingestão supera a capacidade de compactação em segundo plano.",
+    "explanation": [
+      "Mecanismos de armazenamento baseados em LSM-tree (ex.: RocksDB, Cassandra, ScyllaDB) oferecem alta vazão gravando em um buffer de memória (Memtable) e em um log sequencial (WAL).",
+      "Quando o Memtable enche, ele é descarregado no disco como um arquivo SSTable imutável no Nível 0 (L0). Threads em segundo plano compactam e mesclam SSTables menores em níveis mais profundos para remover registros excluídos (tombstones) e ordenar chaves.",
+      "Se a vazão de escrita superar a capacidade de I/O do disco, a compactação se atrasa. Arquivos L0 se acumulam rapidamente, elevando a amplificação de leitura exponencialmente.",
+      "Para evitar degradação incontrolável, o banco ativa um 'Write Stall' — desacelerando ou bloqueando temporariamente novas escritas de clientes até que a compactação termine o trabalho pendente."
+    ],
+    "keyTerms": [
+      { "term": "LSM-Tree", "definition": "Arquitetura de armazenamento otimizada para escritas rápidas em memória e gravação sequencial em SSTables imutáveis no disco." },
+      { "term": "Compactação (Compaction)", "definition": "Processo em segundo plano que mescla SSTables, descarta registros apagados (tombstones) e reordena chaves." },
+      { "term": "Write Stall", "definition": "Mecanismo de autoproteção onde o banco suspende escritas de clientes quando as filas de compactação excedem limites seguros." },
+      { "term": "Compactação em Camadas (Tiered)", "definition": "Estratégia que agrupa SSTables de tamanhos semelhantes, ideal para cargas intensivas de séries temporais." }
+    ]
+  },
+  {
+    "id": "hedged-requests-tail-latency",
+    "title": "Hedged Requests & Amplificação de Latência de Cauda",
+    "summary": "Elimine a latência de cauda p99 em arquiteturas de dispersão distribuída enviando requisições duplicadas especulativas a réplicas de backup.",
+    "explanation": [
+      "Em bancos distribuídos e microsserviços, uma consulta de cliente frequentemente se divide entre dezenas de partições (scatter-gather) e espera a resposta de todas antes de responder ao usuário.",
+      "A latência de cauda é amplificada exponencialmente: se cada shard tem 1% de chance de sofrer um pico de 200ms (p99), uma consulta enviada a 50 shards tem (1 - 0,99^50) ≈ 40% de probabilidade de ser lenta.",
+      "Picos transitórios geralmente decorrem de pausas de GC, trocas de contexto ou vizinhos barulhentos na máquina física, e não de sobrecarga sistêmica.",
+      "Hedged Requests resolvem isso: após enviar a requisição à réplica A, o cliente aguarda até o percentil p95 esperado (ex.: 15ms). Se a réplica A não responder a tempo, envia uma requisição duplicada à réplica B; o primeiro resultado que chegar é aproveitado, cancelando o outro."
+    ],
+    "keyTerms": [
+      { "term": "Hedged Request", "definition": "Requisição duplicada especulativa enviada a uma réplica alternativa quando a original excede o limite de latência." },
+      { "term": "Amplificação de Latência de Cauda", "definition": "Fenômeno estatístico onde sistemas com fan-out multiplicam a chance de atingir picos de latência extrema." },
+      { "term": "Scatter-Gather", "definition": "Padrão arquitetural em que um coordenador envia subconsultas a múltiplos nós e consolida as respostas." },
+      { "term": "Nó Atrasado (Straggler)", "definition": "Uma réplica ou processo lento cuja resposta atrasada se torna o gargalo de toda a operação paralela." }
+    ]
+  },
+  {
+    "id": "head-of-line-blocking",
+    "title": "Bloqueio de Início de Fila (HoL) & Filas Segregadas",
+    "summary": "Evite que tarefas gigantescas paralisem milhares de mensagens rápidas em partições FIFO separando filas por prioridade.",
+    "explanation": [
+      "Brokers de mensageria como Kafka e RabbitMQ garantem a ordem estrita FIFO (primeiro a entrar, primeiro a sair) dentro de cada partição ou fila individual.",
+      "Se uma tarefa enorme ('elefante', ex.: transcrição de áudio de 4 horas) fica na frente da partição FIFO, todas as tarefas rápidas ('ratos', ex.: alertas de emergência de 30s) atrás dela ficam travadas até o elefante terminar.",
+      "Essa condição é conhecida como Head-of-Line (HoL) Blocking. Mesmo que os workers downstream tenham CPU de sobra, a partição não pode avançar seu offset de commit.",
+      "A solução arquitetural é a segregação de filas: classificar tarefas pelo tempo estimado na entrada, roteando lotes longos para filas em segundo plano e tarefas curtas para filas prioritárias de baixa latência."
+    ],
+    "keyTerms": [
+      { "term": "Head-of-Line (HoL) Blocking", "definition": "Gargalo onde um único elemento lento na frente da fila bloqueia todos os itens subsequentes." },
+      { "term": "Tarefas Elefante vs Rato", "definition": "Diferença entre cargas de trabalho pesadas e transações leves sensíveis a atrasos." },
+      { "term": "Segregação de Filas", "definition": "Separação de mensagens em filas distintas baseadas em SLA, duração ou recursos exigidos." },
+      { "term": "Consumer Offset", "definition": "Índice sequencial em uma partição que registra o progresso processado por um grupo de consumidores." }
+    ]
+  },
+  {
+    "id": "jwt-revocation-blacklist",
+    "title": "Revogação de JWT Stateless & Listas Negras Distribuídas",
+    "summary": "Feche a janela de vulnerabilidade de tokens vazados usando curta expiração, rotação de tokens e listas de revogação em cache distribuído.",
+    "explanation": [
+      "JSON Web Tokens (JWTs) são populares por serem stateless: microsserviços validam assinaturas localmente com chaves públicas sem consultar um banco de dados centralizado em cada requisição.",
+      "No entanto, a ausência de estado cria uma brecha séria de revogação: se um usuário troca a senha, faz logout ou tem a conta invadida, os JWTs emitidos continuam válidos até o fim do campo `exp`.",
+      "Definir prazos longos (ex.: 24 horas) concede tempo excessivo a invasores mesmo após a suspensão administrativa da conta.",
+      "A arquitetura recomendada adota uma estratégia dupla: tokens de acesso extremamente curtos (5 a 15 minutos) com rotação de refresh tokens, aliados a uma lista negra rápida em memória (ex.: Redis com Bloom filters) para revogações emergenciais."
+    ],
+    "keyTerms": [
+      { "term": "JWT Stateless", "definition": "Credencial assinada autossuficiente que comprova identidade e permissões sem consulta a banco de dados." },
+      { "term": "Lista Negra de Revogação", "definition": "Cache distribuído em memória que guarda identificadores de tokens revogados (jti) até expirarem." },
+      { "term": "Rotação de Refresh Token", "definition": "Padrão onde cada refresh token só pode ser usado uma vez; reutilização invalida toda a cadeia de tokens." },
+      { "term": "Janela de Expiração de Token", "definition": "Duração em que uma credencial assinada permanece confiável antes de exigir nova validação." }
+    ]
+  },
+  {
+    "id": "ephemeral-port-exhaustion",
+    "title": "Esgotamento de Portas Efêmeras (TIME_WAIT)",
+    "summary": "Evite o colapso de conexões de saída em microsserviços causado pelo acúmulo de sockets TCP sem pool presos em TIME_WAIT.",
+    "explanation": [
+      "Quando um microsserviço inicia uma conexão TCP de saída, o sistema operacional atribui uma porta de origem temporária (porta efêmera) de uma faixa (geralmente 32.768 a 60.999, cerca de 28.000 portas).",
+      "Cada conexão é definida por 4 parâmetros (4-tuple): (IP Origem, Porta Origem, IP Destino, Porta Destino). Ao conectar a um único balanceador upstream, as conexões disponíveis ficam limitadas pelas portas efêmeras livres.",
+      "Ao encerrar a conexão HTTP, o socket TCP permanece em `TIME_WAIT` durante 2 * MSL (geralmente 60 a 120s) para garantir que pacotes retardados na rede não corrompam conexões posteriores.",
+      "Se a aplicação dispara milhares de requisições curtas por segundo sem reutilizar conexões (sem pool ou Keep-Alive), as portas efêmeras se esgotam mais rápido do que o kernel consegue liberá-las, disparando erros `EADDRNOTAVAIL`."
+    ],
+    "keyTerms": [
+      { "term": "Porta Efêmera", "definition": "Porta temporária alocada pelo kernel para conexões TCP de saída iniciadas pelo cliente." },
+      { "term": "Estado TIME_WAIT", "definition": "Período de espera obrigatório do protocolo TCP após encerramento para drenar pacotes residuais na rede." },
+      { "term": "HTTP Keep-Alive", "definition": "Mecanismo de cabeçalho HTTP que permite manter um canal TCP aberto para múltiplas requisições sequenciais." },
+      { "term": "4-Tuple TCP", "definition": "Conjunto composto por IP de origem, porta de origem, IP de destino e porta de destino que identifica uma conexão." }
+    ]
+  },
+  {
+    "id": "multi-leader-conflicts",
+    "title": "Conflitos de Replicação Multi-Leader & Geo-Pinning",
+    "summary": "Evite divergências irreparáveis entre datacenters ativos em múltiplos continentes com ordenação causal e amarração geográfica de entidades.",
+    "explanation": [
+      "Em sistemas globais multi-região, a replicação multi-leader (ativo-ativo) permite que datacenters regionais aceitem escritas locais com latência quase nula.",
+      "Como as alterações viajam de forma assíncrona pelos oceanos, dois usuários em regiões distintas podem alterar a mesma entidade ao mesmo tempo sem que nenhuma região saiba da outra.",
+      "Ao cruzar os fluxos de replicação, ocorre um conflito de escrita. Estratégias simplistas como Last-Write-Wins (LWW) baseadas em relógio NTP descartam dados válidos e corrompem o banco devido a desvios de relógio entre servidores.",
+      "Arquiteturas maduras evitam conflitos roteando escritas de uma entidade sempre ao seu datacenter de origem (Geo-Pinning / Master-per-Entity) ou utilizam Vetores de Relógio (Vector Clocks) para detectar a precedência causal com precisão."
+    ],
+    "keyTerms": [
+      { "term": "Replicação Multi-Leader", "definition": "Topologia distribuída onde múltiplos nós independentes aceitam escritas e replicam entre si." },
+      { "term": "Conflito de Escrita Concorrente", "definition": "Estado em que dois nós registram alterações divergentes no mesmo registro antes de sincronizarem." },
+      { "term": "Geo-Pinning (Região-Mãe)", "definition": "Regra de roteamento que direciona todas as escritas de um cliente ou conta ao seu datacenter regional de origem." },
+      { "term": "Vetor de Relógio (Vector Clock)", "definition": "Arranjo de relógios lógicos que permite ordenar causalmente eventos em sistemas distribuídos e detectar conflitos." }
+    ]
+  },
+  {
+    "id": "keyset-vs-offset-pagination",
+    "title": "Paginação por Cursor (Keyset) vs Degradação de OFFSET",
+    "summary": "Elimine varreduras integrais O(N) no banco de dados em páginas profundas substituindo OFFSET por cursores indexados.",
+    "explanation": [
+      "A paginação tradicional comumente emprega consultas como: `SELECT * FROM orders ORDER BY created_at DESC LIMIT 50 OFFSET 5000000`.",
+      "O banco de dados não consegue saltar diretamente até a linha 5.000.000. Ele precisa percorrer 5.000.050 registros no disco ou índice, ordená-los, descartar os primeiros 5.000.000 e retornar apenas os últimos 50.",
+      "Conforme a profundidade da página avança, a latência cresce linearmente em $O(N)$, causando I/O massivo no disco, despejo de memória cache e exaustão do pool de conexões.",
+      "A paginação Keyset (baseada em cursor) resolve isso usando o último registro da página anterior como âncora de busca: `WHERE (created_at, id) < (:last_time, :last_id) ORDER BY created_at DESC, id DESC LIMIT 50`. Isso realiza uma busca em árvore B em tempo constante $O(1)$ em qualquer nível de profundidade."
+    ],
+    "keyTerms": [
+      { "term": "Degradação de OFFSET", "definition": "Queda drástica de desempenho gerada pela leitura e descarte de milhões de registros para atender páginas profundas." },
+      { "term": "Paginação por Keyset (Cursor)", "definition": "Técnica de paginação que salta diretamente à próxima página utilizando os valores indexados do último item exibido." },
+      { "term": "Index Seek vs Scan", "definition": "Diferença entre navegar diretamente ao nó da árvore B (Seek) contra ler sequencialmente milhares de páginas de índice (Scan)." },
+      { "term": "Coluna de Desempate (Tie-Breaker)", "definition": "Coluna única (como a chave primária ID) adicionada à ordenação para garantir estabilidade determinística na paginação." }
+    ]
   }
 ]

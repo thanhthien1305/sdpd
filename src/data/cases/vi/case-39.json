@@ -1,0 +1,185 @@
+{
+  "id": "case-39",
+  "number": 39,
+  "title": "Lỗ Rò Kết Nối",
+  "subtitle": "Ngoại lệ mã nguồn không được bắt bỏ qua lệnh giải phóng kết nối, làm tê liệt cơ sở dữ liệu đang rảnh rỗi",
+  "brief": {
+    "narrative": "Trong giờ giao ca buổi chiều lúc 17:00, các cảnh sát ồ ạt bàn giao hàng trăm túi tang vật gồm ma túy, súng và tài sản thu giữ tại cổng API Kho Tang Vật. Đột ngột, hệ thống khựng lại hoàn toàn. Mọi thao tác quét mã vạch và nhập kho đều bị treo cứng 30 giây rồi trả về lỗi 'HTTP 504 Gateway Timeout'. Các kỹ sư vận hành lập tức nghi ngờ cơ sở dữ liệu PostgreSQL bị sập. Nhưng khi mở bảng điều khiển máy chủ database, nó hoàn toàn rảnh rỗi: CPU chỉ ở mức 3%, bộ nhớ RAM 18%, và tốc độ đọc/ghi ổ đĩa IOPS xấp xỉ bằng 0. Database gần như đang ngủ say. Tuy nhiên, chỉ số trên máy chủ ứng dụng lại phát hiện một hiện tượng bất thường nghiêm trọng: pool kết nối cơ sở dữ liệu HikariCP đã đầy 100% (100 trên 100 kết nối bị chiếm dụng) và có tới 1.840 yêu cầu HTTP đang xếp hàng chờ đợi kết nối. Kiểm tra mã nguồn cho thấy dòng máy quét mã vạch cầm tay mới được trang bị sáng nay thi thoảng gửi về chuỗi dữ liệu hỏng có tiền tố '#BAD#'. Khi tình huống này xảy ra, lỗi phân tích cú pháp JSON (JSON parse error) bị văng ra bên trong một Promise bất đồng bộ sau khi đã mượn kết nối `pool.getConnection()`, khiến luồng xử lý nhảy cóc qua lệnh `conn.release()`. Mỗi lần quét lỗi làm rò rỉ vĩnh viễn một socket kết nối cho đến khi toàn bộ hồ kết nối cạn kiệt.",
+    "symptoms": [
+      "Thời gian phản hồi của API Kho Tang Vật tăng vọt từ 25ms lên 30.000ms (504 Gateway Timeout)",
+      "CPU máy chủ cơ sở dữ liệu nhàn rỗi ở mức 3% với hoạt động đọc/ghi đĩa gần như bằng 0",
+      "Hồ kết nối ứng dụng bị nghẽn 100%: active_connections = 100/100, idle = 0, hàng đợi chờ = 1.840",
+      "Hàng trăm tủ niêm phong tang vật tại 5 đồn cảnh sát không thể khóa chốt hoặc lưu nhật ký chuỗi hành trình chứng cứ"
+    ],
+    "objective": "Chẩn đoán nguyên nhân khiến một cơ sở dữ liệu đang rảnh rỗi lại bị cô lập hoàn toàn do cạn kiệt kết nối, và triển khai các kiểm soát vòng đời pool kết nối cùng cơ chế phòng chống rò rỉ."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "precinct-scanners",
+        "type": "client",
+        "label": "Máy Quét Mã Vạch Tang Vật",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Quét Cầm Tay Tại Các Đồn",
+          "logs": [
+            "[17:00:10] INFO: Quét túi #E-1002 (mã vạch hợp lệ)",
+            "[17:00:12] WARN: Quét túi #E-1003 -> máy quét phát chuỗi '#BAD#RAW-BINARY'",
+            "[17:00:15] ERROR: Yêu cầu bị quá thời hạn sau 30.000ms",
+            "[17:00:30] ERROR: 100% các lượt quét tiếp theo đều bị timeout trên toàn thành phố"
+          ],
+          "data": {
+            "Máy Quét Đang Dùng": "45 thiết bị cầm tay",
+            "Tỷ Lệ Quét Lỗi": "~5% lượt quét sinh tiền tố hỏng '#BAD#'",
+            "Model Thiết Bị": "LaserScan 4000 (triển khai sáng nay)"
+          },
+          "status": "Phát sinh các mã vạch hỏng bất thường kích hoạt lỗi cú pháp trong ứng dụng."
+        }
+      },
+      {
+        "id": "evidence-api",
+        "type": "server",
+        "label": "API Kho Tang Vật",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Máy Chủ Ứng Dụng Kho Tang Vật",
+          "logs": [
+            "[17:00:12] INFO: conn = pool.getConnection() -> mượn thành công Socket #88",
+            "[17:00:12.010] ERROR: Uncaught SyntaxError: Unexpected token # in JSON at position 0",
+            "[17:00:12.015] WARN: Ngoại lệ nhảy cóc qua lệnh conn.release() — Socket #88 không bao giờ được trả lại!",
+            "[17:42:00] ERROR: HikariCP: Không còn kết nối khả dụng, yêu cầu quá hạn sau 30000ms",
+            "[17:42:01] ERROR: Pool cạn kiệt (active=100, idle=0, waiting=1842)"
+          ],
+          "data": {
+            "Kích Thước Pool": "100 kết nối tối đa",
+            "Kết Nối Đang Chiếm Dụng": "100 (TOÀN BỘ BỊ RÒ RỈ / BỎ RƠI)",
+            "Kết Nối Nhàn Rỗi": "0",
+            "Yêu Cầu Đang Chờ": "1.842 request đang xếp hàng",
+            "Ghi Nhật Ký Phát Hiện Rò Rỉ": "ĐANG TẮT (ngưỡng 0ms)"
+          },
+          "status": "Pool kết nối cạn kiệt hoàn toàn do các socket bị rò rỉ từ ngoại lệ không được bắt."
+        }
+      },
+      {
+        "id": "postgres-evidence",
+        "type": "database",
+        "label": "PostgreSQL Kho Tang Vật",
+        "status": "healthy",
+        "position": {
+          "x": 620,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Động Cơ Cơ Sở Dữ Liệu PostgreSQL",
+          "logs": [
+            "[17:00:00] INFO: CPU máy chủ: 3.2%, Bộ nhớ: 18.1%",
+            "[17:00:12] INFO: Kết nối #88 mở từ IP 10.0.1.5 (trạng thái: 'idle in transaction')",
+            "[17:42:00] INFO: 100 socket TCP đang mở, nhưng 0 câu lệnh SQL nào đang chạy. DB đang ngủ",
+            "[17:45:00] INFO: IOPS đọc/ghi đĩa: 0 IOPS"
+          ],
+          "data": {
+            "CPU Máy Chủ": "3.2% (Nhàn rỗi hoàn toàn)",
+            "IOPS Đĩa": "0 / 10.000",
+            "Kết Nối TCP Mở": "100 (Bị client bỏ rơi)",
+            "Truy Vấn Đang Chạy": "0 lệnh"
+          },
+          "status": "Hoàn toàn khỏe mạnh và nhàn rỗi, nhưng ứng dụng không thể gửi truy vấn vì nghẽn pool."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-scan-api",
+        "source": "precinct-scanners",
+        "target": "evidence-api",
+        "label": "quét mã vạch (quá hạn)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-api-db",
+        "source": "evidence-api",
+        "target": "postgres-evidence",
+        "label": "nghẽn pool (100 socket bị rò rỉ)",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Nguyên nhân gốc rễ khiến API Kho Tang Vật bị tê liệt và timeout trong khi máy chủ cơ sở dữ liệu hoàn toàn rảnh rỗi là gì?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Rò Rỉ Pool Kết Nối (Connection Pool Leak): Một ngoại lệ cú pháp JSON không được bắt đã nhảy cóc qua khối giải phóng kết nối, khiến các socket đã mượn bị chiếm dụng vĩnh viễn cho đến khi cạn sạch pool",
+          "correct": true,
+          "feedback": "Chính xác! Đây là bài toán kinh điển về 'Rò Rỉ Hồ Kết Nối' (Connection Pool Leak). Khi ứng dụng lấy một kết nối từ pool bằng lệnh `pool.getConnection()`, một ngoại lệ phân tích JSON bất ngờ phát sinh trước hoặc ngoài khối xử lý dọn dẹp. Do lệnh `conn.release()` (hoặc `conn.close()`) không bao giờ được thực thi, socket đó bị chiếm giữ vĩnh viễn ở trạng thái 'bị bỏ rơi' (abandoned). Sau 100 lần quét mã vạch lỗi làm rò rỉ hết 100 kết nối, toàn bộ các yêu cầu tiếp theo đều bị tắc nghẽn và timeout, dù bản thân máy chủ Database không hề phải xử lý bất cứ công việc nào."
+        },
+        {
+          "id": "rc-2",
+          "text": "PostgreSQL bị đầy ổ đĩa cứng trên phân vùng chứa nhật ký giao dịch, từ chối các câu lệnh ghi mới",
+          "correct": false,
+          "feedback": "Nhật ký PostgreSQL xác nhận dung lượng đĩa còn rất nhiều và hoạt động I/O gần như bằng 0. Cơ sở dữ liệu hoàn toàn khỏe mạnh và không có lỗi; sự cố nằm trọn vẹn bên trong pool kết nối của máy chủ ứng dụng."
+        },
+        {
+          "id": "rc-3",
+          "text": "Dòng máy quét mã vạch mới bị xung điện qua cổng USB làm hỏng thiết bị định tuyến mạng của đồn cảnh sát",
+          "correct": false,
+          "feedback": "Bộ định tuyến mạng hoạt động hoàn toàn bình thường. Máy quét chỉ đơn thuần gửi về chuỗi ký tự bất thường (`#BAD#`) gây ra lỗi phần mềm ở tầng phân tích cú pháp JSON của ứng dụng."
+        },
+        {
+          "id": "rc-4",
+          "text": "Khóa bảng (table lock) của PostgreSQL bị chiếm giữ bởi một lệnh kiểm tra khóa ngoại chưa có chỉ mục",
+          "correct": false,
+          "feedback": "Nhật ký PostgreSQL cho thấy có 0 câu lệnh nào đang chạy và không có bất kỳ tranh chấp khóa nào. Các kết nối chỉ đang nằm chơi xơi nước vì ứng dụng đã làm sập luồng xử lý mà không trả kết nối về pool."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Những nguyên tắc kiến trúc và cấu hình nào cần được áp dụng để ngăn ngừa rò rỉ pool kết nối làm tê liệt hệ thống?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Bắt buộc giải phóng tài nguyên tự động bằng mô hình RAII / try-with-resources, cấu hình timeout mượn kết nối chặt chẽ, đặt maxLifetime và bật cơ chế ghi log cảnh báo phát hiện rò rỉ",
+          "correct": true,
+          "feedback": "Chính xác! Quản lý pool kết nối an toàn đòi hỏi nhiều lớp phòng thủ: (1) Luôn sử dụng cấu trúc ngôn ngữ tự động giải phóng tài nguyên (như try-with-resources trong Java, RAII trong C++, hoặc `try ... finally { conn.release() }` trong TypeScript/Go) để ngoại lệ không bao giờ có thể bỏ qua lệnh hoàn trả kết nối. (2) Bật ngưỡng phát hiện rò rỉ (ví dụ HikariCP `leakDetectionThreshold = 5000ms`), tự động in stack trace chi tiết ra log nếu một luồng giữ kết nối quá 5 giây mà chưa trả. (3) Cấu hình `maxLifetime` và `connectionTimeout` nghiêm ngặt để tự động thu hồi các kết nối bị bỏ rơi."
+        },
+        {
+          "id": "fix-2",
+          "text": "Tăng kích thước pool kết nối từ 100 lên 10.000 kết nối để ứng dụng không bao giờ bị hết socket",
+          "correct": false,
+          "feedback": "Tăng kích thước pool không sửa được lỗi rò rỉ; nó chỉ trì hoãn thời điểm sập thêm vài tiếng trong khi làm suy giảm nghiêm trọng hiệu năng của database. 10.000 kết nối sẽ ngốn hàng chục GB RAM của PostgreSQL và làm sập bảng tiến trình của hệ điều hành."
+        },
+        {
+          "id": "fix-3",
+          "text": "Cài đặt một cron job tự động khởi động lại container máy chủ ứng dụng mỗi 60 phút một lần để giải phóng các kết nối rò rỉ",
+          "correct": false,
+          "feedback": "Tự động khởi động lại container là một biện pháp đối phó chắp vá nguy hiểm, không phải giải pháp kỹ thuật. Trong giờ cao điểm, 100 kết nối có thể bị rò rỉ hết chỉ sau 10 phút, gây sập hệ thống rất lâu trước khi lệnh khởi động lại định kỳ kích hoạt."
+        },
+        {
+          "id": "fix-4",
+          "text": "Lọc bỏ tiền tố '#BAD#' trên mã JavaScript phía frontend để các mã vạch hỏng bị hủy âm thầm trước khi gửi lên máy chủ",
+          "correct": false,
+          "feedback": "Lọc ở phía client không bảo vệ được backend trước các lỗi bất ngờ khác. Nếu phát sinh một lỗi khác (như lỗi định dạng hoặc timeout), kết nối vẫn sẽ bị rò rỉ. Cơ chế quản lý tài nguyên phía backend bắt buộc phải tuyệt đối kín kẽ."
+        }
+      ]
+    }
+  },
+  "conceptId": "connection-pool-leaks",
+  "badge": {
+    "name": "Thợ Sửa Ống Nước",
+    "icon": "🔧"
+  }
+}

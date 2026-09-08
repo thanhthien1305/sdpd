@@ -229,5 +229,103 @@
     "title": "The Rate Limiter",
     "subtitle": "One integration floods the system, drowning everyone else",
     "conceptId": "rate-limiting"
+  },
+  {
+    "id": "case-34",
+    "number": 34,
+    "title": "The Phantom Queries",
+    "subtitle": "Non-existent records bypass the cache and hammer the primary database",
+    "conceptId": "cache-penetration"
+  },
+  {
+    "id": "case-35",
+    "number": 35,
+    "title": "The Zombie Leader",
+    "subtitle": "A frozen leader wakes up from a long GC pause and overwrites fresh state",
+    "conceptId": "fencing-tokens"
+  },
+  {
+    "id": "case-36",
+    "number": 36,
+    "title": "The Cascading Ring",
+    "subtitle": "A single cache node crash overburdens its neighbor, triggering a domino collapse",
+    "conceptId": "consistent-hashing-vnodes"
+  },
+  {
+    "id": "case-37",
+    "number": 37,
+    "title": "The Ghost Dispatch",
+    "subtitle": "A database write succeeds but the message broker publish fails, leaving services desynced",
+    "conceptId": "transactional-outbox"
+  },
+  {
+    "id": "case-38",
+    "number": 38,
+    "title": "The Teleporting Warrant",
+    "subtitle": "Async cross-region replication causes users to see stale data immediately after saving",
+    "conceptId": "read-your-own-writes"
+  },
+  {
+    "id": "case-39",
+    "number": 39,
+    "title": "The Vanishing Sockets",
+    "subtitle": "Unhandled code exceptions bypass connection release, freezing an idle database",
+    "conceptId": "connection-pool-leaks"
+  },
+  {
+    "id": "case-40",
+    "number": 40,
+    "title": "The Bunker Contradiction",
+    "subtitle": "Offline field notes merged with naive timestamps overwrite critical evidence",
+    "conceptId": "crdt-offline-sync"
+  },
+  {
+    "id": "case-41",
+    "number": 41,
+    "title": "The Midnight Write Freeze",
+    "subtitle": "High-velocity telemetry ingestion triggers sudden storage engine write stalls",
+    "conceptId": "lsm-write-stalls"
+  },
+  {
+    "id": "case-42",
+    "number": 42,
+    "title": "The 50th Shard Ambush",
+    "subtitle": "Scatter-gather biometric query amplifies p99 tail latency across 50 database partitions",
+    "conceptId": "hedged-requests-tail-latency"
+  },
+  {
+    "id": "case-43",
+    "number": 43,
+    "title": "The Elephant in the Queue",
+    "subtitle": "A 4-hour audio transcription blocks thousands of critical 30-second 911 dispatch alerts",
+    "conceptId": "head-of-line-blocking"
+  },
+  {
+    "id": "case-44",
+    "number": 44,
+    "title": "The Compromised Badge",
+    "subtitle": "Stateless JWT tokens remain valid after administrative revocation, leaking confidential files",
+    "conceptId": "jwt-revocation-blacklist"
+  },
+  {
+    "id": "case-45",
+    "number": 45,
+    "title": "The Silent Port Drought",
+    "subtitle": "Unpooled outbound HTTP connections trap 28,000 sockets in TIME_WAIT, causing total outage",
+    "conceptId": "ephemeral-port-exhaustion"
+  },
+  {
+    "id": "case-46",
+    "number": 46,
+    "title": "The Transatlantic Divergence",
+    "subtitle": "Concurrent multi-leader writes across London and New York datacenters cause irreconcilable data loss",
+    "conceptId": "multi-leader-conflicts"
+  },
+  {
+    "id": "case-47",
+    "number": 47,
+    "title": "The Fifty-Millionth Mile",
+    "subtitle": "Deep OFFSET pagination forces full-index scans and disk thrashing on forensic audit queries",
+    "conceptId": "keyset-vs-offset-pagination"
   }
 ]

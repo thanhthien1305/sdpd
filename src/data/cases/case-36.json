@@ -1,0 +1,253 @@
+{
+  "id": "case-36",
+  "number": 36,
+  "title": "The Cascading Ring",
+  "subtitle": "A single cache node crash overburdens its neighbor, triggering a domino collapse",
+  "brief": {
+    "narrative": "The SDPD Real-Time Video Surveillance system caches live CCTV camera snapshots across a 4-node distributed cache cluster (Nodes A, B, C, D) using consistent hashing. Each physical machine is mapped to a single point on a 360-degree hash ring. At 09:00:00, Cache Node B suffers a sudden hardware power supply failure and goes completely dark. Under naive consistent hashing, all keys that previously mapped to Node B are re-routed to the very next available node moving clockwise on the ring: Node C. Instantly, Node C's traffic doubles from 15,000 req/sec to 30,000 req/sec, and its RAM usage surges from 75% to 100%. At 09:00:25, the Linux kernel OOM killer terminates Node C. Now, Node D is the next clockwise node for both Node B and Node C's keys. Crushed under 3x its rated capacity, Node D crashes at 09:01:00. Finally, Node A is left as the sole survivor and dies 10 seconds later. Within 70 seconds, a single node failure has cascaded and wiped out the entire cache ring, drowning the primary video storage cluster.",
+    "symptoms": [
+      "Node B power supply failed at 09:00:00",
+      "Node C memory spiked from 75% to 100% within 20 seconds, killed by OOM at 09:00:25",
+      "Node D collapsed at 09:01:00, followed by Node A at 09:01:10 — 100% cache cluster outage",
+      "Live CCTV camera feeds across the city froze, leaving detective monitoring stations blacked out"
+    ],
+    "objective": "Diagnose why the loss of one node destroyed its neighbor in a domino cascade, and redesign the consistent hash ring to distribute failover load evenly."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "camera-feed",
+        "type": "client",
+        "label": "City CCTV Network",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 180
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "CCTV Surveillance Ingress",
+          "logs": [
+            "[09:00:00] INFO: Streaming 60,000 camera frames/sec across 4 cache nodes",
+            "[09:00:05] WARN: Node B offline — routing B's keys to successor Node C",
+            "[09:00:25] ERROR: Node C down — routing B & C keys to Node D",
+            "[09:01:00] ERROR: Node D down — all traffic hitting sole survivor Node A",
+            "[09:01:15] CRITICAL: 100% cache cluster failure — 503 Service Unavailable"
+          ],
+          "data": {
+            "Total Frame Rate": "60,000 frames/sec",
+            "Active Cameras": "8,400 cameras citywide",
+            "Cache Availability": "0% (all nodes down)",
+            "Video Monitoring": "OFFLINE"
+          },
+          "status": "Camera streams unable to fetch or store cache frames."
+        }
+      },
+      {
+        "id": "cache-b",
+        "type": "server",
+        "label": "Cache Node B",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cache Node B (Physical Position: 90°)",
+          "logs": [
+            "[08:59:59] INFO: Handling 15,000 req/sec, RAM: 48 GB / 64 GB (75%)",
+            "[09:00:00] CRITICAL: Hardware PSU failure — host powered off abruptly",
+            "[09:00:00] OFFLINE: Host unreachable on network"
+          ],
+          "data": {
+            "Ring Position": "90° (Single Token)",
+            "Virtual Nodes": "0 (None)",
+            "Status": "DEAD (Hardware failure)",
+            "Orphaned Keys": "15,000 req/sec redirected to Node C"
+          },
+          "status": "Power supply burned out. All keys shifted to single neighbor Node C."
+        }
+      },
+      {
+        "id": "cache-c",
+        "type": "server",
+        "label": "Cache Node C",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 60
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cache Node C (Physical Position: 180°)",
+          "logs": [
+            "[08:59:59] INFO: Baseline load: 15,000 req/sec, RAM: 48 GB (75%)",
+            "[09:00:01] WARN: Inherited 100% of Node B's key segment (0°-90°)",
+            "[09:00:05] WARN: Incoming traffic surged to 30,000 req/sec (200% load)",
+            "[09:00:20] ERROR: RAM usage 63.8 GB / 64 GB — swap space exhausted",
+            "[09:00:25] CRITICAL: Out of Memory: Kill process 'cache-daemon' (OOM-killer)"
+          ],
+          "data": {
+            "Ring Position": "180° (Single Token)",
+            "Peak Traffic": "30,500 req/sec (203% capacity)",
+            "Failure Mode": "OOM Killed by Linux Kernel",
+            "Orphaned Keys": "Inherited B, passed B+C to Node D"
+          },
+          "status": "Overwhelmed by taking on 100% of Node B's workload. Died of OOM."
+        }
+      },
+      {
+        "id": "cache-d",
+        "type": "server",
+        "label": "Cache Node D",
+        "status": "failed",
+        "position": {
+          "x": 580,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Cache Node D (Physical Position: 270°)",
+          "logs": [
+            "[09:00:25] WARN: Node C down. Node D is next clockwise node for B and C!",
+            "[09:00:30] ERROR: Traffic surged to 45,000 req/sec (300% load)",
+            "[09:00:55] ERROR: CPU 100%, network saturation, dropped packets",
+            "[09:01:00] CRITICAL: Process crashed under memory pressure"
+          ],
+          "data": {
+            "Ring Position": "270° (Single Token)",
+            "Load Multiplier": "3x nominal capacity",
+            "Crash Time": "09:01:00"
+          },
+          "status": "Inherited keys from both B and C. Collapsed under 300% load."
+        }
+      },
+      {
+        "id": "primary-video-db",
+        "type": "database",
+        "label": "Primary Video SAN Storage",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 300
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Primary SAN Storage Array",
+          "logs": [
+            "[09:00:00] INFO: Baseline IOPS: 2,000 read IOPS",
+            "[09:01:15] CRITICAL: Entire cache layer dead — 60,000 req/sec hitting SAN directly",
+            "[09:01:20] ERROR: Controller queue depth exceeded 10,000",
+            "[09:01:30] ERROR: Storage array entering read-only protective throttle"
+          ],
+          "data": {
+            "Max Capacity": "10,000 IOPS",
+            "Inbound Surge": "60,000 IOPS",
+            "Status": "Overwhelmed by 100% cache miss storm"
+          },
+          "status": "Drowned by raw un-cached video frame queries after ring collapse."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-cam-b",
+        "source": "camera-feed",
+        "target": "cache-b",
+        "label": "failed (09:00:00)",
+        "animated": false,
+        "style": "broken"
+      },
+      {
+        "id": "e-b-c",
+        "source": "cache-b",
+        "target": "cache-c",
+        "label": "100% keys dumped on C",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-c-d",
+        "source": "cache-c",
+        "target": "cache-d",
+        "label": "200% keys dumped on D",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-cam-san",
+        "source": "camera-feed",
+        "target": "primary-video-db",
+        "label": "60,000 req/s bypass (crushing SAN)",
+        "animated": true,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "What is the root cause of the entire 4-node cache cluster collapsing following a single node hardware crash?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Naive consistent hashing without Virtual Nodes (vnodes) caused 100% of the dead node's key space to dump onto its single immediate neighbor, triggering a cascading domino failure",
+          "correct": true,
+          "feedback": "Correct! When each physical node occupies only a single point on a consistent hash ring, the failure of Node B causes 100% of its keys to fall onto its immediate clockwise successor (Node C). Doubling the load on Node C caused an Out-Of-Memory crash, which then dumped both B and C's keys onto Node D (3x load). This domino cascade wiped out the entire cluster within 70 seconds."
+        },
+        {
+          "id": "rc-2",
+          "text": "The camera frame resolution was changed from 1080p to 4K, which exceeded the network interface bandwidth of all cache nodes",
+          "correct": false,
+          "feedback": "Video resolution remained constant at 1080p. The failure was not caused by individual frame sizes, but by the lopsided redistribution of keys onto a single neighbor node."
+        },
+        {
+          "id": "rc-3",
+          "text": "The cache nodes were running with Redis cluster master-replica split-brain, causing conflicting writes to freeze the ring",
+          "correct": false,
+          "feedback": "There was no split-brain condition. Node B died from a verified hardware power supply failure, and the remaining nodes failed sequentially from severe memory overload."
+        },
+        {
+          "id": "rc-4",
+          "text": "The SAN storage array sent poison-pill corrupt packets back to the cache nodes, causing process crashes",
+          "correct": false,
+          "feedback": "The SAN was working properly until the cache ring collapsed and flooded it with 60,000 queries per second. The SAN was the victim of the crash, not the cause."
+        }
+      ]
+    },
+    "fix": {
+      "question": "How should the consistent hashing ring be restructured to prevent cascading neighbor failover collapses?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Implement Virtual Nodes (vnodes) where each physical node is assigned hundreds of virtual positions distributed evenly around the hash ring",
+          "correct": true,
+          "feedback": "Correct! Virtual nodes (vnodes) are the standard solution used by Dynamo, Cassandra, and modern distributed caches. By assigning each physical machine 150–250 virtual positions scattered uniformly across the ring, the keys of any single physical node are interleaved with all other nodes. When Node B dies, its orphaned keys are evenly split among Node A, Node C, and Node D (e.g., each absorbs only ~33% additional load instead of one node absorbing 100%). This prevents cascading domino failures."
+        },
+        {
+          "id": "fix-2",
+          "text": "Revert to traditional modulus hashing (`hash(key) % N`) across the 4 physical cache nodes",
+          "correct": false,
+          "feedback": "Modulus hashing makes failovers even worse! In modulus hashing, when N changes from 4 to 3, almost 100% of all keys in the entire system are remapped to different servers, instantly causing a 100% cold cache miss storm across the entire city."
+        },
+        {
+          "id": "fix-3",
+          "text": "Upgrade the RAM on Node C and Node D from 64 GB to 512 GB to ensure they can survive doubling their workload",
+          "correct": false,
+          "feedback": "Over-provisioning hardware is expensive and fragile. If two nodes crash, a 512 GB node could still be overwhelmed. Furthermore, it doesn't solve the underlying structural flaw of load concentration."
+        },
+        {
+          "id": "fix-4",
+          "text": "Configure the CCTV cameras to stop transmitting video whenever any single cache node experiences a hardware failure",
+          "correct": false,
+          "feedback": "Disabling the city's entire security camera system whenever one server loses power defeats the purpose of building a fault-tolerant distributed system and creates severe public safety hazards."
+        }
+      ]
+    }
+  },
+  "conceptId": "consistent-hashing-vnodes",
+  "badge": {
+    "name": "Ring Balancer",
+    "icon": "💍"
+  }
+}

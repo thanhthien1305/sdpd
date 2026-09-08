@@ -1,0 +1,182 @@
+{
+  "id": "case-44",
+  "number": 44,
+  "title": "O Distintivo Comprometido",
+  "subtitle": "Tokens JWT stateless continuam válidos após revogação administrativa, vazando arquivos sigilosos",
+  "brief": {
+    "narrative": "A Corregedoria descobre que o notebook e as credenciais do Detetive Vance foram roubados por uma organização criminosa durante uma operação infiltrada. Às 14:00:00, o Oficial de Segurança suspende imediatamente a conta de Vance no Provedor de Identidade central (IdP) e marca seu status como `REVOKED`. Contudo, às 14:25:00, logs revelam que o notebook roubado baixou com sucesso 48 dossiês confidenciais de informantes no microsserviço do Cofre de Evidências. Como o sistema adota tokens JWT puramente stateless com validade de 12 horas (`exp`), os serviços downstream validam o acesso apenas verificando a assinatura criptográfica RS256 com uma chave pública em cache local. Os microsserviços não fazem nenhuma chamada ao IdP, desconhecendo a revogação do policial. O sindicato criminoso continua extraindo dados sigilosos com um distintivo revogado.",
+    "symptoms": [
+      "Conta do detetive suspenso continua acessando microsserviços 25 minutos após a revogação",
+      "Logs do Cofre de Evidências registram HTTP 200 OK para requisições com o token JWT roubado de Vance",
+      "Auditoria do IdP confirma que o Detetive Vance foi marcado como `REVOKED` às 14:00:00",
+      "Microsserviços internos realizam zero chamadas de rede durante a validação de JWT para otimizar desempenho"
+    ],
+    "objective": "Diagnosticar a vulnerabilidade arquitetural na revogação de tokens JWT stateless e implantar tokens de vida curta com listas de revogação distribuídas em memória."
+  },
+  "diagram": {
+    "nodes": [
+      {
+        "id": "attacker-laptop",
+        "type": "client",
+        "label": "Notebook Roubado",
+        "status": "degraded",
+        "position": {
+          "x": 60,
+          "y": 170
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Terminal do Criminoso",
+          "logs": [
+            "[13:55:00] Token JWT válido extraído do armazenamento local do navegador",
+            "[14:00:00] NOTA: Conta do policial suspensa pelo administrador",
+            "[14:25:00] GET /vault/informants HTTP 200 OK (Authorization: Bearer eyJhbGci...)",
+            "[14:25:05] DOWNLOAD: 48 dossiês confidenciais de informantes exfiltrados"
+          ],
+          "data": {
+            "Validade do Token": "Emitido: 13:00 / Expira: 01:00 (Janela de 12 horas)",
+            "Assinatura JWT": "RS256 VÁLIDA",
+            "Microsserviço Alvo": "Cofre de Evidências"
+          },
+          "status": "Invasor utilizando um token matematicamente válido muito após a suspensão da conta."
+        }
+      },
+      {
+        "id": "evidence-vault",
+        "type": "server",
+        "label": "Microsserviço do Cofre",
+        "status": "failed",
+        "position": {
+          "x": 340,
+          "y": 80
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Serviço de Evidências e Dossiês",
+          "logs": [
+            "[14:25:00] INFO: Validando assinatura JWT com chave pública em cache do IdP",
+            "[14:25:00] INFO: Checagem de assinatura: APROVADA (RS256 compatível)",
+            "[14:25:00] INFO: Checagem de expiração: tempo_atual < exp (Restam: 10h 35m)",
+            "[14:25:00] WARN: Nenhuma consulta de revogação realizada (arquitetura stateless)",
+            "[14:25:01] INFO: Dossiês confidenciais enviados ao cliente"
+          ],
+          "data": {
+            "Estratégia de Autenticação": "JWT Stateless (Validação Local com Chave Pública)",
+            "Checagem de Revogação": "NENHUMA",
+            "Exposição de Dados": "ALTA (Registros Secretos de Informantes)"
+          },
+          "status": "O serviço valida a assinatura localmente sem conferir se o token foi revogado."
+        }
+      },
+      {
+        "id": "central-idp",
+        "type": "server",
+        "label": "Provedor de Identidade (IdP)",
+        "status": "healthy",
+        "position": {
+          "x": 340,
+          "y": 270
+        },
+        "inspectable": true,
+        "inspectData": {
+          "title": "Autoridade de Identidade",
+          "logs": [
+            "[14:00:00] ADMIN: Status do Detetive Vance alterado para 'REVOKED'",
+            "[14:00:00] INFO: Senha redefinida e MFA desativado no banco de dados",
+            "[14:00:01] NOTA: Sem canal para notificar serviços sobre tokens JWT em circulação",
+            "[14:25:00] OCIOSO: 0 consultas de verificação recebidas do Cofre de Evidências"
+          ],
+          "data": {
+            "Status do Policial": "REVOKED / SUSPENSO",
+            "Tokens Ativos em Circulação": "1 (Válido por mais 10 horas)",
+            "Canal de Revogação": "INEXISTENTE"
+          },
+          "status": "A conta foi encerrada no banco, mas não há forma de revogar os tokens emitidos."
+        }
+      }
+    ],
+    "edges": [
+      {
+        "id": "e-attacker-vault",
+        "source": "attacker-laptop",
+        "target": "evidence-vault",
+        "label": "GET /informants [200 OK]",
+        "animated": true,
+        "style": "broken"
+      },
+      {
+        "id": "e-idp-disconnect",
+        "source": "central-idp",
+        "target": "evidence-vault",
+        "label": "sem sincronização de revogação",
+        "animated": false,
+        "style": "broken"
+      }
+    ]
+  },
+  "diagnosis": {
+    "rootCause": {
+      "question": "Qual é a falha fundamental de segurança que permitiu o acesso mesmo após a suspensão da conta?",
+      "options": [
+        {
+          "id": "rc-1",
+          "text": "Ponto cego arquitetural do JWT stateless: os microsserviços validam a assinatura criptográfica e a expiração localmente sem verificação de revogação em tempo real, mantendo tokens roubados de 12 horas válidos até o fim do prazo",
+          "correct": true,
+          "feedback": "Correto! Tokens JSON Web Token (JWT) stateless evitam consultas a banco de dados validando assinaturas com criptografia de chave pública. No entanto, isso gera uma falha grave de revogação: uma vez emitido, o token é matematicamente autêntico até que seu timestamp `exp` seja atingido. Os microsserviços conferem apenas a assinatura e o prazo, desconhecendo por completo que o IdP suspendeu a conta às 14:00:00."
+        },
+        {
+          "id": "rc-2",
+          "text": "A chave privada RSA de 2048 bits do provedor de identidade foi fatorada pelo sindicato usando computação quântica",
+          "correct": false,
+          "feedback": "A chave privada nunca foi comprometida. O invasor não forjou um token novo; ele simplesmente apresentou o token legítimo já emitido antes do roubo do notebook."
+        },
+        {
+          "id": "rc-3",
+          "text": "Uma vulnerabilidade de Cross-Site Scripting (XSS) no Cofre de Evidências contornou completamente a validação do JWT",
+          "correct": false,
+          "feedback": "Os logs mostram que a validação de JWT ocorreu normalmente e foi aprovada. O erro reside na confiança cega concedida a um token que já deveria ter sido invalidado."
+        },
+        {
+          "id": "rc-4",
+          "text": "O serviço de sincronização de horário (NTP) no servidor atrasou 24 horas no tempo",
+          "correct": false,
+          "feedback": "Os relógios do sistema estão sincronizados. O prazo de expiração do token era de 12 horas, restando mais de 10 horas de validade real."
+        }
+      ]
+    },
+    "fix": {
+      "question": "Como a arquitetura de autenticação deve ser redesenhada para permitir revogação instantânea com alto desempenho nos microsserviços?",
+      "options": [
+        {
+          "id": "fix-1",
+          "text": "Adotar tokens de acesso de curta duração (5 minutos) com rotação de refresh tokens, e publicar identificadores de tokens revogados (jti) em uma lista negra distribuída no Redis via pub/sub",
+          "correct": true,
+          "feedback": "Correto! O modelo distribuído padrão combina dois níveis: 1) Tokens de acesso ultracurtos (5 a 15 minutos) reduzem drasticamente a janela de vazamento de credenciais. 2) Para revogações emergenciais (roubos ou demissões), o IdP publica o identificador único do token (`jti`) ou o ID do usuário em um cache distribuído em memória (como Redis com Bloom filters) via pub/sub. Os microsserviços consultam o cache em frações de milissegundo, rejeitando tokens revogados instantaneamente."
+        },
+        {
+          "id": "fix-2",
+          "text": "Voltar para sessões monolíticas gravadas em um único banco SQL relacional consultado sincronicamente a cada chamada",
+          "correct": false,
+          "feedback": "Forçar dezenas de microsserviços a consultar o mesmo banco relacional a cada requisição destrói a autonomia da arquitetura e gera um imenso gargalo de disponibilidade e escalabilidade."
+        },
+        {
+          "id": "fix-3",
+          "text": "Aumentar a validade do JWT para 7 dias para que os policiais não precisem fazer login repetidamente durante operações",
+          "correct": false,
+          "feedback": "Aumentar a validade para 7 dias agravaria o desastre, concedendo aos criminosos uma semana inteira de acesso irrestrito aos arquivos sigilosos."
+        },
+        {
+          "id": "fix-4",
+          "text": "Mudar o algoritmo de assinatura de RS256 para HS256 e distribuir a chave secreta compartilhada em todos os dispositivos clientes",
+          "correct": false,
+          "feedback": "Distribuir chaves simétricas para clientes permite que qualquer pessoa assine e forje tokens de administrador à vontade, destruindo a segurança."
+        }
+      ]
+    }
+  },
+  "conceptId": "jwt-revocation-blacklist",
+  "badge": {
+    "name": "Caçador de Chaves Fantasma",
+    "icon": "🗝️"
+  }
+}

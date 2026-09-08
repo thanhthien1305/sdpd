@@ -34,6 +34,8 @@ export const RANKS: Rank[] = [
   { id: 'sergeant', title: 'Sergeant', requiredCases: 17 },
   { id: 'lieutenant', title: 'Lieutenant', requiredCases: 25 },
   { id: 'chief', title: 'Chief', requiredCases: 33 },
+  { id: 'commissioner', title: 'Commissioner', requiredCases: 40 },
+  { id: 'inspector_general', title: 'Inspector General', requiredCases: 47 },
 ];
 
 export interface Concept {
