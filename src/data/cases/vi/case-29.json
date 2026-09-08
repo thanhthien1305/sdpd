@@ -155,60 +155,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao các ứng dụng cảnh sát vẫn tiếp tục gửi dữ liệu về địa chỉ IP cũ đã tắt suốt 48 giờ sau khi di dời?",
+      "question": "Nguyên nhân gốc rễ khiến toàn bộ các dịch vụ mất kết nối sau khi chuyển máy chủ là gì?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Tin tặc đã thực hiện tấn công đầu độc bộ đệm DNS (DNS Cache Poisoning)",
+          "text": "Cấu Hình Địa Chỉ IP Tĩnh Cố Định (Hardcoded IP Addresses) mà không có Cơ Chế Khám Phá Dịch Vụ (Service Discovery) — các ứng dụng gọi thẳng vào IP cũ thay vì dùng tên miền hoặc bộ đăng ký dịch vụ",
           "correct": true,
-          "feedback": "Không có tấn công mạng; sự cố hoàn toàn do cấu hình TTL và chính sách cache DNS nội bộ."
+          "feedback": "Chính xác! Tất cả các vi dịch vụ đều ghi cứng địa chỉ IP \"10.0.1.50\" trong tệp cấu hình của mình. Khi máy chủ cơ sở dữ liệu cũ bị khai tử và thay thế bằng máy chủ mới có IP khác, không một dịch vụ nào có thể tự động tìm thấy máy chủ mới. Việc phụ thuộc vào địa chỉ IP tĩnh cố định trong môi trường đám mây hoặc mạng phân tán là sai lầm chết người!"
         },
         {
           "id": "rc-1",
-          "text": "Máy chủ cơ sở dữ liệu mới bị cháy card mạng nên từ chối kết nối",
+          "text": "Tường lửa mạng trung tâm chặn toàn bộ lưu lượng cổng 5432 giữa các dịch vụ",
           "correct": false,
-          "feedback": "Máy chủ mới hoạt động hoàn toàn bình thường và sẵn sàng tiếp nhận kết nối."
+          "feedback": "Quy tắc tường lửa đã được cập nhật cho cả dải IP mạng nội bộ."
         },
         {
           "id": "rc-2",
-          "text": "Thời gian sống DNS TTL quá dài (7 ngày) kết hợp với bộ đệm DNS vô hạn ở tầng ứng dụng (JVM DNS caching) khiến client không bao giờ thực hiện phân giải lại tên miền để nhận IP mới",
+          "text": "Máy chủ thay thế lẽ ra phải được gán đúng địa chỉ IP cũ 10.0.1.50 thay vì dùng địa chỉ IP mới",
           "correct": false,
-          "feedback": "Chính xác! Khi client lưu cache DNS quá lâu hoặc vĩnh viễn, việc thay đổi IP trên DNS server trở nên vô tác dụng đối với các tiến trình đang chạy. Chúng sẽ tiếp tục đâm đầu vào IP cũ cho đến khi tiến trình được khởi động lại."
+          "feedback": "Gán IP tĩnh cũ có thể giải quyết tạm thời cho lần này, nhưng kiến trúc dựa vào IP cố định (hardcoded IP) là nguyên nhân sâu xa khiến việc nâng cấp hạ tầng luôn dẫn tới thảm họa."
         },
         {
           "id": "rc-4",
-          "text": "Tên miền của sở cảnh sát bị tổ chức quốc tế thu hồi",
+          "text": "Máy chủ mới được triển khai với hệ điều hành không tương thích",
           "correct": false,
-          "feedback": "Đây là tên miền nội bộ mạng riêng (.local), không thuộc quản lý của tổ chức quốc tế."
+          "feedback": "Máy chủ mới hoạt động hoàn toàn bình thường và đã được kiểm thử trước khi chuyển giao."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn mực để quản lý địa chỉ dịch vụ động và di dời hạ tầng mà không gây gián đoạn là gì?",
+      "question": "Giải pháp dài hạn tốt nhất để ngăn chặn các sự cố mất kết nối khi nâng cấp hạ tầng mạng là gì?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Giữ nguyên máy chủ cũ chạy mãi mãi tại phòng máy cũ",
+          "text": "Triển khai Hệ Thống Khám Phá Dịch Vụ (Service Discovery như Consul, Eureka hoặc Kubernetes DNS) — các dịch vụ tự động đăng ký và tìm kiếm nhau thông qua tên miền logic thay vì địa chỉ IP vật lý",
           "correct": true,
-          "feedback": "Không thể duy trì hạ tầng cũ lỗi thời khi cần nâng cấp công nghệ."
+          "feedback": "Chính xác! Với hệ thống Khám phá dịch vụ (Service Discovery kết hợp Internal DNS), các dịch vụ chỉ cần kết nối tới tên logic như \"db-primary.service.internal\". Khi một máy chủ mới được tạo ra (hoặc IP thay đổi), hệ thống tự động cập nhật bản ghi trong bộ đăng ký dịch vụ (Service Registry). Tất cả các dịch vụ gọi đến sẽ tự động được định tuyến tới IP mới mà không cần sửa code hay khởi động lại!"
         },
         {
           "id": "fix-1",
-          "text": "Hạ thấp DNS TTL xuống mức ngắn (ví dụ: 5-30 giây) trước khi chuyển đổi, cấu hình client JVM cache DNS trong thời gian ngắn (ví dụ: 30 giây), hoặc sử dụng hệ thống Phát Hiện Dịch Vụ chuyên dụng (Service Discovery như Consul, Eureka, Envoy hoặc K8s CoreDNS)",
+          "text": "Tạo một tệp cấu hình dùng chung duy nhất đặt trên máy chủ tệp mạng liệt kê tất cả các địa chỉ IP",
           "correct": false,
-          "feedback": "Chính xác! Hạ thấp TTL trước khi bảo trì giúp client nhanh chóng cập nhật IP mới trong vài giây. Sử dụng các hệ thống Service Discovery chuyên dụng hoặc mesh proxy (Envoy) giúp việc định tuyến tự động hội tụ ngay khi máy chủ di dời."
+          "feedback": "Một tệp cấu hình tập trung vẫn đòi hỏi phải cập nhật và khởi động lại toàn bộ ứng dụng mỗi khi IP thay đổi."
         },
         {
           "id": "fix-3",
-          "text": "Đi đến từng xe tuần tra trong thành phố và cài đặt lại hệ điều hành thủ công",
+          "text": "Cấu hình để mọi dịch vụ tự động quét toàn bộ dải mạng subnet mỗi khi bị mất kết nối",
           "correct": false,
-          "feedback": "Cài đặt thủ công hàng ngàn thiết bị mất hàng tuần và cực kỳ tốn kém nhân lực."
+          "feedback": "Quét mạng liên tục sẽ tạo ra bão lưu lượng broadcast, làm tắc nghẽn switch và gây ra các lỗ hổng bảo mật nghiêm trọng."
         },
         {
           "id": "fix-4",
-          "text": "Gán cứng địa chỉ IP trực tiếp vào trong mã nguồn của ứng dụng",
+          "text": "Giữ nguyên máy chủ cũ chạy mãi mãi tại phòng máy của sở cảnh sát và không bao giờ nâng cấp",
           "correct": false,
-          "feedback": "Gán cứng IP là sai lầm sơ đẳng, khiến việc thay đổi máy chủ trong tương lai bắt buộc phải biên dịch lại toàn bộ ứng dụng."
+          "feedback": "Không thể duy trì hạ tầng cũ lỗi thời, thiếu bảo mật và không thể mở rộng dung lượng."
         }
       ]
     }

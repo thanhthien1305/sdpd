@@ -167,60 +167,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Điều gì đã gây ra nghịch lý thời gian tai hại trên bảng chứng cứ?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc nhãn thời gian bằng chứng hiển thị thời điểm phi lý (nghiệm thu trước khi thu thập) là gì?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Sự trôi đồng hồ vật lý (Clock Drift) giữa các máy chủ độc lập khiến việc so sánh thời gian thực để xác định thứ tự nhân quả trở nên sai lệch hoàn toàn",
+          "text": "Sự cố dịch vụ NTP dẫn đến Hiện Tượng Lệch Đồng Hồ (Clock Skew), khiến nhãn thời gian giữa các máy chủ vật lý bị sai lệch và không thể so sánh trực tiếp",
           "correct": true,
-          "feedback": "Chính xác! Đồng hồ vật lý trên các máy tính luôn bị trôi do nhiệt độ và phần cứng. Không thể dựa vào timestamp thực giữa hai máy chủ khác nhau để khẳng định sự kiện nào diễn ra trước một cách tuyệt đối."
+          "feedback": "Chính xác! Trong hệ thống phân tán, mỗi máy tính sở hữu một tinh thể thạch anh dao động riêng và đồng hồ vật lý của chúng luôn bị trôi dạt (drift). Máy chủ thu thập chạy nhanh hơn 3 phút, trong khi máy chủ phòng lab chạy chậm hơn 5 phút, tạo ra độ lệch tới 8 phút. Việc dùng đồng hồ vật lý (wall-clock time) để xác định thứ tự nhân quả giữa các máy tính độc lập là hoàn toàn thiếu tin cậy."
         },
         {
           "id": "rc-3",
-          "text": "Dữ liệu video của camera an ninh bị tua nhanh gấp đôi tốc độ bình thường",
+          "text": "Cơ sở dữ liệu lưu trữ bản ghi sai thứ tự do lỗi logic trong đường truyền ghi",
           "correct": false,
-          "feedback": "Video phát ở tốc độ chuẩn 30fps hoàn toàn bình thường."
+          "feedback": "Cơ sở dữ liệu chỉ lưu trữ trung thực các giá trị nhãn thời gian mà nó nhận được. Vấn đề nằm ở chỗ các máy chủ gửi dữ liệu đã tự đóng dấu thời gian bị sai lệch do đồng hồ phần cứng của chúng."
         },
         {
           "id": "rc-1",
-          "text": "Kẻ tấn công đã dùng phần mềm độc hại can thiệp và sửa đổi cơ sở dữ liệu chứng cứ",
+          "text": "Bằng chứng thực chất đã bị các kỹ thuật viên làm giả — nhãn thời gian vô lý chứng minh chuỗi mắt xích lưu giữ bằng chứng đã bị phá vỡ",
           "correct": false,
-          "feedback": "Không có sự can thiệp từ tin tặc; nhật ký hệ điều hành cho thấy dịch vụ đồng bộ giờ NTP trên máy chủ tầng hầm đã mất kết nối nhiều tuần qua."
+          "feedback": "Không có hành vi gian lận nào ở đây. Thứ tự các bước trong thế giới thực diễn ra hoàn toàn chuẩn xác; chỉ có đồng hồ máy chủ hiển thị sai thời gian thực do mất kết nối NTP."
         },
         {
           "id": "rc-4",
-          "text": "Đường truyền mạng của cảm biến cửa có tốc độ nhanh hơn tốc độ ánh sáng",
+          "text": "Độ trễ mạng giữa máy chủ thu thập và máy chủ phòng lab khiến các sự kiện truyền tới cơ sở dữ liệu bị đảo lộn thứ tự",
           "correct": false,
-          "feedback": "Các định luật vật lý không bị vi phạm; chỉ có đồng hồ máy tính là chạy sai."
+          "feedback": "Độ trễ mạng có thể làm sự kiện đến trước hoặc sau, nhưng nhãn thời gian được đóng dấu ngay tại máy chủ nguồn. Kể cả sự kiện đến đúng thứ tự, nhãn thời gian vẫn sẽ ghi nhận lab chạy trước thu thập do đồng hồ của lab bị chậm."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp kỹ thuật chuẩn mực để theo dõi chính xác trình tự diễn biến các sự kiện trong hệ thống phân tán là gì?",
+      "question": "Cách tốt nhất để thiết lập thứ tự sự kiện tin cậy giữa các máy chủ trong hệ thống phân tán là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Thay thế toàn bộ camera và cảm biến bằng thiết bị analog thế hệ cũ",
+          "text": "Thêm một khoảng trễ đệm tĩnh trước khi ghi nhận bất kỳ nhãn thời gian nào để bù trừ độ lệch tối đa dự kiến",
           "correct": false,
-          "feedback": "Đây là bước lùi về công nghệ và không giải quyết được bài toán tích hợp hệ thống."
+          "feedback": "Một độ trễ đệm tùy tiện không giải quyết được vấn đề vì độ lệch đồng hồ biến thiên liên tục theo thời gian, đồng thời làm tăng độ trễ không cần thiết cho mọi hoạt động."
         },
         {
           "id": "fix-1",
-          "text": "Sử dụng Đồng Hồ Logic (Lamport Timestamps) hoặc bộ đếm thứ tự tăng dần đơn điệu (Monotonic Sequence Numbers) để phản ánh chính xác quan hệ nhân quả (Causality) giữa các sự kiện",
+          "text": "Cấu hình lại máy chủ NTP và bắt buộc tất cả đồng hồ máy chủ phải đồng bộ định kỳ mỗi 30 giây",
           "correct": false,
-          "feedback": "Chính xác! Đồng hồ logic Lamport không quan tâm đến giờ hiển thị trên tường là mấy giờ; nó đảm bảo rằng nếu sự kiện B xảy ra sau sự kiện A, số thứ tự logic của B bắt buộc phải lớn hơn A. Điều này khôi phục hoàn toàn tính chân lý trước tòa án."
+          "feedback": "Sửa NTP là cần thiết nhưng chưa đủ. Giữa các chu kỳ đồng bộ, đồng hồ vẫn có thể bị trôi dạt vài mili-giây. Bạn không bao giờ có thể dựa duy nhất vào đồng hồ vật lý để chứng minh quan hệ nhân quả pháp lý."
         },
         {
           "id": "fix-2",
-          "text": "Chạy lệnh ntpdate thủ công bằng tay mỗi sáng trên tất cả các máy chủ",
+          "text": "Sử dụng Đồng Hồ Logic (Logical Clocks như Lamport Timestamps hoặc Vector Clocks) để theo dõi quan hệ nhân quả của các sự kiện qua từng nút mạng",
           "correct": true,
-          "feedback": "Chạy thủ công không đảm bảo tính liên tục và giữa các lần chạy đồng hồ vẫn có thể bị trôi vài chục mili-giây, đủ để làm đảo lộn thứ tự sự kiện."
+          "feedback": "Chính xác! Đồng hồ logic không phụ thuộc vào thời gian vật lý của thế giới thực. Lamport Timestamp là một bộ đếm số nguyên tăng dần theo từng sự kiện và được đính kèm vào mỗi thông điệp trao đổi giữa các máy chủ. Nếu sự kiện A gây ra sự kiện B, nhãn thời gian logic của A chắc chắn nhỏ hơn B. Đây là giải pháp tiêu chuẩn để bảo toàn chuỗi quan hệ nhân quả độc lập với độ lệch đồng hồ phần cứng."
         },
         {
           "id": "fix-3",
-          "text": "Làm tròn tất cả các nhãn thời gian về phút gần nhất để che giấu phần mili-giây sai lệch",
+          "text": "Chỉ định một máy chủ thời gian tập trung duy nhất chịu trách nhiệm đóng dấu nhãn thời gian cho mọi sự kiện trong toàn hệ thống",
           "correct": false,
-          "feedback": "Làm tròn làm mất độ chi tiết của chứng cứ và khiến hàng loạt sự kiện khác nhau trông như diễn ra cùng một lúc."
+          "feedback": "Một máy chủ thời gian tập trung sẽ trở thành điểm lỗi đơn lẻ (SPOF) và nút thắt cổ chai hiệu năng — mọi sự kiện đều phải chờ hop mạng tới máy chủ này để lấy tem thời gian."
         }
       ]
     }

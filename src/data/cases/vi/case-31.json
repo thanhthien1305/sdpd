@@ -155,60 +155,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Hiện tượng xuất hiện thêm các dòng dữ liệu mới chui vào kết quả của một giao dịch đang mở được gọi là gì?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc con số thống kê tổng tội phạm không khớp với danh sách chi tiết các vụ án là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Lỗi tính toán sai số dấu phẩy động trong bộ xử lý CPU",
+          "text": "Hàm tính tổng COUNT(*) trong hệ quản trị cơ sở dữ liệu có lỗi tràn số nguyên",
           "correct": false,
-          "feedback": "Phép cộng số nguyên hoàn toàn chính xác; vấn đề là số lượng dòng dữ liệu đã bị thay đổi giữa hai lần đọc."
+          "feedback": "Phép tính COUNT(*) hoạt động hoàn hảo; vấn đề nằm ở mức độ cô lập của giao dịch (Transaction Isolation Level)."
         },
         {
           "id": "rc-2",
-          "text": "Hiện Tượng Đọc Ảo Ảnh (Phantom Read) ở mức cô lập Read Committed — mức cô lập này cho phép nhìn thấy các bản ghi mới được commit bởi các giao dịch khác chèn vào phạm vi truy vấn",
+          "text": "Hiện Tượng Đọc Bóng Ma (Phantom Read do Mức Cô Lập Read Committed) — trong khi giao dịch báo cáo đang chạy, các đồn cảnh sát khác đã chèn thêm vụ án mới vào cơ sở dữ liệu và được commit",
           "correct": true,
-          "feedback": "Chính xác! Ở mức cô lập Read Committed, mỗi câu lệnh SELECT đọc một bản snapshot mới của dữ liệu đã commit. Nếu có giao dịch khác INSERT thêm dòng mới và commit, câu SELECT thứ hai trong cùng giao dịch sẽ nhìn thấy những dòng 'bóng ma' này."
+          "feedback": "Chính xác! Báo cáo được tạo bởi hai câu truy vấn trong cùng một phiên: đầu tiên đếm tổng số (COUNT), sau đó lấy danh sách chi tiết (SELECT *). Vì cơ sở dữ liệu hoạt động ở mức cô lập READ COMMITTED, giữa lúc câu lệnh 1 vừa chạy xong và câu lệnh 2 bắt đầu, Đồn 4 đã INSERT và COMMIT 3 vụ án mới. Câu lệnh thứ hai nhìn thấy các bản ghi mới (Phantom Rows) này, khiến tổng danh sách chi tiết là 1.003 vụ trong khi con số tóm tắt ban đầu chỉ ghi nhận 1.000 vụ!"
         },
         {
           "id": "rc-3",
-          "text": "Hacker đã can thiệp vào máy chủ để chuyển tiền vào tài khoản riêng",
+          "text": "Các sĩ quan tại Đồn 4 đã cố tình gian lận số liệu để phá hoại báo cáo của thị trưởng",
           "correct": false,
-          "feedback": "Số tiền tăng lên là từ các vụ phạt thực tế hợp pháp vừa được cảnh sát nhập vào."
+          "feedback": "Các vụ án được chèn là tội phạm thật xảy ra trong thời gian thực, hoàn toàn hợp lệ."
         },
         {
           "id": "rc-4",
-          "text": "Mực máy in bị nhòe làm biến dạng con số trên trang giấy",
+          "text": "Bảng thống kê tội phạm bị lỗi hỏng bộ nhớ RAM trên máy chủ báo cáo",
           "correct": false,
-          "feedback": "Dữ liệu truy vấn trực tiếp từ cơ sở dữ liệu đã bị biến đổi số liệu."
+          "feedback": "Phần cứng và bộ nhớ hoàn toàn chính xác; kết quả sai lệch do dữ liệu bị thay đổi giữa hai câu truy vấn."
         }
       ]
     },
     "fix": {
-      "question": "Cần thiết lập mức độ cô lập giao dịch (Transaction Isolation Level) như thế nào để đảm bảo báo cáo kiểm toán luôn có cái nhìn đóng băng bất biến?",
+      "question": "Giải pháp tốt nhất để đảm bảo tính nhất quán tuyệt đối cho các báo cáo thống kê phức tạp là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Sử dụng máy tính bấm tay để cộng thủ công từng dòng",
+          "text": "Cấm tất cả các đồn cảnh sát không được ghi nhận tội phạm trong suốt 1 tiếng trước cuộc họp báo",
           "correct": false,
-          "feedback": "Cộng tay hàng trăm ngàn dòng dữ liệu là phi thực tế và dễ mắc sai sót con người."
+          "feedback": "Không thể tạm dừng công tác bảo vệ trật tự trị an xã hội chỉ để phục vụ cho việc xuất báo cáo."
         },
         {
           "id": "fix-1",
-          "text": "Nâng mức cô lập giao dịch lên Repeatable Read (hoặc Snapshot Isolation / Serializable) cho phiên kiểm toán — đảm bảo giao dịch luôn nhìn thấy cùng một bản snapshot dữ liệu cố định tại thời điểm bắt đầu giao dịch",
+          "text": "Nâng mức cô lập lên SERIALIZABLE cho toàn bộ tất cả các truy vấn trên toàn bộ hệ thống",
           "correct": false,
-          "feedback": "Chính xác! Với Repeatable Read (sử dụng MVCC trong Postgres/MySQL), toàn bộ giao dịch kiểm toán sẽ đọc từ một bản chụp trạng thái (Snapshot) duy nhất tại thời điểm bắt đầu. Dù các đồn có INSERT thêm hàng ngàn bản ghi, báo cáo kiểm toán vẫn hoàn toàn bất biến và chính xác 100%!"
+          "feedback": "Serializable là mức cô lập cao nhất nhưng cực kỳ nặng nề, gây xung đột khóa (lock contention) và làm giảm nghiêm trọng thông lượng của các thao tác ghi thông thường."
         },
         {
           "id": "fix-2",
-          "text": "Hạ mức cô lập xuống Read Uncommitted để đọc luôn cả dữ liệu chưa commit",
+          "text": "Khóa toàn bộ bảng cơ sở dữ liệu trong suốt thời gian xuất báo cáo của thị trưởng",
           "correct": false,
-          "feedback": "Hạ xuống Read Uncommitted sẽ gây ra thêm lỗi Đọc Bẩn (Dirty Read), làm số liệu sai lệch trầm trọng hơn."
+          "feedback": "Khóa bảng sẽ chặn đứng mọi hoạt động ghi nhận bắt giữ tội phạm của các đồn cảnh sát trong nhiều phút."
         },
         {
           "id": "fix-3",
-          "text": "Cấm tất cả các đồn cảnh sát không được bắt giữ tội phạm trong tuần lễ kiểm toán",
+          "text": "Sử dụng Mức Cô Lập REPEATABLE READ hoặc SNAPSHOT ISOLATION (dựa trên MVCC) cho giao dịch xuất báo cáo — đảm bảo mọi câu truy vấn trong giao dịch đều đọc từ một ảnh chụp dữ liệu nhất quán tại cùng một thời điểm",
           "correct": true,
-          "feedback": "Không thể dừng công tác trị an xã hội chỉ để phục vụ việc làm báo cáo kế toán."
+          "feedback": "Chính xác! Với REPEATABLE READ hoặc SNAPSHOT ISOLATION (sử dụng cơ chế Đa phiên bản MVCC), khi giao dịch xuất báo cáo bắt đầu, nó sẽ nhận một \"ảnh chụp\" (snapshot) nhất quán của cơ sở dữ liệu tại thời điểm đó. Bất kỳ thao tác chèn (INSERT) hay sửa đổi nào của các đồn khác diễn ra sau thời điểm bắt đầu giao dịch sẽ hoàn toàn vô hình đối với báo cáo này. Cả câu lệnh COUNT và SELECT chi tiết đều nhìn thấy chính xác cùng 1.000 bản ghi ban đầu!"
         }
       ]
     }

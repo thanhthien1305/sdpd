@@ -151,60 +151,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao 1.200 cuộc gọi khẩn cấp lại biến mất hoàn toàn sau khi máy chủ broker khởi động lại?",
+      "question": "Nguyên nhân gốc rễ khiến 23 tin nhắn điều động khẩn cấp bị mất tích hoàn toàn là gì?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Hàng đợi và thông điệp được cấu hình ở chế độ tạm thời trong bộ nhớ (In-Memory / Non-durable) — không ghi xuống đĩa cứng (Persistent Storage) nên bị xóa sạch khi mất nguồn",
+          "text": "Hàng đợi tin nhắn hoạt động ở chế độ Chỉ Lưu Trong Bộ Nhớ RAM (In-Memory Only) mà không có Tính Bền Vững (Persistence) ra đĩa cứng — khi máy chủ hàng đợi sập, toàn bộ tin nhắn chưa xử lý bốc hơi",
           "correct": true,
-          "feedback": "Chính xác! Để đổi lấy tốc độ cao, hệ thống đã bỏ qua việc ghi đĩa. Khi máy tính mất điện, dữ liệu trong RAM biến mất 100%. Với các hệ thống trọng yếu như 911, thông điệp bắt buộc phải được lưu bền vững (Durable)."
+          "feedback": "Chính xác! Máy chủ hàng đợi tin nhắn (Message Queue) được cấu hình chế độ tạm thời (transient / in-memory) để tối đa hóa tốc độ. Khi tiến trình hàng đợi bị sập hoặc khởi động lại, 23 lệnh điều phối khẩn cấp đang nằm chờ trong bộ nhớ RAM đã biến mất hoàn toàn mà không để lại dấu vết."
         },
         {
           "id": "rc-3",
-          "text": "Dung lượng ổ cứng của máy chủ broker bị đầy 100%",
+          "text": "Các sĩ quan trực ban đã xóa nhầm 23 tin nhắn khỏi hệ thống điều phối trung tâm",
           "correct": false,
-          "feedback": "Ổ cứng còn trống rất nhiều vì broker căn bản không hề ghi thông điệp xuống đĩa."
+          "feedback": "Nhật ký cho thấy các tin nhắn đã được hệ thống tiếp nhận và gửi vào hàng đợi thành công lúc 19:42."
         },
         {
           "id": "rc-1",
-          "text": "Các nhân viên tổng đài đã vô tình bấm nhầm nút 'Xóa toàn bộ cuộc gọi'",
+          "text": "Các tin nhắn gửi đến có định dạng JSON không hợp lệ và bị bộ phân tích cú pháp từ chối",
           "correct": false,
-          "feedback": "Không có thao tác xóa thủ công từ con người; nhật ký hệ thống ghi nhận broker bị sập nguồn đột ngột."
+          "feedback": "Tất cả các tin nhắn đều hợp lệ và đã được hàng đợi chấp nhận vào RAM trước khi tiến trình bị sập."
         },
         {
           "id": "rc-4",
-          "text": "Mạng viễn thông thành phố đã chặn các cuộc gọi đến tổng đài",
+          "text": "Xe tuần tra bị mất sóng bộ đàm trong khi đang di chuyển qua khu vực đường hầm",
           "correct": false,
-          "feedback": "Các cuộc gọi đã vào được tổng đài và đã được đẩy vào hàng đợi thành công."
+          "feedback": "Xe tuần tra vẫn nhận các lệnh điều động khác bình thường. Sự cố xảy ra tại máy chủ môi giới tin nhắn (broker)."
         }
       ]
     },
     "fix": {
-      "question": "Cần cấu hình hàng đợi thông điệp như thế nào để đảm bảo dữ liệu sống sót qua mọi sự cố sập nguồn?",
+      "question": "Hạ tầng hàng đợi tin nhắn cần được cấu hình như thế nào để đảm bảo không bao giờ mất thông điệp?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Chuyển toàn bộ thông điệp khẩn cấp gửi qua ứng dụng mạng xã hội",
+          "text": "Tăng dung lượng RAM máy chủ lên gấp 4 lần để hàng đợi không bao giờ bị sập do thiếu bộ nhớ",
           "correct": false,
-          "feedback": "Mạng xã hội không đảm bảo tính bảo mật và cam kết độ sẵn sàng cho các tình huống cứu nạn khẩn cấp."
+          "feedback": "Tăng RAM không giải quyết được các sự cố mất điện, cập nhật hệ điều hành hoặc lỗi sập tiến trình phần mềm."
         },
         {
           "id": "fix-1",
-          "text": "Cấu hình Hàng Đợi Bền Vững (Durable Queue) và bật chế độ Thông Điệp Bền Vững (Persistent Messages) ghi xuống đĩa cứng (WAL), kết hợp cơ chế Xác Nhận Từ Bên Gửi (Publisher Confirms)",
+          "text": "Cấu hình Hàng Đợi Bền Vững (Durable Queues) và Thông Điệp Bền Vững (Persistent Messages ghi xuống đĩa cứng), kết hợp Xác Nhận Tin Nhắn Từ Phía Người Dùng (Consumer Acknowledgements / ACK)",
           "correct": true,
-          "feedback": "Chính xác! Khi cấu hình Durable + Persistent, broker sẽ ghi thông điệp xuống đĩa cứng an toàn trước khi báo thành công cho producer. Khi broker khởi động lại, toàn bộ 1.200 thông điệp sẽ tự động được nạp lại nguyên vẹn từ đĩa."
+          "feedback": "Chính xác! Bằng cách kích hoạt chế độ lưu trữ bền vững (Write-Ahead Log / fsync ra đĩa cứng) trên hàng đợi và bắt buộc Consumer chỉ gửi ACK sau khi đã hoàn thành xử lý nhiệm vụ, nếu máy chủ hàng đợi bị sập và khởi động lại, nó sẽ đọc lại toàn bộ thông điệp từ đĩa cứng và phân phối lại cho các xe tuần tra. Không một tin nhắn nào bị bỏ sót."
         },
         {
           "id": "fix-2",
-          "text": "Mua thêm bộ lưu điện UPS lớn hơn để máy chủ không bao giờ bị mất điện",
+          "text": "Yêu cầu tổng đài viên gọi điện thoại trực tiếp cho từng xe tuần tra thay vì dùng phần mềm",
           "correct": false,
-          "feedback": "UPS không bảo vệ được trước lỗi phần mềm, lỗi kernel hệ điều hành hay hỏng linh kiện máy tính."
+          "feedback": "Gọi điện thoại thủ công cho hàng trăm xe tuần tra trong giờ cao điểm là điều bất khả thi và làm chậm trễ nghiêm trọng việc cứu nạn."
         },
         {
           "id": "fix-4",
-          "text": "Tăng tốc độ xử lý của các worker lên gấp 10 lần bằng cách ép xung CPU",
+          "text": "Chuyển sang giao thức UDP để truyền tin nhắn nhanh hơn tới các xe tuần tra",
           "correct": false,
-          "feedback": "Ép xung làm máy chủ kém ổn định và dễ gây sập nguồn thường xuyên hơn."
+          "feedback": "UDP là giao thức không đảm bảo phân phối tin cậy và chấp nhận rớt gói tin — điều này sẽ càng làm mất tin nhắn nhiều hơn."
         }
       ]
     }

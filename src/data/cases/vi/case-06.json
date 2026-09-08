@@ -164,60 +164,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao lệnh theo dõi ngầm quan trọng của Đồn Bắc lại bị âm thầm xóa sổ mà không ai hay biết?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc phân công điều tra vụ án bị xung đột mâu thuẫn là gì?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Quyền truy cập của sĩ quan Ramirez đã hết hạn ngay trước khi nhấn nút lưu",
+          "text": "Thanh tra Reyes và Trung sĩ Okonkwo lẽ ra phải gọi điện thoại trao đổi trước khi phân công vụ án để tránh xung đột ghi cơ sở dữ liệu",
           "correct": false,
-          "feedback": "Không phải lỗi phân quyền; cả hai thao tác cập nhật đều hợp lệ và được ghi nhận thành công trên máy chủ cục bộ mỗi bên."
+          "feedback": "Quy trình phối hợp bằng miệng giữa con người không phải là giải pháp kỹ thuật tin cậy ở quy mô lớn. Hệ thống phân tán phải có trách nhiệm phát hiện và xử lý xung đột ghi đồng thời."
         },
         {
           "id": "rc-1",
-          "text": "Đường truyền cáp quang giữa hai đồn bị mất gói tin khiến bản ghi của Đồn Bắc không gửi đi được",
+          "text": "Độ trễ nhân bản 45 giây giữa hai máy chủ Leader là quá lớn và cần được giảm thiểu để tránh xung đột",
           "correct": false,
-          "feedback": "Bản ghi đã được gửi đi thành công; vấn đề xảy ra tại bước giải quyết xung đột khi hai bên gặp nhau."
+          "feedback": "Giảm độ trễ nhân bản giúp giảm tần suất xảy ra xung đột, nhưng trong mô hình Multi-Leader, bất kỳ độ trễ nào lớn hơn 0 đều có thể phát sinh xung đột nếu hai thao tác ghi diễn ra trong cùng khoảng thời gian đó."
         },
         {
           "id": "rc-4",
-          "text": "Dữ liệu trạng thái hồ sơ bị tràn bộ đệm chuỗi ký tự trong cơ sở dữ liệu",
+          "text": "Chiến lược giải quyết xung đột Last-Write-Wins (LWW) có lỗi phần mềm trong logic so sánh nhãn thời gian",
           "correct": false,
-          "feedback": "Trường dữ liệu là chuỗi ngắn hoàn toàn hợp lệ."
+          "feedback": "Thuật toán LWW hoạt động hoàn toàn đúng theo thiết kế của nó: nó chọn bản ghi có nhãn thời gian lớn hơn. Vấn đề là bản thân chiến lược LWW là một chiến lược gây mất mát dữ liệu (lossy) âm thầm mà không hề thông báo cho người dùng."
         },
         {
           "id": "rc-2",
-          "text": "Chiến lược Last-Write-Wins (LWW) dựa trên đồng hồ vật lý bị lệch đã âm thầm vứt bỏ một trong hai bản ghi cập nhật đồng thời mà không hề hay biết về ngữ cảnh nghiệp vụ",
+          "text": "Mô hình nhân bản Multi-Leader cho phép cả hai cơ sở dữ liệu độc lập chấp nhận thao tác ghi, khiến các lệnh ghi đồng thời vào cùng một bản ghi tạo ra xung đột cần phải được xử lý sau",
           "correct": true,
-          "feedback": "Chính xác! Trong mô hình Multi-Leader, LWW giải quyết xung đột bằng cách mù quáng chọn bản ghi có timestamp cao hơn. Do đồng hồ Đồn Nam chạy nhanh hơn một chút, nó đã đè bẹp và xóa sạch lệnh của Đồn Bắc mà không cảnh báo cho con người."
+          "feedback": "Chính xác! Trong kiến trúc Multi-Leader, mỗi Leader nhận lệnh ghi độc lập và gửi bản sao bất đồng bộ sang các Leader khác. Khi hai đồn cùng sửa một vụ án trước khi dữ liệu kịp đồng bộ, xung đột ghi (write conflict) tất yếu xảy ra. Chiến lược Last-Write-Wins đã âm thầm xóa mất phân công của Thanh tra Reyes mà không ai hay biết — một hậu quả cực kỳ nguy hiểm cho dữ liệu pháp lý."
         }
       ]
     },
     "fix": {
-      "question": "Phương án kiến trúc nào là tốt nhất để xử lý xung đột trong các trường hợp nghiệp vụ nhạy cảm như hồ sơ tội phạm?",
+      "question": "Phương pháp tốt nhất để xử lý xung đột ghi trong hệ thống Multi-Leader này là gì?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Tiếp tục dùng LWW nhưng mua đồng hồ nguyên tử đắt tiền lắp vào từng máy chủ",
+          "text": "Triển khai cơ chế giải quyết xung đột ở tầng ứng dụng (Application-level Conflict Resolution) — phát hiện xung đột và hiển thị cho người có thẩm quyền phê duyệt thủ công hoặc dùng CRDT",
           "correct": true,
-          "feedback": "Đồng hồ nguyên tử (như Google Spanner TrueTime) giảm thiểu sai số nhưng cực kỳ tốn kém và vẫn không giải quyết được xung đột về mặt ngữ nghĩa nghiệp vụ khi hai người cùng ra lệnh trái ngược nhau trong cùng một tích tắc."
+          "feedback": "Chính xác! Đối với dữ liệu nghiệp vụ quan trọng như phân công phá án, giải pháp đúng đắn là phát hiện xung đột và giữ lại cả hai phiên bản, sau đó thông báo cho người giám sát xem xét và quyết định thay vì âm thầm loại bỏ một bên. Đây là nguyên lý hoạt động của các cấu trúc dữ liệu CRDT hoặc hàm hợp nhất (merge function) tùy chỉnh."
         },
         {
           "id": "fix-4",
-          "text": "Gộp hai dòng trạng thái thành một chuỗi văn bản dài ghép chung với nhau",
+          "text": "Bổ sung cơ chế khóa phân tán toàn cầu (Distributed Global Lock) để mỗi thời điểm chỉ duy nhất một đồn được phép sửa hồ sơ vụ án",
           "correct": false,
-          "feedback": "Ghép chuỗi 'THEO DÕI NGẦM + BẮT GIỮ NGAY' sẽ chỉ làm sĩ quan ngoài hiện trường bối rối gấp bội."
+          "feedback": "Khóa phân tán qua mạng giữa các trung tâm dữ liệu sẽ phá hỏng hoàn toàn lợi ích của Multi-Leader (vốn nhằm tăng tốc độ ghi cục bộ và tính sẵn sàng khi đứt mạng)."
         },
         {
           "id": "fix-1",
-          "text": "Sử dụng Vector Clocks để phát hiện sửa đổi đồng thời và đưa xung đột ra giao diện người dùng giải quyết (hoặc định tuyến các thao tác ghi của cùng một nghi phạm về duy nhất một Leader xác định)",
+          "text": "Chuyển toàn bộ hệ thống về mô hình Single-Leader duy nhất cho việc phân công vụ án",
           "correct": false,
-          "feedback": "Chính xác! Vector Clocks cho phép hệ thống nhận biết chính xác hai thao tác ghi đã diễn ra đồng thời mà không có quan hệ nhân quả trước sau. Hệ thống sẽ gắn cờ xung đột để điều tra viên xử lý, hoặc tốt hơn nữa là định tuyến toàn bộ tác vụ của cùng một nghi phạm về cùng một Leader."
+          "feedback": "Chuyển về Single-Leader loại bỏ xung đột nhưng làm mất đi tính sẵn sàng cao mà Multi-Leader mang lại. Nếu đường truyền mạng tới Leader chính gặp sự cố, các đồn khác sẽ không thể giao nhiệm vụ phá án."
         },
         {
           "id": "fix-3",
-          "text": "Cấm tất cả các đồn cập nhật hồ sơ nghi phạm vào ban ngày",
+          "text": "Tiếp tục dùng Last-Write-Wins nhưng đồng bộ đồng hồ máy chủ qua NTP chính xác hơn",
           "correct": false,
-          "feedback": "Nghiệp vụ an ninh đòi hỏi phản ứng thời gian thực từng giây, không thể trì hoãn việc cập nhật."
+          "feedback": "Đồng hồ chính xác hơn chỉ giúp việc chọn bản ghi có nhãn thời gian sau chuẩn hơn, nhưng bản chất của LWW vẫn là âm thầm vứt bỏ một thao tác ghi của sĩ quan mà không có thông báo."
         }
       ]
     }

@@ -149,60 +149,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Nguyên nhân cốt lõi khiến hệ thống phân tích không thể đáp ứng nhu cầu tăng trưởng là gì?",
+      "question": "Nguyên nhân gốc rễ của sự cố hệ thống phân tích dữ liệu tội phạm bị chậm nghiêm trọng là gì?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Phần mềm phân tích dữ liệu bị lỗi cú pháp trong vòng lặp tính toán",
+          "text": "Dung lượng lưu trữ đĩa trên máy chủ phân tích đã đạt mức 98% khiến hệ điều hành bị nghẽn I/O",
           "correct": false,
-          "feedback": "Thuật toán hoàn toàn hợp lệ, chỉ là khối lượng dữ liệu phân tích đã vượt quá sức chứa của một máy."
+          "feedback": "Đĩa cứng vẫn còn trống nhiều. Nút thắt cổ chai là CPU và RAM liên tục chạm ngưỡng 100% trong quá trình xử lý tính toán."
         },
         {
           "id": "rc-1",
-          "text": "Bộ vi xử lý của máy chủ bị tích bụi làm giảm hiệu suất tản nhiệt",
+          "text": "Hệ điều hành của máy chủ gặp lỗi rò rỉ bộ nhớ (Memory Leak) làm cạn kiệt RAM theo thời gian",
           "correct": false,
-          "feedback": "Vấn đề không phải tản nhiệt mà là giới hạn vật lý của kiến trúc máy chủ đơn lẻ."
+          "feedback": "Bộ nhớ bị chiếm dụng hoàn toàn bởi các tiến trình tính toán phân tích và tập dữ liệu lớn hợp lệ, không phải do memory leak."
         },
         {
           "id": "rc-2",
-          "text": "Phụ thuộc vào chiến lược mở rộng theo chiều dọc (Vertical Scaling / Scale Up) — vốn luôn có trần giới hạn phần cứng và chi phí tăng phi mã",
+          "text": "Hệ thống đã chạm Giới Hạn Mở Rộng Theo Chiều Dọc (Vertical Limit) — một máy chủ đơn lẻ dù mạnh nhất cũng không thể xử lý khối lượng dữ liệu phân tích đang tăng trưởng theo cấp số nhân",
           "correct": true,
-          "feedback": "Chính xác! Scale Up chỉ giúp trì hoãn vấn đề. Đến một ngưỡng nhất định, bạn không thể mua được linh kiện mạnh hơn, và chiếc máy duy nhất đó sẽ trở thành nút thắt cổ chai không thể vượt qua."
+          "feedback": "Chính xác! Sở cảnh sát đã liên tục mở rộng theo chiều dọc (Scale Up) bằng cách nâng cấp CPU và RAM lớn hơn trên một máy chủ duy nhất. Nhưng khối lượng dữ liệu tội phạm và các truy vấn phân tích phức tạp đã vượt quá giới hạn phần cứng vật lý lớn nhất có thể mua được trên thị trường. Đây là trần giới hạn của Scale Up."
         },
         {
           "id": "rc-3",
-          "text": "Hệ điều hành Linux bị giới hạn không cho phép chạy quá 100 tiến trình",
+          "text": "Các câu truy vấn SQL chạy bảng điều khiển phân tích được tối ưu hóa quá kém và thiếu chỉ mục",
           "correct": false,
-          "feedback": "Linux hỗ trợ hàng chục ngàn tiến trình đồng thời; giới hạn ở đây là tài nguyên tính toán thực tế."
+          "feedback": "Dù có tối ưu hóa câu lệnh thì khi quy mô dữ liệu đạt tới hàng chục terabyte, một máy chủ đơn lẻ vẫn không thể vừa chạy xử lý hàng loạt vừa phục vụ truy vấn thời gian thực."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp kiến trúc dài hạn bền vững để hệ thống có thể mở rộng không giới hạn là gì?",
+      "question": "Giải pháp tốt nhất để mở rộng hệ thống phân tích tội phạm bền vững trong tương lai là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Tắt bớt các thuật toán phân tích và chỉ dự báo tội phạm dựa trên linh cảm",
+          "text": "Cắt giảm bớt khối lượng dữ liệu tội phạm cũ được lưu trữ để giảm gánh nặng cho máy chủ",
           "correct": false,
-          "feedback": "Phương pháp cảm tính không đáp ứng tiêu chuẩn khoa học hình sự hiện đại."
+          "feedback": "Xóa dữ liệu lịch sử phá hỏng mục đích cốt lõi của phòng phân tích điều tra (vốn cần dữ liệu nhiều năm để phát hiện quy luật phạm tội)."
         },
         {
           "id": "fix-2",
-          "text": "Chờ đợi 5 năm nữa để các hãng chip sản xuất ra loại CPU mạnh hơn",
+          "text": "Chờ đợi thế hệ vi xử lý và phần cứng máy chủ tiếp theo ra mắt với nhiều lõi CPU và RAM khủng hơn",
           "correct": false,
-          "feedback": "Sở cảnh sát không thể dừng công tác phòng chống tội phạm để chờ đợi tiến trình công nghệ tương lai."
+          "feedback": "Chờ phần cứng mới chỉ trì hoãn vấn đề tạm thời. Dữ liệu sẽ lại nhanh chóng vượt qua giới hạn của thế hệ phần cứng đó."
         },
         {
           "id": "fix-1",
-          "text": "Tái cấu trúc hệ thống sang mô hình Mở Rộng Theo Chiều Ngang (Horizontal Scaling / Scale Out) — chia nhỏ tác vụ để chạy song song trên cụm nhiều máy chủ thông thường (Commodity Hardware)",
+          "text": "Chuyển đổi sang kiến trúc Mở Rộng Theo Chiều Ngang (Horizontal Scaling / Scale Out) — phân tán tải xử lý qua nhiều máy chủ phân tích phía sau bộ cân bằng tải hoặc cụm điện toán phân tán",
           "correct": true,
-          "feedback": "Chính xác! Mở rộng ngang cho phép bạn bổ sung thêm 5, 10 hay 100 máy chủ bất kỳ lúc nào để tăng sức mạnh tính toán mà không bị giới hạn bởi trần phần cứng của một máy đơn lẻ."
+          "feedback": "Chính xác! Mở rộng theo chiều ngang (Scale Out) cho phép bạn bổ sung thêm nhiều máy chủ thương mại tiêu chuẩn vào cụm khi nhu cầu tăng lên. Các tác vụ xử lý lô (batch jobs) và truy vấn thời gian thực có thể phân tán trên các nút tính toán riêng biệt (như cụm Spark hoặc hệ thống OLAP phân tán). Khác với Scale Up, Scale Out không có trần giới hạn phần cứng."
         },
         {
           "id": "fix-4",
-          "text": "Chuyển toàn bộ dữ liệu phân tích sang phần mềm bảng tính Excel",
+          "text": "Viết lại toàn bộ hệ thống phân tích bằng một ngôn ngữ lập trình cấp thấp hơn như C++ để tối ưu hiệu năng",
           "correct": false,
-          "feedback": "Excel có giới hạn 1 triệu dòng và không thể xử lý khối lượng dữ liệu lớn phân tán."
+          "feedback": "Kể cả phần mềm chạy nhanh hơn thì một máy chủ đơn lẻ cũng chỉ có giới hạn 100% tài nguyên nhất định. Vấn đề cốt tử nằm ở kiến trúc máy chủ đơn lẻ."
         }
       ]
     }

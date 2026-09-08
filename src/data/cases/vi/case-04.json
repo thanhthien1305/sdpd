@@ -193,60 +193,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Cơ chế khiếm khuyết nào đã cho phép hai máy chủ cùng đồng thời nhận mình là Leader?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc hồ sơ nghi phạm bị xung đột dữ liệu trái ngược nhau là gì?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Một nhân viên IT đã vô tình chạy lệnh gán quyền Leader thủ công trên cả hai máy chủ",
+          "text": "Thời gian chờ (timeout) chuyển đổi dự phòng tự động được cấu hình quá thấp, gây ra việc thăng cấp sớm",
           "correct": false,
-          "feedback": "Nhật ký hệ thống cho thấy quy trình thăng cấp diễn ra hoàn toàn tự động theo kịch bản failover lỗi thời."
+          "feedback": "Thời gian timeout ngắn có thể làm thăng cấp nhanh, nhưng nguyên nhân sâu xa là cả hai phía đều không hề biết đến sự tồn tại của phía bên kia do mạng bị đứt, và không bên nào kiểm tra túc số đa số (quorum)."
         },
         {
           "id": "rc-3",
-          "text": "Thời gian timeout kiểm tra nhịp tim (heartbeat) được đặt quá dài khiến hai bên không phát hiện ra nhau",
+          "text": "Một sĩ quan tại Đồn Đông đã thực hiện cập nhật trái phép vào hồ sơ nghi phạm mà không có quyền hạn",
           "correct": false,
-          "feedback": "Ngược lại, nếu timeout quá ngắn hay dài thì khi mạng đứt hoàn toàn, hai bên vẫn sẽ mất kết nối như nhau."
+          "feedback": "Cả hai sĩ quan đều là người dùng hợp lệ và có thẩm quyền. Hệ thống đã chấp nhận cả hai thao tác ghi một cách độc lập trên hai máy chủ cơ sở dữ liệu khác nhau."
         },
         {
           "id": "rc-1",
-          "text": "Tấn công từ chối dịch vụ (DDoS) từ tội phạm bên ngoài làm giả mạo địa chỉ IP của Leader",
+          "text": "Lỗi phần mềm bên trong một trong các nút cơ sở dữ liệu làm hỏng dữ liệu trạng thái của nghi phạm",
           "correct": false,
-          "feedback": "Không có dấu vết tấn công bên ngoài; sự cố thuần túy là đứt đường truyền vật lý dẫn đến phân vùng mạng nội bộ."
+          "feedback": "Cả hai máy chủ đều hoạt động hoàn hảo theo logic của chúng. Không có lỗi hỏng bộ nhớ hay hỏng phần mềm; vấn đề nằm ở kiến trúc điều phối mạng phân tán."
         },
         {
           "id": "rc-2",
-          "text": "Thiếu cơ chế Quorum Đa Số — khi mạng bị chia đôi 50/50, cả hai phía đều tự cho mình quyền tiếp nhận ghi mà không cần sự xác nhận của đa số (> 50%) các node",
+          "text": "Sự cố phân vùng mạng gây ra hiện tượng Phân Não (Split-Brain) — cả hai trung tâm dữ liệu đều tự thăng cấp máy chủ của mình làm Leader và chấp nhận các lệnh ghi mâu thuẫn",
           "correct": true,
-          "feedback": "Chính xác! Nếu không có nguyên tắc Quorum đa số (cần N/2 + 1 node đồng thuận), khi mạng bị cắt đôi, mỗi nửa sẽ tự hành động như một hệ thống hoàn chỉnh, gây ra thảm họa Não Đôi (Split-Brain)."
+          "feedback": "Chính xác! Sự cố đứt cáp quang giữa Đồn Tây và Đồn Đông đã chia đôi hệ thống mạng. Vì thiếu cơ chế đồng thuận kiểm tra túc số (quorum), Đồn Đông tưởng Đồn Tây đã chết nên tự thăng cấp bản sao của mình lên làm Leader, trong khi Đồn Tây vẫn đang là Leader. Cả hai Leader đều độc lập chấp nhận các lệnh ghi trái ngược nhau cho cùng một nghi phạm!"
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn mực trong thiết kế hệ thống phân tán để loại bỏ hoàn toàn nguy cơ Não Đôi là gì?",
+      "question": "Phương pháp tốt nhất để ngăn chặn kịch bản Phân Não (Split-Brain) trong hệ thống phân tán là gì?",
       "options": [
         {
           "id": "fix-1",
-          "text": "Triển khai số lượng node lẻ (ít nhất 3 node trở lên) và áp dụng thuật toán đồng thuận dựa trên Quorum — chỉ phân vùng nào nắm giữ đa số tuyệt đối (> 50%) số node mới được phép ghi",
+          "text": "Triển khai giao thức đồng thuận dựa trên Túc Số Đa Số (Quorum-based Consensus) — yêu cầu phải có sự đồng thuận của đa số các nút (ví dụ 3 trên 5 nút) để bầu Leader hoặc chấp nhận lệnh ghi",
           "correct": true,
-          "feedback": "Chính xác! Với 3 node (hoặc thêm 1 node trọng tài Witness/Arbiter), khi mạng đứt đôi thành nhóm 2 node và nhóm 1 node: nhóm 2 node (chiếm 66% > 50%) sẽ được ghi, còn nhóm 1 node tự động chuyển sang chế độ chỉ đọc hoặc dừng lại. Tuyệt đối không thể xảy ra Não Đôi!"
+          "feedback": "Chính xác! Bằng cách triển khai thuật toán đồng thuận (như Raft hoặc Paxos) với số nút lẻ (tối thiểu 3 nút phân bổ hợp lý), khi mạng bị chia đôi, chỉ có phân vùng nào nắm giữ đa số nút (> 50%) mới được phép bầu Leader và ghi dữ liệu. Phân vùng thiểu số sẽ từ chối ghi, triệt tiêu hoàn toàn nguy cơ xuất hiện 2 Leader cùng lúc."
         },
         {
           "id": "fix-2",
-          "text": "Lắp đặt đường cáp quang thứ hai chạy song song với đường cáp quang thứ nhất",
+          "text": "Bổ sung thêm một đường truyền mạng dự phòng giữa hai trung tâm dữ liệu để chống đứt kết nối",
           "correct": false,
-          "feedback": "Thêm đường truyền dự phòng là tốt cho hạ tầng vật lý, nhưng không thể thay thế cho thuật toán phần mềm. Nếu thiên tai hay sự cố làm đứt cả hai tuyến cáp, hiện tượng não đôi sẽ lại tái diễn."
+          "feedback": "Dự phòng mạng vật lý giúp giảm thiểu sự cố đứt cáp, nhưng không thể ngăn chặn 100% rủi ro phân vùng mạng (ví dụ lỗi switch, cấu hình sai tường lửa). Bạn phải bảo vệ hệ thống ở tầng logic thuật toán."
         },
         {
           "id": "fix-3",
-          "text": "Luôn ưu tiên cụm phía Đông thắng trong mọi trường hợp bằng cách gán cứng ID trong mã nguồn",
+          "text": "Chỉ định vĩnh viễn một cơ sở dữ liệu làm Leader chính và không bao giờ cho phép tự động thăng cấp nếu không có can thiệp thủ công",
           "correct": false,
-          "feedback": "Nếu cụm phía Đông thực sự bị nổ tung hoặc mất điện hoàn toàn, cả thành phố sẽ bị tê liệt vì cụm phía Tây không bao giờ được phép tiếp quản."
+          "feedback": "Cách này ngăn được split-brain nhưng triệt tiêu hoàn toàn tính năng tự động phục hồi khi có sự cố thật sự (High Availability), khiến toàn bộ hệ thống bị tê liệt khi Leader chính gặp lỗi."
         },
         {
           "id": "fix-4",
-          "text": "Tắt toàn bộ hệ thống cơ sở dữ liệu tự động và chuyển sang ghi chép hồ sơ bằng sổ tay khi mất mạng",
+          "text": "Sử dụng nhãn thời gian đồng hồ thực (Wall-clock timestamps) để tự động ghi đè bản ghi mới hơn khi mạng kết nối lại",
           "correct": false,
-          "feedback": "Không thể quản lý an ninh của một đô thị hiện đại bằng ghi chép sổ tay thủ công."
+          "feedback": "Chiến lược Last-Write-Wins (LWW) dựa trên đồng hồ vật lý sẽ âm thầm xóa bỏ một trong hai lệnh ghi quan trọng và dễ bị sai lệch do độ lệch đồng hồ máy chủ (clock drift)."
         }
       ]
     }

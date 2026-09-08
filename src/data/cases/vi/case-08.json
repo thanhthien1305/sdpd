@@ -178,60 +178,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Hiện tượng một node gửi dữ liệu sai lệch và mâu thuẫn cho các đối tác khác nhau được gọi là gì trong khoa học máy tính?",
+      "question": "Nút 3 đang biểu hiện dạng lỗi phân tán nào?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Lỗi phần mềm thông thường do tràn bộ nhớ đệm ngăn xếp (Stack Overflow)",
+          "text": "Lỗi sập nguồn (Crash fault) — Nút 3 đã dừng xử lý hoàn toàn các yêu cầu gửi tới",
           "correct": false,
-          "feedback": "Không đúng; đây là hành vi gửi thông điệp mâu thuẫn có chủ đích hoặc do suy thoái dữ liệu tùy ý."
+          "feedback": "Nút 3 không hề bị chết — nó vẫn đang hoạt động và gửi các phản hồi, nhưng các phản hồi đó lại mâu thuẫn lẫn nhau đối với các nút khác nhau."
         },
         {
           "id": "rc-3",
-          "text": "Đứt cáp mạng giữa Node 3 và Viện Kiểm Sát",
+          "text": "Lỗi phân vùng mạng — một số thông điệp từ Nút 3 gửi tới các nút khác bị rớt gói tin trên đường truyền",
           "correct": false,
-          "feedback": "Mạng vẫn truyền tin bình thường; vấn đề là nội dung thông tin được gửi đi bị mâu thuẫn có chủ đích."
+          "feedback": "Hạ tầng mạng truyền tải 100% các gói tin bình thường. Chính Nút 3 đã chủ động tạo ra hai nội dung phân tích khác nhau và gửi đi."
         },
         {
           "id": "rc-4",
-          "text": "Mẫu ADN đưa vào bị nhiễm bẩn tại hiện trường",
+          "text": "Lỗi thuật toán phần mềm bên trong thuật toán so khớp vân tay của Nút 3 tạo ra kết quả ngẫu nhiên",
           "correct": false,
-          "feedback": "Đây là sự cố ở tầng phần cứng/mạng phân tán, không phải lỗi sinh học."
+          "feedback": "Dữ liệu cho thấy Nút 3 cố tình gửi kết quả \"TRÙNG KHỚP\" cho Nút 1 nhưng lại gửi kết quả \"KHÔNG TRÙNG KHỚP\" cho Nút 2. Đây là hành vi phản trắc có chủ đích hoặc do bị xâm nhập."
         },
         {
           "id": "rc-2",
-          "text": "Lỗi Byzantine (Byzantine Fault) — node không đơn thuần ngừng chạy mà hành xử bất thường, đưa ra thông tin dối trá cho các thành viên khác trong mạng",
+          "text": "Lỗi Byzantine (Byzantine Fault) — Nút 3 đã bị xâm nhập hoặc có hành vi gian lận, gửi các thông tin mâu thuẫn trái ngược nhau cho các nút khác trong mạng",
           "correct": true,
-          "feedback": "Chính xác! Lỗi Byzantine là dạng lỗi hiểm độc nhất trong hệ thống phân tán. Nó mô tả các node vừa nói dối, vừa mâu thuẫn, đòi hỏi các thuật toán đồng thuận cấp cao hơn nhiều so với lỗi sập thông thường."
+          "feedback": "Chính xác! Lỗi Byzantine là dạng lỗi nghiêm trọng nhất trong hệ thống phân tán: một nút không chỉ đơn giản là sập, mà nó có hành vi lừa dối, gửi dữ liệu sai lệch hoặc mâu thuẫn cho các thành viên khác để phá hoại sự đồng thuận. Để chống lại lỗi này, hệ thống cần các thuật toán chịu lỗi Byzantine (BFT)."
         }
       ]
     },
     "fix": {
-      "question": "Cần nâng cấp hệ thống như thế nào để đạt được đồng thuận chính xác ngay cả khi có node bị lỗi Byzantine?",
+      "question": "Mạng lưới giám định pháp y cần được thiết kế như thế nào để chống chịu được lỗi Byzantine?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Giảm bớt số lượng node xuống chỉ còn 2 node để đỡ cãi nhau",
+          "text": "Sử dụng cơ chế biểu quyết đa số đơn giản (> 50%) — chấp nhận kết quả nào nhận được nhiều hơn một nửa số phiếu",
           "correct": false,
-          "feedback": "Giảm xuống 2 node sẽ khiến hệ thống không thể hoạt động nếu 1 máy hỏng hoặc bất đồng quan điểm (tỷ lệ 1 vs 1)."
+          "feedback": "Bỏ phiếu đa số thông thường (Crash Fault Tolerant) chỉ hoạt động khi các nút trung thực và chỉ có nguy cơ bị sập. Khi có nút phản trắc nói dối, bỏ phiếu đa số đơn giản sẽ dễ dàng bị thao túng."
         },
         {
           "id": "fix-2",
-          "text": "Chỉ cần cài phần mềm diệt virus trên Node 3 và khởi động lại",
+          "text": "Yêu cầu sự nhất trí 100% (Unanimous agreement) từ tất cả các nút trong cụm trước khi đưa ra kết luận",
           "correct": false,
-          "feedback": "Diệt virus không thể ngăn chặn lỗi phần cứng làm lật bit bộ nhớ hay các lỗ hổng zero-day trong tương lai."
+          "feedback": "Yêu cầu 100% nhất trí có nghĩa là chỉ cần một nút bị sập hoặc cố tình bỏ phiếu ngược lại, toàn bộ hệ thống sẽ bị tê liệt vĩnh viễn (mất hoàn toàn tính sẵn sàng)."
         },
         {
           "id": "fix-1",
-          "text": "Triển khai thuật toán Đồng Thuận Dung Lỗi Byzantine (BFT) yêu cầu tối thiểu 3f + 1 node để chống lại f node gian dối, kết hợp ký số mật mã (Cryptographic Signatures) trên mọi thông điệp",
+          "text": "Áp dụng giao thức Đồng Thuận Chống Lỗi Byzantine (BFT - Byzantine Fault Tolerant) với yêu cầu tối thiểu 3f + 1 nút để chịu được f nút gian lận (ví dụ cần ít nhất 4 nút để chịu 1 nút phản trắc)",
           "correct": true,
-          "feedback": "Chính xác! Theo định lý BFT, để sống sót qua f node phản bội, hệ thống cần ít nhất 3f + 1 node (để chống 1 node dối trá cần tối thiểu 3×1 + 1 = 4 node khỏe mạnh). Chữ ký số ngăn không cho node dối trá sửa đổi thông điệp của người khác."
+          "feedback": "Chính xác! Theo định lý toán học của PBFT, để chịu được f nút có hành vi Byzantine độc hại, hệ thống cần tối thiểu 3f + 1 nút và yêu cầu túc số 2f + 1 phiếu đồng thuận kèm chữ ký mật mã. Với 4 nút, hệ thống có thể phát hiện và cô lập hoàn toàn 1 nút gian dối như Nút 3 mà vẫn đưa ra kết luận pháp y chính xác."
         },
         {
           "id": "fix-4",
-          "text": "Yêu cầu Node 3 gửi kết quả qua email cá nhân của Cảnh trưởng",
+          "text": "Bổ sung mã hóa đầu-cuối (End-to-end encryption) cho tất cả các kênh liên lạc giữa các nút",
           "correct": false,
-          "feedback": "Không thể giải quyết vấn đề tự động hóa và bảo mật trong hạ tầng phân tán bằng email thủ công."
+          "feedback": "Mã hóa đường truyền bảo vệ dữ liệu khỏi kẻ nghe lén bên ngoài, nhưng không thể ngăn chặn một nút bên trong mạng đã bị chiếm quyền và tự tạo ra dữ liệu dối trá."
         }
       ]
     }

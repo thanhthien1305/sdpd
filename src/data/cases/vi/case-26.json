@@ -191,60 +191,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao sự chậm trễ của dịch vụ GPS lại làm cạn kiệt tài nguyên và đánh sập toàn bộ các dịch vụ microservices phía trên?",
+      "question": "Tại sao một dịch vụ giám định pháp y chạy chậm lại có thể kéo sập toàn bộ Cổng API trung tâm của sở cảnh sát?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Hiệu ứng Timeout Dây Chuyền (Cascading Timeouts) và công việc lãng phí — timeout tầng trên ngắn hơn tầng dưới và thiếu cơ chế hủy lan truyền (Cancellation Propagation), khiến tài nguyên bị khóa chặt để xử lý các yêu cầu đã chết",
+          "text": "Bẫy Thời Gian Chờ (The Timeout Trap / Cascading Thread Exhaustion) — Cổng API có thời gian chờ (timeout) quá dài mà không có cơ chế Ngắt Mạch (Circuit Breaker), khiến toàn bộ luồng xử lý (worker threads) bị chiếm giữ vô hạn",
           "correct": true,
-          "feedback": "Chính xác! Khi Gateway đã báo lỗi cho người dùng sau 2s, các dịch vụ phía sau vẫn tiếp tục chạy ròng rã 15s để làm một việc vô ích. Khi hàng ngàn request lặp lại, toàn bộ thread pool bị nuốt trọn bởi công việc rác này, dẫn đến sụp đổ dây chuyền."
+          "feedback": "Chính xác! Khi dịch vụ Giám định pháp y bị chậm do xử lý tác vụ nặng, Cổng API vẫn tiếp tục nhận các yêu cầu mới và cấu hình timeout tới 60 giây. Từng luồng xử lý (thread) trong Thread Pool của Gateway lần lượt bị khóa cứng để chờ phản hồi từ dịch vụ pháp y. Trong vài phút, toàn bộ 500 luồng của Gateway bị cạn kiệt, khiến ngay cả các yêu cầu gọi sang dịch vụ Tuần tra hay Điều phối cũng bị từ chối!"
         },
         {
           "id": "rc-3",
-          "text": "Các sĩ quan cảnh sát cố tình spam nút gửi để phá hoại hệ thống",
+          "text": "Bộ cân bằng tải đã ngừng phân phối lưu lượng tới Cổng API",
           "correct": false,
-          "feedback": "Người dùng chỉ bấm gửi lại vì họ nhận được thông báo lỗi timeout từ hệ thống."
+          "feedback": "Bộ cân bằng tải vẫn gửi lưu lượng đến, nhưng Gateway không còn luồng rảnh để tiếp nhận yêu cầu mới."
         },
         {
           "id": "rc-1",
-          "text": "Dây cáp mạng nối giữa các dịch vụ bị nhiễm sóng vô tuyến",
+          "text": "Cổng API có lỗi tràn số nguyên trong mã nguồn xử lý định tuyến",
           "correct": false,
-          "feedback": "Hạ tầng mạng bình thường; lỗi nằm ở cơ chế quản lý vòng đời và thời hạn của request."
+          "feedback": "Mã nguồn định tuyến không có lỗi; các luồng xử lý bị đóng băng vì chờ phản hồi từ dịch vụ phụ trợ."
         },
         {
           "id": "rc-4",
-          "text": "Hệ điều hành máy chủ tự động khởi động lại để cập nhật bản vá Windows",
+          "text": "Dịch vụ giám định pháp y bị tấn công từ chối dịch vụ (DDoS) làm lây lan sang Cổng API",
           "correct": false,
-          "feedback": "Máy chủ chạy Linux và không có lịch tự khởi động lại."
+          "feedback": "Lưu lượng hoàn toàn bình thường; dịch vụ chỉ đơn giản là bị chậm do một tác vụ phân tích nặng."
         }
       ]
     },
     "fix": {
-      "question": "Cách thức xử lý chuẩn xác nhất để chặn đứng hiện tượng sụp đổ dây chuyền do timeout là gì?",
+      "question": "Giải pháp tốt nhất để ngăn chặn một dịch vụ chậm làm cạn kiệt tài nguyên của toàn bộ hệ thống là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Tắt toàn bộ hệ thống định vị GPS của xe tuần tra",
+          "text": "Khởi động lại Cổng API định kỳ mỗi 5 phút một lần để giải phóng luồng",
           "correct": false,
-          "feedback": "Không có GPS, trung tâm chỉ huy không thể điều phối lực lượng ứng cứu kịp thời."
+          "feedback": "Khởi động lại liên tục sẽ làm rớt kết nối của hàng ngàn sĩ quan đang thao tác và gây gián đoạn dịch vụ liên tục."
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng cơ chế Lan Truyền Thời Hạn (Deadline Propagation / gRPC Context Deadline / OpenTelemetry Context) — truyền thời hạn còn lại qua từng chặng gọi và lập tức hủy ngay (Cancel) tác vụ downstream khi upstream timeout, đồng thời cấu hình timeout downstream luôn ngắn hơn upstream",
+          "text": "Tăng thời gian timeout của Cổng API lên 10 phút cho mỗi yêu cầu để không bị lỗi timeout",
           "correct": false,
-          "feedback": "Chính xác! Với Deadline Propagation, nếu Gateway chỉ cho phép tối đa 2s, nó sẽ gắn thời hạn 2s vào header. Dịch vụ con thấy thời gian còn lại đã hết sẽ lập tức hủy ngay câu lệnh SQL đang chạy để giải phóng tài nguyên CPU/RAM tức thì, bảo vệ toàn hệ thống!"
+          "feedback": "Tăng timeout lên 10 phút chỉ làm các luồng xử lý bị chiếm giữ lâu hơn gấp 10 lần, khiến Gateway sập nhanh hơn nữa."
         },
         {
           "id": "fix-2",
-          "text": "Tăng timeout của Cổng API lên 10 phút cho mỗi yêu cầu",
+          "text": "Cấu hình Thời Gian Chờ Ngắn Chặt Chẽ (Tight Timeouts), áp dụng Lan Truyền Thời Hạn (Deadline Propagation) và triển khai Bộ Ngắt Mạch (Circuit Breaker) kết hợp Vách Ngăn (Bulkheading)",
           "correct": true,
-          "feedback": "Tăng timeout lên 10 phút sẽ chỉ khiến hàng ngàn kết nối bị treo cứng chờ đợi, làm sập hệ thống nhanh hơn."
+          "feedback": "Chính xác! Ba biện pháp phòng thủ hoàn hảo: (1) Tight Timeouts & Deadline: Giảm timeout xuống mức hợp lý (ví dụ 3s) và truyền deadline xuyên suốt chuỗi vi dịch vụ; (2) Bulkheading: Phân chia thread pool riêng biệt cho từng dịch vụ phụ trợ để sự cố của dịch vụ pháp y không thể ăn vào tài nguyên của dịch vụ điều phối; (3) Circuit Breaker: Tự động ngắt kết nối khi phát hiện dịch vụ bị chậm liên tục, trả về phản hồi fallback tức thì."
         },
         {
           "id": "fix-3",
-          "text": "Xóa bỏ hoàn toàn lớp Gateway và để ứng dụng gọi thẳng vào DB GPS",
+          "text": "Cấm dịch vụ pháp y không bao giờ được chạy tác vụ phân tích nặng trên máy chủ",
           "correct": false,
-          "feedback": "Bỏ Gateway làm lộ cấu trúc mạng nội bộ và phá hủy cơ chế bảo mật, định tuyến."
+          "feedback": "Tác vụ phân tích pháp y là nghiệp vụ bắt buộc. Hệ thống phải có khả năng cô lập các tác vụ nặng mà không làm ảnh hưởng các dịch vụ khác."
         }
       ]
     }

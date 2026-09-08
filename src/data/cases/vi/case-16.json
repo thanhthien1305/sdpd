@@ -151,60 +151,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Hiện tượng hàng trăm tiến trình cùng lúc lao vào tính toán lại cùng một mục dữ liệu cache bị trượt được gọi là gì?",
+      "question": "Nguyên nhân gốc rễ khiến cơ sở dữ liệu bị tê liệt khi bản tin truy nã đặc biệt được công bố là gì?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Hiện tượng Đống Hỗn Loạn (Dog Pile / Cache Stampede) trên một Hot Key — thiếu cơ chế đồng bộ hóa khiến hàng trăm luồng cùng làm một công việc trùng lặp gây quá tải DB",
+          "text": "Hiện Tượng Đè Bẹp Bộ Đệm (Dog Pile / Cache Stampede trên Khóa Hot) — khi một thông tin cực kỳ phổ biến bị cache miss lần đầu tiên, hàng nghìn yêu cầu đồng thời cùng chạy xuống DB để nạp dữ liệu cho cùng một bản ghi",
           "correct": true,
-          "feedback": "Chính xác! Khi không có cơ chế khóa, mọi luồng đều nghĩ mình có nghĩa vụ phải đi nạp lại cache. Kết quả là 300 tiến trình cùng đè bẹp database để tính ra một kết quả y hệt nhau."
+          "feedback": "Chính xác! Khi bản tin về nghi phạm nguy hiểm vừa được phát đi, hàng ngàn sĩ quan và hệ thống camera đồng loạt tra cứu mã hồ sơ đó. Vì bản tin mới chưa kịp có trong cache (cold start), tất cả các yêu cầu cùng thấy miss và cùng gửi câu lệnh SELECT xuống cơ sở dữ liệu để tìm cùng một thông tin. Cơ sở dữ liệu bị chôn vùi dưới hàng ngàn truy vấn trùng lặp."
         },
         {
           "id": "rc-3",
-          "text": "Hồ sơ của tên cướp có dung lượng quá lớn làm hỏng giao thức TCP",
+          "text": "Hệ thống mạng của sở cảnh sát bị nghẽn băng thông do truyền tải hình ảnh độ phân giải cao",
           "correct": false,
-          "feedback": "Dữ liệu hồ sơ chỉ vài chục kilobyte, hoàn toàn trong chuẩn TCP."
+          "feedback": "Băng thông mạng vẫn thông suốt. Nút thắt cổ chai nằm ở số lượng kết nối và CPU của cơ sở dữ liệu bị bão hòa."
         },
         {
           "id": "rc-4",
-          "text": "Mạng nội bộ của sở cảnh sát bị đứt cáp quang",
+          "text": "Khóa của bản tin trong Redis có kích thước dung lượng quá lớn vượt quá giới hạn mạng",
           "correct": false,
-          "feedback": "Mạng hoàn toàn thông suốt; chính lưu lượng truy vấn nội bộ đã gây nghẽn máy chủ."
+          "feedback": "Kích thước dữ liệu bản ghi rất nhỏ (chưa tới vài KB). Vấn đề là hàng ngàn yêu cầu cùng dồn xuống DB để nạp bản ghi đó."
         },
         {
           "id": "rc-1",
-          "text": "Lỗi vòng lặp đệ quy vô tận trong tầng xử lý giao diện người dùng",
+          "text": "Cơ sở dữ liệu bị lỗi khóa bảng (Table Lock) do một quản trị viên đang chạy câu lệnh bảo trì",
           "correct": false,
-          "feedback": "Không có lỗi đệ quy; đây là vấn đề tranh chấp tài nguyên đồng thời ở tầng backend."
+          "feedback": "Không có câu lệnh quản trị nào chạy lúc đó; tất cả đều là các câu truy vấn SELECT thông thường từ các đồn cảnh sát."
         }
       ]
     },
     "fix": {
-      "question": "Mẫu thiết kế nào giúp đảm bảo chỉ có duy nhất một tiến trình được phép truy vấn database để nạp lại cache cho hot key?",
+      "question": "Giải pháp tốt nhất để bảo vệ cơ sở dữ liệu trước hiện tượng Dog Pile đối với các khóa Hot là gì?",
       "options": [
         {
           "id": "fix-1",
-          "text": "Sử dụng Khóa Mutex Phân Tán (ví dụ: Redis SETNX) hoặc thư viện Gộp Yêu Cầu (Singleflight) — luồng đầu tiên giữ khóa đi nạp DB, các luồng khác chờ và nhận kết quả dùng chung",
+          "text": "Nâng cấp cấu hình phần cứng của cơ sở dữ liệu để chịu được 10.000 truy vấn đồng thời",
           "correct": false,
-          "feedback": "Chính xác! Với Singleflight hoặc Mutex, luồng đầu tiên giành được khóa sẽ đi tính toán dữ liệu trong DB. 299 luồng còn lại sẽ kiên nhẫn chờ đợi và cùng chia sẻ kết quả mà luồng thứ nhất vừa mang về. Database chỉ phải chạy đúng 1 truy vấn duy nhất!"
+          "feedback": "Nâng cấp phần cứng rất tốn kém và vô nghĩa khi 9.999 truy vấn trong số đó hoàn toàn giống hệt nhau và tính toán ra cùng một kết quả."
         },
         {
           "id": "fix-2",
-          "text": "Khởi động lại toàn bộ máy chủ cơ sở dữ liệu mỗi khi có hot key",
+          "text": "Sử dụng cơ chế Gộp Yêu Cầu (Singleflight / Request Coalescing) hoặc Khóa Phân Tán (Mutex) — chỉ cho phép đúng 1 tiến trình xuống DB lấy dữ liệu nạp cache, các yêu cầu khác dùng chung kết quả",
           "correct": true,
-          "feedback": "Khởi động lại làm gián đoạn toàn bộ các dịch vụ khác và khiến tình trạng nghẽn thêm trầm trọng."
+          "feedback": "Chính xác! Với cơ chế Singleflight (hoặc Mutex Lock tại tầng ứng dụng), khi hàng ngàn yêu cầu đồng thời tìm kiếm cùng một khóa bị miss, hệ thống sẽ gom chúng lại và chỉ ủy quyền cho DUY NHẤT một cuộc gọi xuống cơ sở dữ liệu. Tất cả các yêu cầu còn lại sẽ chờ cuộc gọi đó hoàn thành và cùng nhận kết quả được chia sẻ. Cơ sở dữ liệu chỉ phải xử lý đúng 1 truy vấn!"
         },
         {
           "id": "fix-4",
-          "text": "Tăng bộ nhớ RAM của cơ sở dữ liệu lên gấp 10 lần",
+          "text": "Giới hạn số lượng sĩ quan được phép tra cứu thông tin tội phạm truy nã cùng một lúc",
           "correct": false,
-          "feedback": "Tăng RAM không giải quyết được vấn đề thuật toán lãng phí tài nguyên CPU cho 300 phép JOIN trùng lặp."
+          "feedback": "Trong tình huống truy bắt khẩn cấp, ngăn cản sĩ quan tiếp cận thông tin nhận dạng là điều tối kỵ."
         },
         {
           "id": "fix-3",
-          "text": "Cấm các sĩ quan tuần tra không được xem hồ sơ của tên cướp cùng một lúc",
+          "text": "Lưu trữ thông tin tội phạm trong một tệp văn bản tĩnh chia sẻ qua mạng nội bộ",
           "correct": false,
-          "feedback": "Trong tình huống truy bắt khẩn cấp, mọi sĩ quan đều cần xem nhận dạng ngay lập tức."
+          "feedback": "Tệp văn bản tĩnh không đảm bảo tính toàn vẹn, bảo mật và khó đồng bộ tức thời khi có thông tin mới."
         }
       ]
     }

@@ -196,60 +196,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao hệ thống có 20 máy chủ xử lý hùng mạnh phía sau nhưng toàn bộ ứng dụng vẫn bị tê liệt?",
+      "question": "Nguyên nhân gốc rễ gây ra sự cố sập toàn bộ hệ thống trong trận động đất là gì?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Nhà mạng viễn thông thành phố đã chặn toàn bộ lưu lượng của sở cảnh sát",
+          "text": "Trận động đất gây ra thiệt hại vật lý trực tiếp tới phần cứng của các trung tâm dữ liệu",
           "correct": false,
-          "feedback": "Mạng viễn thông bình thường; các gói tin đã đến được cổng máy chủ nhưng bị máy chủ từ chối vì quá tải."
+          "feedback": "Tất cả các máy chủ phụ trợ (backend services) đều nguyên vẹn và đang hoạt động tốt. Vấn đề nằm ở cổng tiếp nhận lưu lượng."
         },
         {
           "id": "rc-1",
-          "text": "Các máy chủ phía sau bị lỗi cấu hình cơ sở dữ liệu nên không thể khởi động",
+          "text": "Bản thân các dịch vụ nghiệp vụ phía sau (Backend Services) không thể chịu được mức tăng đột biến của lưu lượng",
           "correct": false,
-          "feedback": "Sai. Các máy chủ backend hoàn toàn khỏe mạnh và sẵn sàng xử lý, chúng chỉ không nhận được lưu lượng từ cổng vào."
+          "feedback": "Các dịch vụ phụ trợ phía sau thậm chí còn chưa nhận được yêu cầu nào vì cổng API Gateway đã bị nghẽn cứng ngay từ cửa vào."
         },
         {
           "id": "rc-2",
-          "text": "Toàn bộ lưu lượng truy cập phải đi qua một máy chủ Gateway duy nhất, tạo thành một nút thắt cổ chai đơn điểm (Bottleneck) làm sập hệ thống khi có đợt tăng vọt lưu lượng",
+          "text": "Một cá thể API Gateway duy nhất là nút thắt cổ chai (Single Bottleneck) — nó không thể mở rộng và bị cạn kiệt tài nguyên khi lưu lượng tăng vọt 15 lần trong tình huống khẩn cấp",
           "correct": true,
-          "feedback": "Chính xác! Dù backend phía sau có mạnh đến đâu, nếu lối vào chỉ là một cánh cửa hẹp duy nhất (Single Gateway), toàn bộ hệ thống sẽ chết nghẹt ngay tại cửa khi lưu lượng bùng nổ."
+          "feedback": "Chính xác! Cổng API Gateway là điểm tiếp xúc đầu tiên của toàn bộ hệ thống. Mặc dù các dịch vụ phía sau được chia nhỏ, việc chỉ đặt một API Gateway duy nhất phía trước mà không có bộ cân bằng tải (Load Balancer) đã tạo ra một điểm nghẽn nghiêm trọng. Khi lưu lượng bùng nổ từ 200 lên 3.000 yêu cầu/giây, gateway cạn kiệt CPU và luồng kết nối, chặn đứng mọi cuộc gọi khẩn cấp."
         },
         {
           "id": "rc-3",
-          "text": "Ứng dụng trên điện thoại của cảnh sát bị lỗi vòng lặp vô tận",
+          "text": "Bão thử lại (Retry Storm) dữ dội từ các đồn cảnh sát đã đánh sập cơ sở dữ liệu",
           "correct": false,
-          "feedback": "Lưu lượng cao là do sự kiện thực tế đêm giao thừa, không phải lỗi ứng dụng di động."
+          "feedback": "Bão thử lại là hệ quả xuất hiện sau khi người dùng thấy lỗi kết nối, không phải nguyên nhân ban đầu đánh sập gateway."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp kiến trúc nào là cần thiết để phân bổ lưu lượng truy cập khổng lồ một cách trơn tru?",
+      "question": "Phương pháp tốt nhất để ngăn chặn tình trạng quá tải API Gateway khi lưu lượng tăng vọt là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Giới hạn mỗi sĩ quan chỉ được mở ứng dụng 5 phút một lần trong lúc làm việc",
+          "text": "Triển khai giới hạn tốc độ (Rate Limiting) trên Gateway để từ chối ngay các yêu cầu vượt ngưỡng",
           "correct": false,
-          "feedback": "Trong tình huống khẩn cấp, cảnh sát cần truyền tọa độ và nhận chỉ thị liên tục từng giây."
+          "feedback": "Trong trận động đất khẩn cấp, việc từ chối các cuộc gọi cứu nạn của người dân và cảnh sát là điều không thể chấp nhận được. Hệ thống cần phải mở rộng để tiếp nhận cuộc gọi, không phải vứt bỏ chúng."
         },
         {
           "id": "fix-4",
-          "text": "Bỏ hẳn lớp Gateway và để điện thoại kết nối trực tiếp vào cơ sở dữ liệu",
+          "text": "Xóa bỏ hoàn toàn tầng API Gateway và để từng đồn cảnh sát kết nối trực tiếp vào từng dịch vụ backend",
           "correct": false,
-          "feedback": "Cho hàng ngàn thiết bị kết nối thẳng vào database là thảm họa bảo mật và sẽ làm sập DB ngay lập tức."
+          "feedback": "Bỏ Gateway làm lộ toàn bộ mạng nội bộ ra ngoài, gây khó khăn cho việc xác thực, định tuyến và phân tán bảo mật."
         },
         {
           "id": "fix-1",
-          "text": "Triển khai Bộ Cân Bằng Tải Lớp 4/Lớp 7 dự phòng đa tầng (Active-Passive LB hoặc Anycast DNS) phía trước một nhóm các máy chủ Gateway được mở rộng theo chiều ngang",
+          "text": "Triển khai nhiều phiên bản API Gateway phía sau một Bộ Cân Bằng Tải (Load Balancer) kết hợp cơ chế Tự Động Co Giãn (Auto-scaling)",
           "correct": true,
-          "feedback": "Chính xác! Sử dụng nhiều Gateway nằm sau hệ thống cân bằng tải (Load Balancer) với cơ chế mở rộng ngang (Horizontal Scaling) đảm bảo không bao giờ có một điểm nghẽn đơn lẻ nào ở cửa ngõ."
+          "feedback": "Chính xác! Bằng cách đặt một cụm API Gateway nằm sau Bộ cân bằng tải L4/L7 có tính sẵn sàng cao kết hợp Auto-scaling, khi thảm họa xảy ra và lưu lượng tăng gấp 15 lần, hệ thống sẽ tự động kích hoạt thêm hàng chục instance gateway mới trong vài chục giây để san sẻ tải, đảm bảo không một yêu cầu khẩn cấp nào bị nghẽn."
         },
         {
           "id": "fix-2",
-          "text": "Mua thêm RAM và CPU xịn nhất thế giới gắn vào chiếc máy chủ Gateway hiện tại",
+          "text": "Nâng cấp máy chủ API Gateway duy nhất hiện tại lên một cấu hình phần cứng cực mạnh (Scale Up)",
           "correct": false,
-          "feedback": "Nâng cấp dọc (Scale Up) rất tốn kém, có trần giới hạn vật lý và vẫn để lại một Điểm Lỗi Đơn nguy hiểm."
+          "feedback": "Mở rộng theo chiều dọc luôn có giới hạn vật lý và chi phí cực kỳ đắt đỏ, đồng thời vẫn giữ nguyên điểm lỗi đơn lẻ (SPOF) nếu máy chủ đó gặp trục trặc."
         }
       ]
     }

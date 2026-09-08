@@ -157,60 +157,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao sự cố ở Cục Đăng Kiểm bên ngoài lại có thể đánh sập toàn bộ hệ thống điều hành chỉ huy nội bộ của sở cảnh sát?",
+      "question": "Nguyên nhân gốc rễ khiến toàn bộ hệ thống tiếp nhận khẩn cấp 911 bị sập dây chuyền là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Sét đánh ở Cục Đăng Kiểm đã truyền theo dây mạng làm cháy máy chủ của sở cảnh sát",
+          "text": "Đội bảo trì đã tắt dịch vụ Xác Thực Địa Chỉ mà không thông báo trước cho các bộ phận",
           "correct": false,
-          "feedback": "Hạ tầng vật lý của sở cảnh sát hoàn toàn nguyên vẹn; sự cố thuần túy ở tầng phần mềm quản lý tài nguyên."
+          "feedback": "Việc bảo trì đã được lên lịch. Trong hệ thống phân tán, các dịch vụ phụ trợ có thể sập bất kỳ lúc nào; kiến trúc hệ thống phải được thiết kế để chịu được việc một dịch vụ ngừng hoạt động."
         },
         {
           "id": "rc-3",
-          "text": "Dữ liệu biển số xe chứa các ký tự đặc biệt làm hỏng bộ giải mã JSON",
+          "text": "Thời gian chờ 30 giây cấu hình cho cuộc gọi Xác Thực Địa Chỉ là quá dài",
           "correct": false,
-          "feedback": "Lỗi là do timeout đường truyền mạng, không liên quan đến định dạng dữ liệu."
+          "feedback": "Timeout ngắn hơn giúp giải phóng luồng nhanh hơn, nhưng nếu không có Circuit Breaker thì với hàng nghìn cuộc gọi đến, thread pool vẫn sẽ bị lấp đầy hoàn toàn."
         },
         {
           "id": "rc-4",
-          "text": "Nhân viên tổng đài đã cắm nhầm dây mạng vào máy in",
+          "text": "Dịch vụ Điều Phối có thread pool quá nhỏ không đủ xử lý giờ cao điểm",
           "correct": false,
-          "feedback": "Mạng nội bộ hoàn toàn bình thường."
+          "feedback": "Dù có cấp 1.000 luồng thì khi tất cả các luồng đều bị giữ chân 30 giây trên một dịch vụ đã chết, toàn bộ 1.000 luồng đó cũng sẽ nhanh chóng bị cạn kiệt."
         },
         {
           "id": "rc-2",
-          "text": "Thiếu Bộ Ngắt Mạch (Circuit Breaker) — hệ thống tiếp tục gửi yêu cầu vào một dịch vụ đã chết, khiến toàn bộ tài nguyên luồng kết nối bị khóa nghẽn trong trạng thái chờ đợi vô ích và làm sập dây chuyền toàn bộ ứng dụng",
+          "text": "Dịch vụ Điều Phối Thiếu Bộ Ngắt Mạch (No Circuit Breaker) — nó tiếp tục khóa cứng toàn bộ luồng xử lý để chờ đợi một dịch vụ đã chết, gây ra Sự Cố Sập Lan Truyền Dây Chuyền (Cascading Failure)",
           "correct": true,
-          "feedback": "Chính xác! Khi một dịch vụ phụ thuộc bị lỗi hoặc quá chậm, nếu không có cơ chế ngắt mạch để 'Thất Bại Nhanh' (Fail Fast), các luồng xử lý sẽ bị giữ chân và tích tụ dần cho đến khi cạn kiệt toàn bộ tài nguyên của hệ thống chính."
+          "feedback": "Chính xác! Khi dịch vụ Xác thực địa chỉ bị tắt để bảo trì, Dịch vụ Điều phối không hề biết và vẫn kiên nhẫn gọi sang với timeout 30 giây cho mỗi yêu cầu. Toàn bộ các luồng của nó bị khóa cứng trong vô vọng. Hậu quả là Dịch vụ Điều phối trở nên bất động, kéo theo Dịch vụ Định tuyến cuộc gọi và Dịch vụ Phân công tuần tra cũng sập theo như hiệu ứng domino!"
         }
       ]
     },
     "fix": {
-      "question": "Cần triển khai mẫu thiết kế nào để cô lập hoàn toàn sự cố của dịch vụ bên thứ ba và bảo vệ hệ thống nội bộ?",
+      "question": "Phương pháp tốt nhất để ngăn chặn sự cố sụp đổ lan truyền dây chuyền giữa các vi dịch vụ là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Ngừng vĩnh viễn việc tra cứu biển số xe trên toàn quốc",
+          "text": "Loại bỏ hoàn toàn sự phụ thuộc vào dịch vụ Xác Thực Địa Chỉ bằng cách nhúng thẳng dữ liệu địa chỉ vào cơ sở dữ liệu của Dịch vụ Điều Phối",
           "correct": false,
-          "feedback": "Tra cứu biển số là nghiệp vụ sống còn để phát hiện xe ăn trộm và tội phạm đào tẩu."
+          "feedback": "Nhúng toàn bộ dữ liệu vi phạm nguyên tắc phân rã vi dịch vụ và không giải quyết được vấn đề nếu một dịch vụ phụ thuộc khác gặp sự cố."
         },
         {
           "id": "fix-2",
-          "text": "Tăng số lượng luồng kết nối của máy chủ chỉ huy lên 100.000 threads",
+          "text": "Triển khai dịch vụ Xác Thực Địa Chỉ ở chế độ sẵn sàng cao tuyệt đối không bao giờ được phép tắt",
           "correct": false,
-          "feedback": "Mở quá nhiều thread sẽ làm tràn RAM và khiến CPU tiêu tốn toàn bộ năng lực cho việc chuyển đổi ngữ cảnh, làm máy chủ sập nhanh hơn."
+          "feedback": "Không có hệ thống nào cam kết không bao giờ lỗi 100%. Phần mềm vẫn có thể bị sập do bug, cạn tài nguyên hoặc sự cố mạng. Hệ thống luôn phải có cơ chế phòng vệ chủ động."
         },
         {
           "id": "fix-1",
-          "text": "Triển khai Mẫu Thiết Kế Bộ Ngắt Mạch (Circuit Breaker Pattern như Resilience4j/Envoy) — khi tỷ lệ lỗi vượt ngưỡng, chuyển sang trạng thái OPEN để từ chối ngay lập tức (Fail Fast) và trả về dữ liệu dự phòng (Fallback từ Cache), định kỳ thử nghiệm trạng thái HALF-OPEN để tự động đóng mạch khi đối tác hồi phục",
+          "text": "Triển khai Bộ Ngắt Mạch (Circuit Breaker) — tự động ngắt kết nối (Open) khi phát hiện lỗi liên tiếp, lập tức trả về phản hồi dự phòng (Fallback) hoặc báo lỗi nhanh mà không khóa luồng",
           "correct": true,
-          "feedback": "Chính xác! Khi phát hiện Cục Đăng Kiểm bị lỗi > 50%, Circuit Breaker lập tức 'nhảy cầu dao' sang trạng thái OPEN. Mọi truy vấn tra cứu biển số sẽ được phản hồi ngay lập tức trong 1ms kèm thông báo 'Tạm thời tra cứu từ cache cục bộ', giải phóng 100% tài nguyên luồng để phục vụ các cuộc gọi khẩn cấp khác!"
+          "feedback": "Chính xác! Circuit Breaker theo dõi tỷ lệ lỗi của dịch vụ phụ thuộc. Khi thấy lỗi liên tiếp (ví dụ 5 lần trong 10 giây), nó lập tức \"ngắt mạch\" (chuyển sang trạng thái Open). Tất cả các yêu cầu tiếp theo sẽ không gọi sang dịch vụ đã chết nữa mà lập tức chuyển sang chế độ dự phòng (fallback) — ví dụ tiếp tục điều động xe dựa trên địa chỉ thô chưa qua xác thực. Các luồng được giải phóng ngay lập tức, bảo vệ toàn bộ phần còn lại của hệ sinh thái 911 sống sót an toàn!"
         },
         {
           "id": "fix-4",
-          "text": "Khởi động lại toàn bộ máy chủ chỉ huy mỗi 5 phút một lần",
+          "text": "Bổ sung hàng đợi tin nhắn giữa tất cả các dịch vụ để giao tiếp bất đồng bộ",
           "correct": false,
-          "feedback": "Khởi động lại liên tục làm gián đoạn mọi hoạt động của lực lượng cảnh sát."
+          "feedback": "Tổng đài 911 tiếp nhận cuộc gọi khẩn cấp yêu cầu phản hồi điều động xe tức thời trong vài giây, không thể chuyển sang xử lý lô qua hàng đợi."
         }
       ]
     }

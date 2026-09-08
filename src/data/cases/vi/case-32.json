@@ -159,60 +159,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao tài sản của công dân vẫn bị niêm phong khi quy trình khởi tố bị hủy bỏ ở bước cuối cùng?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc nghi phạm bị giam giữ trong trạng thái lơ lửng không có hồ sơ hợp lệ là gì?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Bộ nhớ cache của trình duyệt web hiển thị sai thông tin tài sản",
+          "text": "Phần mềm của Nhà giam trung tâm bị mất kết nối mạng với phòng trực ban",
           "correct": false,
-          "feedback": "Dữ liệu niêm phong đã được ghi nhận thật sự trong cơ sở dữ liệu nghiệp vụ."
+          "feedback": "Kết nối mạng hoàn toàn bình thường; vấn đề là bước thứ 3 trong quy trình phân tán bị thất bại vì buồng giam đã hết chỗ."
         },
         {
           "id": "rc-1",
-          "text": "Ngân hàng đã tự động tịch thu tài sản do nghi phạm nợ tín dụng",
+          "text": "Dịch vụ Phân Phòng Giam có lỗi phần mềm báo sai tình trạng hết chỗ trong khi vẫn còn phòng trống",
           "correct": false,
-          "feedback": "Tài sản bị niêm phong bởi lệnh tự động từ dịch vụ nội bộ của sở cảnh sát."
+          "feedback": "Buồng giam thực sự đã hết chỗ; sự cố nghiệp vụ này là hoàn toàn bình thường trong vận hành thực tế."
         },
         {
           "id": "rc-2",
-          "text": "Triển khai Mẫu Thiết Kế Saga không hoàn chỉnh — thiếu các Giao Dịch Bù Trừ (Compensating Transactions) để hoàn tác (Rollback) các bước đã thành công khi một bước tiếp theo bị thất bại",
+          "text": "Quy Trình Giao Dịch Phân Tán Thiếu Các Hành Động Bù Đắp (Saga Rollback / Compensating Transactions) — khi một bước sau thất bại, các bước trước đã hoàn thành không được hoàn tác, để lại dữ liệu mồ côi không nhất quán",
           "correct": true,
-          "feedback": "Chính xác! Trong kiến trúc microservices không thể dùng giao dịch ACID truyền thống. Saga đòi hỏi mỗi hành động phải đi kèm một hành động bù trừ ngược lại (Ví dụ: Đặt lịch tòa → Hủy lịch tòa, Niêm phong tài sản → Mở khóa tài sản). Quên viết bù trừ đồng nghĩa với việc để lại rác dữ liệu vĩnh viễn."
+          "feedback": "Chính xác! Quy trình thụ lý nghi phạm là một giao dịch phân tán trải qua 3 vi dịch vụ: (1) Lập hồ sơ bắt giữ, (2) Tạo mã số lưu ký, (3) Phân bổ buồng giam. Khi Bước 3 thất bại do trại giam quá tải, hệ thống không có cơ chế hoàn tác (compensating transactions) cho Bước 1 và Bước 2. Kết quả là nghi phạm có hồ sơ bắt và mã lưu ký nhưng lại không có buồng giam, bị kẹt trong trạng thái lơ lửng không nhất quán!"
         },
         {
           "id": "rc-3",
-          "text": "Dịch vụ gán luật sư bị hacker ngắt kết nối mạng",
+          "text": "Cả ba dịch vụ lẽ ra phải dùng chung một cơ sở dữ liệu tập trung để thực hiện một giao dịch ACID truyền thống duy nhất",
           "correct": false,
-          "feedback": "Bước 4 thất bại do quy tắc nghiệp vụ thực tế (không có luật sư rảnh), không phải lỗi bảo mật."
+          "feedback": "Dùng chung một cơ sở dữ liệu phá hủy hoàn toàn kiến trúc vi dịch vụ (tính độc lập triển khai, mở rộng và sở hữu dữ liệu). Mô hình Saga là giải pháp tiêu chuẩn cho giao dịch xuyên vi dịch vụ."
         }
       ]
     },
     "fix": {
-      "question": "Cần bổ sung thành phần cốt lõi nào vào Saga Orchestrator để đảm bảo tính nhất quán cuối cùng của quy trình nghiệp vụ?",
+      "question": "Phương pháp tốt nhất để xử lý các thất bại trong quy trình giao dịch phân tán đa dịch vụ là gì?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Bắt buộc mọi nghi phạm phải tự thuê luật sư riêng đắt tiền",
+          "text": "Sử dụng giao thức Cam Kết Hai Pha (Two-Phase Commit / 2PC) đồng bộ giữa cả ba dịch vụ",
           "correct": false,
-          "feedback": "Người nghèo có quyền hiến định được nhà nước chỉ định luật sư bào chữa."
+          "feedback": "2PC giữ khóa mạng rất lâu, làm giảm thông lượng nghiêm trọng và nếu điều phối viên gặp sự cố, các dịch vụ sẽ bị khóa cứng."
         },
         {
           "id": "fix-1",
-          "text": "Định nghĩa đầy đủ chuỗi Giao Dịch Bù Trừ (Compensating Transactions) có tính idempotent cho từng bước — khi bước 4 thất bại, Orchestrator tự động gọi ngược lại: Hủy phiên tòa → Trả lại tài sản niêm phong → Hủy đăng ký tạm giam",
+          "text": "Triển khai Mô Hình Saga (Saga Pattern) Với Các Giao Dịch Bù Đắp (Compensating Transactions) — mỗi bước thực thi đều có một hành động \"hoàn tác\" tương ứng được tự động kích hoạt nếu bước sau gặp thất bại",
           "correct": true,
-          "feedback": "Chính xác! Mô hình Saga hoàn chỉnh bắt buộc phải có cơ chế hoàn tác ngược theo ngữ nghĩa nghiệp vụ. Khi bất kỳ bước nào gặp lỗi, Orchestrator sẽ kích hoạt chuỗi bù trừ theo thứ tự đảo ngược, đưa toàn bộ hệ thống trở về trạng thái sạch sẽ ban đầu."
+          "feedback": "Chính xác! Mô hình Saga chia nhỏ giao dịch phân tán thành chuỗi các giao dịch cục bộ độc lập. Mỗi bước đều định nghĩa sẵn hành động bù đắp tương ứng: nếu Bước 3 (phân buồng giam) thất bại, bộ điều phối Saga sẽ tự động kích hoạt \"Hành động bù đắp Bước 2\" (hủy mã số lưu ký) và tiếp theo là \"Hành động bù đắp Bước 1\" (hủy hồ sơ bắt giữ). Hệ thống tự động trở về trạng thái sạch sẽ và nhất quán 100%!"
         },
         {
           "id": "fix-3",
-          "text": "Gộp cả 4 microservices lại thành một cơ sở dữ liệu nguyên khối duy nhất dùng 2PC",
+          "text": "Thêm logic thử lại liên tục với thời gian chờ số mũ cho đến khi trại giam có buồng trống",
           "correct": false,
-          "feedback": "Giao thức 2PC (Two-Phase Commit) quá chậm, dễ gây khóa chết và không phù hợp với kiến trúc phân tán hiện đại."
+          "feedback": "Thử lại vô hạn là điều tối kỵ — buồng giam có thể không có chỗ trong nhiều ngày và nghi phạm sẽ bị kẹt mãi mãi trong trạng thái trung gian."
         },
         {
           "id": "fix-4",
-          "text": "Bỏ qua bước 4 và tiếp tục xét xử nghi phạm mà không cần luật sư",
+          "text": "Đặt trước toàn bộ tài nguyên (buồng giam, mã số, hồ sơ) cùng một lúc trước khi thực hiện",
           "correct": false,
-          "feedback": "Xét xử không có người bào chữa là vi phạm nghiêm trọng luật tố tụng hình sự."
+          "feedback": "Đặt trước tài nguyên vẫn có thể thất bại khi đặt chỗ và không thể loại trừ hoàn toàn sự cố giữa các bước."
         }
       ]
     }

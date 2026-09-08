@@ -156,60 +156,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao lượng dữ liệu ghi thực tế xuống ổ đĩa lại lớn gấp 30 lần lượng dữ liệu do ứng dụng tạo ra?",
+      "question": "Tại sao hệ thống lưu trữ chỉ chứa 8 TB dữ liệu thực tế nhưng lại tiêu tốn tới 48 TB dung lượng đĩa và gây bão I/O?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Ổ cứng SSD bị lỗi firmware tự động nhân bản dữ liệu rác",
+          "text": "Cơ chế nén dữ liệu của cơ sở dữ liệu bị hỏng khiến kích thước dữ liệu bị phình to gấp 6 lần",
           "correct": false,
-          "feedback": "SSD hoạt động bình thường; chính các tác vụ ghi ngẫu nhiên và cấu trúc B-Tree đã gây ra khuếch đại ghi."
+          "feedback": "Thuật toán nén vẫn hoạt động bình thường trên từng khối dữ liệu."
         },
         {
           "id": "rc-2",
-          "text": "Khuếch Đại Ghi (Write Amplification) nghiêm trọng do cấu trúc B-Tree ghi ngẫu nhiên kèm quá nhiều chỉ mục (Indexes), kết hợp với cơ chế Flash Block Garbage Collection của ổ SSD",
+          "text": "Hiện Tượng Khuếch Đại Ghi Quá Mức (Excessive Write Amplification) do quá trình Gom và Hợp Nhất (Compaction) của Cây LSM (Log-Structured Merge-tree) bị quá tải khi dữ liệu ghi liên tục",
           "correct": true,
-          "feedback": "Chính xác! Mỗi lần sửa 1 dòng dữ liệu nhỏ trong B-Tree, hệ thống phải cập nhật nhiều trang đĩa 4KB/16KB và cập nhật 12 cây chỉ mục khác nhau, khiến lượng dữ liệu ghi đĩa vật lý bùng nổ gấp hàng chục lần."
+          "feedback": "Chính xác! Cây LSM tối ưu cho thao tác ghi nhanh bằng cách ghi vào MemTable rồi xả tuần tự xuống các tầng SSTable trên đĩa. Tuy nhiên, khi dữ liệu ghi liên tục với tốc độ cao, quá trình Compaction (đọc các tầng cũ, hợp nhất, sắp xếp và ghi lại ra tầng mới) phải chạy không ngừng nghỉ. Một byte dữ liệu được ghi đi ghi lại trên đĩa tới 6 lần (Write Amplification Factor = 6), gây nghẽn toàn bộ băng thông I/O đĩa cứng."
         },
         {
           "id": "rc-3",
-          "text": "Dây cáp SATA nối ổ cứng bị nhiễu từ trường làm tăng lưu lượng",
+          "text": "Hệ điều hành máy chủ bị nhiễm mã độc tự động nhân bản dữ liệu rác vào ổ đĩa",
           "correct": false,
-          "feedback": "Cáp truyền tín hiệu không thể tự nhân bản dữ liệu ghi của hệ điều hành."
+          "feedback": "Không có mã độc nào; toàn bộ dữ liệu đều thuộc cơ sở dữ liệu nhật ký camera giám sát."
         },
         {
           "id": "rc-4",
-          "text": "Kỹ thuật viên đã vô tình bật tính năng ghi màn hình máy tính 24/7",
+          "text": "Quản trị viên đã vô tình kích hoạt chế độ sao lưu 6 bản copy trên cùng một ổ đĩa",
           "correct": false,
-          "feedback": "Không có phần mềm quay màn hình; nhật ký đo lường chuẩn xác I/O của cơ sở dữ liệu."
+          "feedback": "Cơ sở dữ liệu chỉ được cấu hình 1 bản lưu duy nhất; dung lượng đĩa bị phình to do các tệp SSTable trung gian chưa kịp dọn dẹp trong quá trình Compaction."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp kiến trúc nào là tối ưu nhất cho các hệ thống chuyên ghi nhật ký với tần suất khổng lồ?",
+      "question": "Giải pháp tốt nhất để giảm thiểu hiện tượng khuếch đại ghi và giải phóng I/O cho hệ thống lưu trữ LSM là gì?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Quay lại sử dụng băng từ hoặc đĩa mềm mềm thế hệ cũ",
+          "text": "Tinh chỉnh chiến lược Compaction (chuyển sang Leveled hoặc Tiered Compaction phù hợp), tăng kích thước MemTable và phân tầng lưu trữ (đẩy dữ liệu cũ sang kho lưu trữ đối tượng giá rẻ như S3)",
           "correct": true,
-          "feedback": "Băng từ có độ trễ truy xuất cực kỳ cao và không đáp ứng được yêu cầu tìm kiếm chứng cứ tức thì."
+          "feedback": "Chính xác! Bằng cách tinh chỉnh chiến lược Compaction (ví dụ Size-Tiered Compaction tối ưu cho khối lượng ghi lớn), tăng dung lượng MemTable trong RAM để xả các khối SSTable lớn hơn, và tự động di chuyển các tệp SSTable cũ đã đóng băng sang Blob Storage giá rẻ, hệ thống sẽ cắt giảm đáng kể số chu kỳ ghi đĩa lặp lại, đưa Write Amplification về mức tối thiểu."
         },
         {
           "id": "fix-1",
-          "text": "Chuyển sang công cụ lưu trữ sử dụng Cây LSM (Log-Structured Merge-tree như RocksDB, Cassandra, hoặc ClickHouse) chuyên tối ưu hóa ghi tuần tự (Append-Only), đồng thời loại bỏ các chỉ mục thứ cấp không cần thiết",
+          "text": "Chuyển sang công cụ lưu trữ sử dụng B-tree truyền thống cho toàn bộ khối lượng dữ liệu ghi camera khổng lồ",
           "correct": false,
-          "feedback": "Chính xác! Cây LSM gom toàn bộ các tác vụ ghi vào bộ nhớ RAM (MemTable) và chỉ xả xuống đĩa theo các khối tuần tự lớn (SSTables), giảm thiểu tối đa ghi ngẫu nhiên, hạ thấp WAF xuống gần 1x và kéo dài tuổi thọ SSD thêm hàng chục năm!"
+          "feedback": "B-tree thực hiện ghi ngẫu nhiên (random I/O) trực tiếp xuống các trang đĩa, với khối lượng ghi camera khổng lồ thì B-tree sẽ bị nghẽn đĩa còn nhanh hơn nhiều so với LSM."
         },
         {
           "id": "fix-3",
-          "text": "Tắt hoàn toàn việc ghi log chứng cứ an ninh",
+          "text": "Quay lại sử dụng băng từ từ tính thế hệ cũ để lưu trữ toàn bộ dữ liệu nhật ký camera",
           "correct": false,
-          "feedback": "Không ghi log chứng cứ đồng nghĩa với việc phá hủy khả năng điều tra tội phạm."
+          "feedback": "Băng từ có độ trễ truy xuất ngẫu nhiên cực lớn (mất nhiều phút để cuộn băng) và không thể phục vụ tra cứu biển số xe theo thời gian thực."
         },
         {
           "id": "fix-4",
-          "text": "Định kỳ đổ nước lạnh vào phòng máy chủ để hạ nhiệt ổ cứng SSD",
+          "text": "Xóa toàn bộ dữ liệu nhật ký camera cũ sau mỗi 24 giờ hoạt động",
           "correct": false,
-          "feedback": "Đổ nước vào thiết bị điện tử sẽ gây chập cháy nổ nguy hiểm."
+          "feedback": "Quy định pháp lý yêu cầu lưu trữ dữ liệu camera giám sát giao thông tối thiểu 90 ngày phục vụ điều tra án."
         }
       ]
     }

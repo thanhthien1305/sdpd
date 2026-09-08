@@ -184,60 +184,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao sự cố của Shard 7 lại làm mất hoàn toàn khả năng tra cứu toàn bộ tội phạm nhóm U-Z?",
+      "question": "Tại sao việc mất một phân mảnh (Shard 7) lại khiến toàn bộ cổng thông tin tư pháp bị tê liệt không thể tra cứu?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Áp dụng phân mảnh (Sharding) mà không có tính dự phòng — mỗi shard là một Điểm Lỗi Đơn (SPOF) cho phân vùng dữ liệu của nó",
+          "text": "Các phân mảnh không có Bản Sao Dự Phòng (No Shard Replicas) — mỗi phân mảnh là một điểm lỗi đơn lẻ độc lập, khiến việc mất 1 shard đồng nghĩa với mất vĩnh viễn quyền truy cập vào phần dữ liệu đó",
           "correct": true,
-          "feedback": "Chính xác! Sharding chỉ giải quyết bài toán dung lượng và tải, không tự động mang lại tính sẵn sàng. Nếu một shard không có bản sao dự phòng (Replica), khi máy chủ đó chết, toàn bộ tập dữ liệu thuộc shard đó sẽ chết theo."
+          "feedback": "Chính xác! Sharding chia dữ liệu theo chiều ngang để mở rộng quy mô, nhưng nếu mỗi Shard chỉ là một máy chủ đơn lẻ không có bản sao (Replication Group), thì xác suất cả hệ thống bị gián đoạn sẽ TĂNG LÊN theo số lượng Shard. Mất Shard 7 khiến 1/8 số vụ án bị biến mất và mọi truy vấn tổng hợp trên toàn thành phố bị lỗi."
         },
         {
           "id": "rc-3",
-          "text": "Các tội phạm họ W đã cấu kết với nhau để xóa hồ sơ từ xa",
+          "text": "Mạng nội bộ của trung tâm dữ liệu bị đứt cáp quang kết nối tới Shard 7",
           "correct": false,
-          "feedback": "Không có sự can thiệp từ tội phạm; đây là sự cố sập nguồn vật lý trong phòng máy chủ."
+          "feedback": "Máy chủ Shard 7 bị chết nguồn và hỏng bo mạch chủ, không phải lỗi cáp mạng."
         },
         {
           "id": "rc-1",
-          "text": "Bộ cân bằng tải bị cấu hình chặn các chữ cái cuối bảng chữ cái",
+          "text": "Dữ liệu của toàn bộ sở cảnh sát đều tập trung trên Shard 7",
           "correct": false,
-          "feedback": "Load Balancer không can thiệp vào ngữ nghĩa dữ liệu; nguyên nhân là máy chủ lưu trữ dải đó đã chết."
+          "feedback": "Shard 7 chỉ chứa khoảng 12.5% dữ liệu của sở cảnh sát. Vấn đề là kiến trúc phân mảnh không có bản sao dự phòng."
         },
         {
           "id": "rc-4",
-          "text": "Dung lượng RAM trên các máy trạm của cảnh sát không đủ để vẽ chữ W",
+          "text": "Bộ định tuyến phân mảnh (Shard Router) bị lỗi phần mềm và tự ý dừng hoạt động khi một shard biến mất",
           "correct": false,
-          "feedback": "Máy trạm hiển thị bình thường; dữ liệu trả về từ server là rỗng."
+          "feedback": "Bộ định tuyến vẫn hoạt động bình thường, nhưng các truy vấn không có shard key buộc phải quét toàn bộ các shard (Scatter-Gather). Khi một shard không phản hồi, toàn bộ truy vấn bị treo."
         }
       ]
     },
     "fix": {
-      "question": "Kiến trúc chuẩn mực cho các hệ thống phân mảnh quy mô lớn là gì?",
+      "question": "Giải pháp tốt nhất để ngăn chặn việc mất một Shard làm sập hệ thống tra cứu là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Khóa không cho phép tội phạm có họ U-Z được thực hiện hành vi phạm tội",
+          "text": "Bỏ qua các bản ghi thuộc Shard 7 và chỉ trả về kết quả từ các shard còn sống",
           "correct": false,
-          "feedback": "Phần mềm không thể can thiệp vào hành vi ngoài đời thực của con người."
+          "feedback": "Trả về kết quả thiếu mà không có cảnh báo có thể khiến các thẩm phán đưa ra phán quyết sai lầm nghiêm trọng."
         },
         {
           "id": "fix-1",
-          "text": "Cấu hình mỗi Shard thành một Nhóm Bản Sao (Replica Set / Primary-Follower Cluster) gồm ít nhất 3 node có cơ chế tự động chuyển đổi dự phòng khi Primary gặp sự cố",
+          "text": "Bỏ sharding hoàn toàn và gộp toàn bộ dữ liệu trở lại một cơ sở dữ liệu khổng lồ",
           "correct": false,
-          "feedback": "Chính xác! Nguyên tắc vàng trong kiến trúc phân tán: Mỗi Shard phải là một Replica Set (như trong MongoDB hay Cassandra). Nếu Primary của Shard 7 chết, một bản sao Follower của Shard 7 sẽ lập tức lên thay thế trong 2 giây mà không mất một byte dữ liệu nào!"
+          "feedback": "Bỏ sharding khiến hệ thống quay lại với các điểm nghẽn hiệu năng và giới hạn dung lượng lưu trữ của máy chủ đơn lẻ."
         },
         {
           "id": "fix-2",
-          "text": "In toàn bộ hồ sơ của Shard 7 ra giấy và để ở bàn làm việc của Cảnh trưởng",
+          "text": "Cấu hình mỗi Shard thành một Nhóm Bản Sao (Replica Set) — duy trì ít nhất 1 Leader và 2 Follower cho từng phân mảnh với cơ chế tự động chuyển đổi dự phòng (Automatic Failover)",
           "correct": true,
-          "feedback": "Hồ sơ giấy không thể tra cứu tự động trong hệ thống nghiệp vụ số thời gian thực."
+          "feedback": "Chính xác! Nguyên tắc vàng trong kiến trúc phân tán là: \"Sharding để mở rộng, Replication để dự phòng\". Bằng cách biến mỗi Shard thành một Replica Set (ví dụ sử dụng Raft/Paxos hoặc Leader-Follower), khi máy chủ Shard 7 chính bị cháy bo mạch, bản sao của nó sẽ được thăng cấp lên làm Leader mới trong vài giây, hệ thống không bao giờ bị gián đoạn!"
         },
         {
           "id": "fix-3",
-          "text": "Chuyển toàn bộ tội phạm có họ U-Z sang đồn cảnh sát của thành phố khác quản lý",
+          "text": "In toàn bộ hồ sơ vụ án của Shard 7 ra giấy và cất trong tủ lưu trữ văn phòng",
           "correct": false,
-          "feedback": "Trốn tránh trách nhiệm không giải quyết được bài toán an ninh của thành phố."
+          "feedback": "Hồ sơ giấy không thể tra cứu tự động qua API và không phải là giải pháp kỹ thuật cho hệ thống phần mềm."
         }
       ]
     }

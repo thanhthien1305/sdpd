@@ -156,60 +156,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao hàng đợi thông điệp lại bị phình to vô hạn dẫn đến sập toàn bộ máy chủ Broker?",
+      "question": "Nguyên nhân gốc rễ khiến đường ống điều động bị ùn ứ hàng chục nghìn thông điệp là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Các camera giao thông bị hacker điều khiển từ xa để gửi ảnh giả mạo",
+          "text": "Tổng đài 911 tạo ra lượng tin nhắn điều phối quá nhanh vượt quá khả năng tiếp nhận của hàng đợi",
           "correct": false,
-          "feedback": "Không có hacker; lưu lượng là ảnh giao thông thực tế giờ cao điểm."
+          "feedback": "Tốc độ sản xuất 12 tin/giây là hoàn toàn bình thường. Vấn đề là đầu tiêu thụ (consumer) bằng 0 vì dịch vụ đã bị sập."
         },
         {
           "id": "rc-2",
-          "text": "Thiếu cơ chế Áp Lực Ngược (Backpressure) và giới hạn kích thước hàng đợi — Producer tiếp tục bơm dữ liệu với tốc độ cao hơn khả năng tiêu thụ của Consumer cho đến khi cạn kiệt bộ nhớ",
+          "text": "Sự Cố Thiếu Cơ Chế Áp Lực Ngược (Backpressure Failure) khi dịch vụ Consumer bị sập mà không có chính sách tự khởi động lại — tin nhắn tiếp tục đổ về vô hạn mà không có ai tiêu thụ",
           "correct": true,
-          "feedback": "Chính xác! Khi bên tiêu thụ bị chậm hoặc tê liệt, nếu không có cơ chế áp lực ngược để bắt bên gửi giảm tốc hoặc từ chối bớt việc, hàng đợi chắc chắn sẽ phát nổ vì cạn kiệt bộ nhớ vật lý."
+          "feedback": "Chính xác! Dịch vụ Consumer điều phối đã bị sập do tràn bộ nhớ từ 45 phút trước và không có cơ chế giám sát tự động hồi sinh. Tổng đài vẫn liên tục đẩy tin nhắn vào hàng đợi trong khi không có ai rút tin ra. Hệ thống thiếu cơ chế áp lực ngược (backpressure) để giới hạn độ sâu hàng đợi hoặc điều tiết đầu vào, khiến hàng đợi phình to tới 91% RAM và sắp sập toàn diện."
         },
         {
           "id": "rc-3",
-          "text": "Dung lượng thẻ nhớ trên các camera ngoài đường bị hỏng",
+          "text": "Máy chủ hàng đợi tin nhắn bị hết bộ nhớ RAM và từ chối nhận các tin nhắn mới",
           "correct": false,
-          "feedback": "Thẻ nhớ camera bình thường; vấn đề xảy ra tại cụm máy chủ trung tâm."
+          "feedback": "Hàng đợi đang ở mức 91% RAM và vẫn đang gắng gượng nhận tin. Hết bộ nhớ là triệu chứng của vấn đề thiếu áp lực ngược chứ không phải nguyên nhân gốc."
         },
         {
           "id": "rc-4",
-          "text": "Thuật toán mã hóa hình ảnh trên worker sử dụng sai khóa bảo mật",
+          "text": "Phân vùng mạng đã chia cắt máy chủ hàng đợi với các xe tuần tra",
           "correct": false,
-          "feedback": "Worker bị treo do lỗi thư viện rò rỉ RAM, không liên quan đến khóa mã hóa."
+          "feedback": "Xe tuần tra không kết nối trực tiếp vào hàng đợi; dịch vụ consumer trung gian mới là bên kết nối. Consumer đã chết do lỗi OutOfMemoryError."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp toàn diện để bảo vệ hàng đợi trước tình trạng nghẽn tắc và tràn bộ nhớ là gì?",
+      "question": "Giải pháp tốt nhất để ngăn chặn tình trạng đường ống tin nhắn bị tắc nghẽn vô hạn trong tương lai là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Mua thêm 1TB RAM cắm vào máy chủ Message Broker",
+          "text": "Để tổng đài 911 gửi lệnh trực tiếp tới xe tuần tra mà không cần đi qua hàng đợi trung gian",
           "correct": false,
-          "feedback": "Bổ sung RAM chỉ trì hoãn thời điểm sập thêm vài tiếng; nếu worker vẫn không chạy, 1TB RAM cũng sẽ bị lấp đầy."
+          "feedback": "Bỏ hàng đợi làm mất đi lớp đệm hấp thụ các đợt tăng vọt lưu lượng trong giờ cao điểm."
         },
         {
           "id": "fix-2",
-          "text": "Tắt toàn bộ hệ thống camera giao thông trên toàn thành phố",
+          "text": "Nâng cấp dung lượng RAM của máy chủ hàng đợi lên 64 GB để chứa được nhiều tin nhắn hơn",
           "correct": false,
-          "feedback": "Tắt camera làm tê liệt công tác kiểm soát an toàn giao thông đô thị."
+          "feedback": "Nâng RAM chỉ trì hoãn cái chết — nếu Consumer vẫn bị chết, hàng đợi sẽ lấp đầy bất kỳ dung lượng RAM nào bạn cấp cho nó."
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng cơ chế Áp Lực Ngược (Backpressure - giới hạn tốc độ Producer / tạm dừng nhận tin khi hàng đợi đầy), đặt trần dung lượng hàng đợi (Max-length with Drop/Reject), và cấu hình cảnh báo Consumer Lag",
+          "text": "Triển khai Kiểm Soát Áp Lực Ngược (Backpressure Controls): tự động giám sát và hồi sinh Consumer, giới hạn dung lượng tối đa của hàng đợi, và điều tiết tốc độ Producer khi hàng đợi bị đầy",
           "correct": true,
-          "feedback": "Chính xác! Đặt giới hạn kích thước tối đa cho hàng đợi (Max Queue Length) buộc broker phải từ chối hoặc chuyển tin sang hàng đợi phụ (Dead Letter) khi vượt ngưỡng, kết hợp cơ chế báo động Consumer Lag để tự động khởi động lại các worker bị treo."
+          "feedback": "Chính xác! Một hệ thống đường ống hoàn chỉnh bắt buộc phải có: (1) Trình giám sát tiến trình tự động khởi động lại Consumer khi bị lỗi, (2) Thiết lập kích thước hàng đợi tối đa, và (3) Cơ chế Áp lực ngược (Backpressure) phát tín hiệu cho bên gửi giảm tốc độ hoặc từ chối bớt yêu cầu khi người tiêu thụ không theo kịp. Điều này giúp bảo vệ hệ thống không bị tràn bộ nhớ."
         },
         {
           "id": "fix-4",
-          "text": "Xóa toàn bộ ảnh chụp người vi phạm mỗi 10 phút một lần",
+          "text": "Cấu hình các tin nhắn điều động tự động hết hạn và tự xóa sau 5 phút nếu chưa được tiêu thụ",
           "correct": false,
-          "feedback": "Xóa bằng chứng vi phạm khiến cảnh sát không thể phạt nguội và thu ngân sách."
+          "feedback": "Tự động xóa tin nhắn điều phối đồng nghĩa với việc các cuộc gọi khẩn cấp của người dân bị vứt bỏ vào hư vô."
         }
       ]
     }

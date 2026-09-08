@@ -178,60 +178,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Khiếm khuyết kiến trúc nào đã khiến sự cố sập một máy chủ làm mất trắng phiên làm việc của hàng trăm người dùng?",
+      "question": "Nguyên nhân gốc rễ khiến 340 sĩ quan tuần tra bị đăng xuất đột ngột và mất dữ liệu báo cáo là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Các sĩ quan đã nhập mật khẩu quá ngắn khiến phiên đăng nhập tự động hủy",
+          "text": "Bộ cân bằng tải đã không phân phối lại các phiên hoạt động sang các máy chủ còn sống sau khi Máy chủ 2 gặp sự cố",
           "correct": false,
-          "feedback": "Mật khẩu không liên quan; vấn đề là máy chủ lưu giữ phiên đã bị sập."
+          "feedback": "Bộ cân bằng tải đã định tuyến lại các yêu cầu mới rất chuẩn xác, nhưng dữ liệu phiên đăng nhập chỉ nằm trong bộ nhớ RAM của Máy chủ 2. Dữ liệu phiên đã chết theo máy chủ, không còn gì để chuyển giao."
         },
         {
           "id": "rc-2",
-          "text": "Kiến trúc có trạng thái (Stateful) với Sticky Sessions — dữ liệu phiên làm việc bị gắn chặt vào bộ nhớ RAM của từng máy chủ riêng lẻ thay vì được lưu trữ tập trung",
+          "text": "Kiến trúc Phiên Gắn Kết (Sticky Sessions) lưu trạng thái phiên trực tiếp trong bộ nhớ cục bộ của từng máy chủ — khi máy chủ sập, toàn bộ phiên đăng nhập của người dùng trên đó biến mất",
           "correct": true,
-          "feedback": "Chính xác! Khi máy chủ lưu trạng thái trong RAM của chính nó, cái chết của máy chủ đồng nghĩa với cái chết của mọi phiên làm việc. Các máy chủ khác không thể chia sẻ hay tiếp quản trạng thái đó."
+          "feedback": "Chính xác! Khi sử dụng Sticky Sessions, trạng thái phiên làm việc của sĩ quan được lưu trực tiếp trong RAM của Máy chủ 2. Điều này biến các máy chủ ứng dụng thành hệ thống có trạng thái (stateful). Khi Máy chủ 2 bị tràn bộ nhớ (OOM) và khởi động lại, toàn bộ 340 phiên làm việc bị xóa sạch. Các sĩ quan bị đá văng ra màn hình đăng nhập và mất trắng dữ liệu báo cáo chưa lưu."
         },
         {
           "id": "rc-3",
-          "text": "Bộ cân bằng tải bị lỗi phần mềm và tự động gửi lệnh đăng xuất tới tất cả người dùng",
+          "text": "Máy chủ 2 bị cạn kiệt bộ nhớ vì nó được giao quá nhiều phiên gắn kết so với các máy chủ khác",
           "correct": false,
-          "feedback": "Load Balancer chỉ phát hiện máy sập và điều hướng sang máy khác; chính máy mới đã từ chối người dùng vì thiếu dữ liệu session."
+          "feedback": "Dù các phiên có được chia đều tuyệt đối thì bất kỳ khi nào một máy chủ gặp sự cố, các phiên nằm trên nó cũng sẽ biến mất nếu lưu trong RAM cục bộ."
         },
         {
           "id": "rc-4",
-          "text": "Dây cáp mạng của các máy tính trạm cảnh sát bị lỏng đồng loạt",
+          "text": "Các máy chủ ứng dụng thiếu cơ chế sao lưu định kỳ dữ liệu phiên ra đĩa cứng",
           "correct": false,
-          "feedback": "Mạng ở các đồn cảnh sát bình thường; lỗi nằm tại cụm máy chủ ứng dụng trung tâm."
+          "feedback": "Ghi phiên ra đĩa cục bộ không giải quyết được vấn đề khi máy chủ bị sập và các máy chủ khác cần phục vụ tiếp người dùng đó."
         }
       ]
     },
     "fix": {
-      "question": "Cần tái cấu trúc tầng ứng dụng như thế nào để bất kỳ máy chủ nào cũng có thể xử lý yêu cầu của bất kỳ người dùng nào mà không bao giờ mất session?",
+      "question": "Giải pháp tốt nhất để ngăn ngừa việc mất phiên làm việc khi máy chủ ứng dụng gặp sự cố là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Sao chép toàn bộ bộ nhớ RAM của App 2 sang App 1 qua đường truyền Bluetooth",
+          "text": "Thiết lập chính sách tự động khởi động lại máy chủ cực nhanh trước khi các phiên bị hết hạn",
           "correct": false,
-          "feedback": "Đồng bộ RAM qua Bluetooth là phi thực tế và bất khả thi về mặt kỹ thuật."
+          "feedback": "Khi tiến trình bị chết, bộ nhớ RAM bị hệ điều hành thu hồi sạch sẽ. Khởi động lại nhanh thì máy chủ vẫn là một trang giấy trắng."
         },
         {
           "id": "fix-1",
-          "text": "Chuyển đổi các máy chủ ứng dụng thành Phi Trạng Thái (Stateless) và lưu trữ toàn bộ phiên làm việc tại một kho dữ liệu bộ nhớ dùng chung (như Redis Cluster) hoặc mã hóa an toàn trong JWT token",
+          "text": "Tăng thêm số lượng máy chủ ứng dụng để mỗi máy chủ chỉ chứa ít phiên hơn, giảm bán kính ảnh hưởng",
           "correct": false,
-          "feedback": "Chính xác! Khi ứng dụng phi trạng thái, mọi máy chủ đều như nhau. Nếu App 2 sập, Load Balancer lập tức đẩy request sang App 1; App 1 chỉ cần tra cứu session từ Redis là tiếp tục phục vụ mượt mà, người dùng không hề hay biết có sự cố vừa xảy ra!"
+          "feedback": "Tăng số máy chủ chỉ làm giảm số nạn nhân trong mỗi vụ sập, chứ không ngăn chặn được việc mất phiên và mất dữ liệu của người dùng."
         },
         {
           "id": "fix-2",
-          "text": "Cài đặt nguồn điện dự phòng UPS mạnh hơn cho riêng máy chủ App 2",
+          "text": "Thiết kế ứng dụng Phi Trạng Thái (Stateless Services) — lưu trữ toàn bộ phiên làm việc tại một kho lưu trữ tập trung dùng chung bên ngoài (như cụm Redis Cluster)",
           "correct": true,
-          "feedback": "UPS chỉ chống mất điện nhưng không chống được lỗi phần mềm, kernel panic hay sự cố bảo trì khởi động lại máy."
+          "feedback": "Chính xác! Bằng cách đưa phiên làm việc (session state) ra một kho lưu trữ chuyên dụng bên ngoài như Redis, các máy chủ ứng dụng trở thành hoàn toàn phi trạng thái (stateless). Bất kỳ máy chủ nào trong cụm cũng có thể nhận và xử lý yêu cầu của bất kỳ sĩ quan nào. Khi một máy chủ sập, bộ cân bằng tải chuyển người dùng sang máy khác ngay lập tức mà người dùng không hề nhận ra sự gián đoạn."
         },
         {
           "id": "fix-3",
-          "text": "Yêu cầu các sĩ quan bấm phím Ctrl+S lưu bài liên tục mỗi 3 giây một lần",
+          "text": "Sao chép dữ liệu phiên trong bộ nhớ giữa cả ba máy chủ trong thời gian thực bằng cơ chế đồng bộ phiên",
           "correct": false,
-          "feedback": "Bắt người dùng gánh vác khiếm khuyết của hệ thống là trải nghiệm tồi tệ và không giải quyết được việc mất phiên đăng nhập."
+          "feedback": "Sao chép bộ nhớ giữa các máy chủ ứng dụng (session replication) cực kỳ tốn băng thông, phức tạp và không thể mở rộng khi số lượng máy chủ tăng lên."
         }
       ]
     }

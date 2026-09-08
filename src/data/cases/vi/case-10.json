@@ -165,60 +165,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Hiện tượng hàng ngàn truy vấn đồng loạt tấn công cơ sở dữ liệu khi một khóa cache hết hạn được gọi là gì?",
+      "question": "Điều gì đã khiến cơ sở dữ liệu bị tê liệt chính xác vào lúc 06:00 sáng?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Một đồn cảnh sát đã vô tình kích hoạt cuộc tấn công SQL Injection",
+          "text": "Máy chủ Redis gặp lỗi ngoại lệ chưa được xử lý, bị sập và mất toàn bộ dữ liệu trong bộ nhớ RAM",
           "correct": false,
-          "feedback": "Các câu truy vấn đều là câu lệnh SELECT hợp lệ, chỉ là số lượng quá lớn cùng lúc."
+          "feedback": "Máy chủ cache hoạt động hoàn toàn bình thường và không hề bị sập. Dữ liệu trong cache hết hạn một cách hợp lệ theo đúng thời gian sống TTL 24 giờ đã cấu hình."
         },
         {
           "id": "rc-1",
-          "text": "Lỗi rò rỉ bộ nhớ (Memory Leak) trong mã nguồn Redis",
+          "text": "Phần cứng máy chủ cơ sở dữ liệu quá yếu và không đủ năng lực xử lý số lượng truy vấn bắt đầu ca trực lúc 06:00",
           "correct": false,
-          "feedback": "Redis hoạt động hoàn toàn chính xác theo cấu hình; nó xóa khóa khi hết hạn TTL theo đúng thiết kế."
+          "feedback": "Cơ sở dữ liệu xử lý 50 truy vấn/giây với độ trễ 50ms trong điều kiện bình thường rất mượt mà. Vấn đề là 2.400 truy vấn ập đến chỉ trong 1 giây (gấp 48 lần mức tải) do cache hết hạn đồng loạt."
         },
         {
           "id": "rc-2",
-          "text": "Bão Trượt Cache (Cache Stampede / Thundering Herd) — khi một khóa hot hết hạn, tất cả các luồng đồng thời thấy miss và cùng đổ dồn xuống DB để tính toán lại",
+          "text": "Bão Trượt Cache (Cache Stampede / Thundering Herd) — khóa dữ liệu trong cache hết hạn đồng thời cho tất cả người dùng, khiến hàng nghìn yêu cầu cùng lúc ập thẳng xuống cơ sở dữ liệu",
           "correct": true,
-          "feedback": "Chính xác! Hiện tượng Cache Stampede xảy ra khi lá chắn cache đột ngột biến mất, biến hàng ngàn request đọc lẽ ra rất nhẹ nhàng thành hàng ngàn truy vấn SQL nặng nề giẫm nát cơ sở dữ liệu."
+          "feedback": "Chính xác! Đây là hiện tượng Cache Stampede kinh điển. Khóa danh sách truy nã được nạp lúc 06:00 hôm trước với TTL tròn 24 giờ. Đúng 06:00 hôm sau, khóa hết hạn. Đúng khoảnh khắc đó, 2.400 sĩ quan đồng loạt đăng nhập vào ca trực, thấy cache rỗng và cùng lúc gửi truy vấn xuống cơ sở dữ liệu để tính toán lại. DB bị quá tải đến mức không kịp phản hồi để nạp lại cache, tạo thành vòng lặp sụp đổ."
         },
         {
           "id": "rc-4",
-          "text": "Cơ sở dữ liệu MySQL bị hỏng bảng dữ liệu do đĩa cứng",
+          "text": "Việc quá nhiều sĩ quan bắt đầu ca trực cùng lúc 06:00 là một sự bùng nổ bất thường ngoài tầm kiểm soát của hệ thống",
           "correct": false,
-          "feedback": "Bảng dữ liệu không bị hỏng; nó chỉ bị quá tải số lượng kết nối đồng thời."
+          "feedback": "Việc sĩ quan bắt đầu ca lúc 06:00 là hoạt động hoàn toàn định kỳ và dự đoán trước được. Khi có cache hoạt động tốt, chỉ 1 yêu cầu đầu tiên nạp cache và 2.399 người sau sẽ nhận dữ liệu từ RAM trong vài micro-giây."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp tốt nhất để triệt tiêu hiện tượng Thundering Herd tại tầng bộ đệm là gì?",
+      "question": "Chiến lược tốt nhất để triệt tiêu hiện tượng Cache Stampede (Thundering Herd) là gì?",
       "options": [
         {
           "id": "fix-1",
-          "text": "Áp dụng Khóa Bộ Đệm Phân Tán (Mutex Lock) hoặc cơ chế Singleflight (chỉ cho 1 request xuống DB nạp lại cache, các request khác kiên nhẫn chờ), kết hợp kỹ thuật Stale-While-Revalidate",
+          "text": "Mở rộng kích thước bể kết nối (Connection Pool) của cơ sở dữ liệu để đủ sức chứa toàn bộ 2.400 truy vấn đồng thời",
           "correct": false,
-          "feedback": "Chính xác! Với Khóa Mutex hoặc Singleflight, chỉ đúng 1 request đầu tiên được phép chạy xuống DB để lấy dữ liệu mới, trong khi 1.999 request còn lại đứng chờ kết quả hoặc tạm thời phục vụ dữ liệu cũ (stale). Cơ sở dữ liệu sẽ chỉ phải xử lý đúng 1 truy vấn duy nhất!"
+          "feedback": "Mở thêm kết nối không giúp ích gì nếu CPU của cơ sở dữ liệu bị bão hòa. Mục tiêu của kiến trúc là ngăn chặn hiện tượng bão trượt xảy ra, chứ không phải cố gắng chịu đòn."
         },
         {
           "id": "fix-3",
-          "text": "Xóa bỏ hoàn toàn lớp Redis và để các ứng dụng luôn đọc thẳng từ MySQL",
+          "text": "Đặt thời gian sống TTL của khóa trong cache thành vô hạn để danh sách không bao giờ hết hạn",
           "correct": false,
-          "feedback": "Bỏ cache sẽ khiến database chết ngay lập tức ở quy mô truy cập bình thường."
+          "feedback": "Cache vĩnh viễn sẽ khiến dữ liệu bị cũ (stale) — tội phạm mới bị truy nã sẽ không xuất hiện, người đã được xóa án tích vẫn nằm trên danh sách."
         },
         {
           "id": "fix-2",
-          "text": "Tăng kích thước kết nối tối đa (max_connections) của MySQL lên 100.000 kết nối",
+          "text": "Sử dụng Khóa Bộ Nhớ Đệm (Cache Lock / Mutex) để chỉ 1 yêu cầu duy nhất được xuống DB nạp lại cache trong khi các yêu cầu khác kiên nhẫn chờ, kết hợp Dao Động Thời Gian Sống (TTL Jitter)",
           "correct": true,
-          "feedback": "Mở quá nhiều kết nối sẽ chỉ làm cạn kiệt RAM của máy chủ và khiến CPU tốn toàn bộ thời gian cho việc chuyển ngữ cảnh (context switching), làm máy sập nhanh hơn."
+          "feedback": "Chính xác! Hai kỹ thuật hoàn hảo bổ trợ cho nhau: (1) Cache Mutex / Singleflight: Khi cache hết hạn, chỉ yêu cầu đầu tiên được cấp khóa để xuống DB nạp lại, các yêu cầu khác đứng chờ và dùng chung kết quả mới. 2.400 truy vấn DB được gom lại thành đúng 1 truy vấn! (2) TTL Jitter: Thêm độ lệch ngẫu nhiên vào TTL (ví dụ 24h ± 15 phút) để các khóa không bao giờ hết hạn cùng một giây chính xác."
         },
         {
           "id": "fix-4",
-          "text": "Chỉ cập nhật danh sách truy nã mỗi năm một lần",
+          "text": "Lập lịch một tác vụ làm ấm cache (Pre-warm) chạy lúc 05:59 hàng ngày để nạp trước dữ liệu",
           "correct": false,
-          "feedback": "Thông tin truy nã tội phạm cần được cập nhật liên tục để bảo đảm an toàn cho cộng đồng."
+          "feedback": "Làm ấm chỉ áp dụng được cho trường hợp cụ thể này, không giải quyết được các khóa dữ liệu khác có mẫu truy cập ngẫu nhiên. Cache lock và TTL Jitter là giải pháp toàn diện cho mọi bài toán cache."
         }
       ]
     }

@@ -156,60 +156,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao sự hư hỏng của tệp video không bị phát hiện trong suốt quá trình truyền và lưu trữ?",
+      "question": "Tệp video bằng chứng đã bị hỏng ở vị trí nào và tại sao hệ thống không phát hiện ra sự cố?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Tòa án sử dụng loa phóng thanh công suất quá nhỏ",
+          "text": "Máy quay bodycam của cảnh sát đã ghi lại tệp video bị lỗi ngay từ ban đầu",
           "correct": false,
-          "feedback": "Vấn đề là tệp video bị lỗi giải mã, không liên quan đến thiết bị âm thanh."
+          "feedback": "Video gốc trên máy quay hoàn toàn sắc nét và đã được xem trực tiếp tại hiện trường."
         },
         {
           "id": "rc-1",
-          "text": "Phần mềm xem video của tòa án chưa được kích hoạt bản quyền",
+          "text": "Đường truyền mạng internet công cộng đã làm mất gói tin khi tải tệp lên máy chủ",
           "correct": false,
-          "feedback": "Phần mềm bản quyền đầy đủ; lỗi thực sự nằm ở các byte dữ liệu bên trong tệp đã bị sai lệch."
+          "feedback": "Giao thức TCP đảm bảo truyền tải đầy đủ các gói tin; tệp đã đến máy chủ lưu trữ trọn vẹn lúc tải lên."
         },
         {
           "id": "rc-2",
-          "text": "Hư hỏng dữ liệu âm thầm (Silent Data Corruption / Bit Rot) mà không có Mã Kiểm Tra Toàn Vẹn Đầu-Cuối (End-to-End Checksums) — các tầng mạng và đĩa cứng thấp không thể bảo đảm toàn vẹn ở tầng ứng dụng",
+          "text": "Hiện Tượng Thối Dữ Liệu Âm Thầm (Silent Bit Rot / Data Corruption) trên đĩa cứng lưu trữ vật lý kết hợp với việc thiếu Cơ Chế Kiểm Tra Mã Băm Toàn Vẹn (Checksum / Hash Verification)",
           "correct": true,
-          "feedback": "Chính xác! Lỗi phần cứng ngầm (lật bit RAM, suy hao cáp, lỗi bộ điều khiển) có thể làm biến đổi dữ liệu mà không gây lỗi phần cứng rõ ràng. Nếu ứng dụng không tự tính checksum SHA-256/MD5 từ nguồn và xác thực ở đích, dữ liệu hỏng sẽ lọt qua mắt mọi người."
+          "feedback": "Chính xác! Sau 2 năm lưu trữ trên các phiến đĩa từ, hiện tượng suy hao từ tính tự nhiên (bit rot) đã làm đảo ngược một số bit trong tệp video. Vì hệ thống lưu trữ không tạo và lưu trữ mã băm kiểm tra tính toàn vẹn (như SHA-256 Checksum) lúc tải lên, nó không hề hay biết tệp đã bị hư hỏng cho đến khi mở ra tại phiên tòa."
         },
         {
           "id": "rc-3",
-          "text": "Đoạn video bị quay ngược sáng nên cảm biến máy ảnh bị quá nhiệt",
+          "text": "Phần mềm xem video tại tòa án bị lỗi không hỗ trợ codec của tệp bằng chứng",
           "correct": false,
-          "feedback": "Lỗi phần mềm định dạng tệp bị hỏng cấu trúc, không phải lỗi kỹ thuật ánh sáng."
+          "feedback": "Codec hoàn toàn tương thích; các khối dữ liệu nhị phân bên trong tệp thực sự đã bị thay đổi và hỏng cấu trúc."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn công nghiệp để bảo đảm tính toàn vẹn và khả năng tự phục hồi của dữ liệu chứng cứ là gì?",
+      "question": "Giải pháp tốt nhất để ngăn chặn và phát hiện sớm hiện tượng hỏng dữ liệu bằng chứng là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Đổi đuôi tệp từ .mp4 sang .avi để chống hỏng dữ liệu",
+          "text": "Lưu trữ tất cả các video bằng chứng vào thẻ nhớ USB và cất trong két sắt cơ mật",
           "correct": false,
-          "feedback": "Đổi đuôi tệp không làm thay đổi các byte dữ liệu vật lý bên dưới."
+          "feedback": "Bộ nhớ flash NAND trong thẻ USB có tuổi thọ lưu giữ dữ liệu khi không cắm điện còn ngắn hơn cả đĩa cứng từ."
         },
         {
           "id": "fix-4",
-          "text": "Giảm độ phân giải video xuống 240p cho nhẹ để ít bị hỏng hơn",
+          "text": "Chỉ xem video bằng chứng trực tiếp trên máy quay và không bao giờ lưu trữ trên máy chủ",
           "correct": false,
-          "feedback": "Video độ phân giải thấp làm mờ mặt tội phạm và không thể dùng làm bằng chứng nhận dạng."
+          "feedback": "Không thể giữ hàng ngàn máy quay bodycam trong kho lưu trữ bằng chứng của tòa án."
         },
         {
           "id": "fix-1",
-          "text": "Tính toán mã băm SHA-256 (Checksum) ngay tại thời điểm ghi hình, đính kèm vào siêu dữ liệu (Metadata) để kiểm tra toàn vẹn ở mọi chặng truyền tải, kết hợp lưu trữ Erasure Coding hoặc hệ thống tệp ZFS/Btrfs có khả năng tự sửa lỗi",
+          "text": "Tính toán và lưu trữ Mã Băm Toàn Vẹn (Cryptographic Checksum như SHA-256) ngay khi tải lên, kết hợp Hệ Thống Tự Quét và Tự Sửa Lỗi Định Kỳ (Background Scrubbing & Erasure Coding)",
           "correct": true,
-          "feedback": "Chính xác! Theo Nguyên lý Đầu-Cuối (End-to-End Principle), ứng dụng phải tính hash SHA-256 ngay khi sinh tệp. Mỗi lần sao chép hay đọc lại, hệ thống kiểm tra lại checksum; nếu phát hiện lệch dù chỉ 1 bit, cơ chế Erasure Coding / RAID sẽ tự động dùng dữ liệu dự phòng để phục hồi lại nguyên bản!"
+          "feedback": "Chính xác! Bằng cách ghi nhận mã SHA-256 lúc tiếp nhận bằng chứng, hệ thống có thể xác minh tính toàn vẹn bất kỳ lúc nào. Kết hợp với hệ thống tệp tự phục hồi (như ZFS hoặc lưu trữ đám mây dùng Erasure Coding) chạy quét định kỳ (scrubbing), hệ thống sẽ tự động phát hiện các bit bị hỏng và tái tạo lại dữ liệu gốc từ các khối dự phòng trước khi quá muộn."
         },
         {
           "id": "fix-2",
-          "text": "Xem lại toàn bộ video bằng mắt thường sau mỗi lần sao chép tệp",
+          "text": "Nén video xuống dung lượng nhỏ nhất có thể để giảm xác suất bị lỗi bit",
           "correct": false,
-          "feedback": "Xem thủ công hàng triệu giờ video là bất khả thi và dễ bỏ sót lỗi của con người."
+          "feedback": "Nén dữ liệu làm giảm chất lượng bằng chứng và nếu tệp nén bị lỗi 1 bit, toàn bộ tệp nén sẽ bị hỏng hoàn toàn không thể giải nén."
         }
       ]
     }

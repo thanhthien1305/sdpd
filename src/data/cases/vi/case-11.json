@@ -195,60 +195,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao Shard 3 bị quá tải nghiêm trọng trong khi các shard khác hoàn toàn rảnh rỗi?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc Shard 4 bị quá tải trong khi các Shard khác hoàn toàn rảnh rỗi là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Shard 3 bị lỗi phần cứng bo mạch chủ làm giảm hiệu năng xử lý",
+          "text": "Bộ cân bằng tải cấp cơ sở dữ liệu gặp lỗi và chuyển nhầm toàn bộ lưu lượng vào Shard 4",
           "correct": false,
-          "feedback": "Phần cứng của Shard 3 hoàn toàn bình thường; nguyên nhân là lượng dữ liệu và truy vấn đổ vào nó quá lớn so với các máy khác."
+          "feedback": "Hệ thống sharding định tuyến theo khóa phân vùng chứ không dùng round-robin ngẫu nhiên. Bộ định tuyến hoạt động đúng theo quy tắc phân mảnh đã cấu hình."
         },
         {
           "id": "rc-3",
-          "text": "Các đồn cảnh sát chỉ gửi hồ sơ của những người có họ bắt đầu bằng M-R",
+          "text": "Phần cứng của Shard 4 bị suy giảm hiệu năng do lỗi ổ đĩa hoặc bộ nhớ RAM",
           "correct": false,
-          "feedback": "Cảnh sát bắt giữ tội phạm ngẫu nhiên; chính cách chia shard theo chữ cái đã tập trung tải vào một chỗ."
+          "feedback": "Phần cứng của Shard 4 hoàn toàn giống hệt các Shard khác. Nó bị quá tải đơn thuần vì phải hứng chịu tới 70% tổng lưu lượng truy vấn của toàn bộ hệ thống."
         },
         {
           "id": "rc-2",
-          "text": "Khóa phân vùng theo dải chữ cái (Range-based partitioning) dẫn đến sự phân bố dữ liệu bị lệch nghiêm trọng (Hot Partition) do sự phân bổ không đều của các họ trong thực tế",
+          "text": "Hiện Tượng Phân Vùng Nóng (Hot Partition) do chọn khóa phân mảnh kém — sharding theo Quận (Precinct) khiến quận trung tâm đông đúc dồn toàn bộ dữ liệu vào một máy chủ duy nhất",
           "correct": true,
-          "feedback": "Chính xác! Phân vùng theo dải tự nhiên thường bị ảnh hưởng bởi phân phối thực tế (như các họ phổ biến). Kết quả là Shard 3 phải gánh hơn 60% dữ liệu và truy vấn của cả thành phố."
+          "feedback": "Chính xác! Shard 4 chứa dữ liệu của Quận Downtown — nơi tập trung hầu hết các vụ việc và sĩ quan hoạt động. Chọn Khóa Phân Mảnh (Shard Key) có độ phân tán (cardinality) thấp hoặc phân bổ không đồng đều là sai lầm kinh điển. Shard 4 gánh 70% tải trong khi Shard 1, 2, 3 chỉ gánh 10% mỗi shard."
         },
         {
           "id": "rc-4",
-          "text": "Hệ điều hành trên Shard 3 bị nhiễm phần mềm đào tiền ảo",
+          "text": "Dữ liệu được lưu trữ trên Shard 4 bị phân mảnh nghiêm trọng cần phải thực hiện nén đĩa",
           "correct": false,
-          "feedback": "Không có mã độc; toàn bộ CPU được tiêu thụ bởi các truy vấn SQL tra cứu họ tên."
+          "feedback": "Phân mảnh đĩa không phải là nguyên nhân gây ra sự chênh lệch lưu lượng khổng lồ giữa các shard."
         }
       ]
     },
     "fix": {
-      "question": "Chiến lược phân vùng nào sẽ phân bổ đều tải trọng và lưu trữ trên toàn bộ các shard?",
+      "question": "Chiến lược phân mảnh dữ liệu nào tốt nhất để phân bổ tải đồng đều trên toàn bộ các Shard?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Gộp 4 shard lại thành một cơ sở dữ liệu duy nhất không phân mảnh",
+          "text": "Bỏ sharding và gộp toàn bộ dữ liệu trở lại một cơ sở dữ liệu khổng lồ duy nhất",
           "correct": false,
-          "feedback": "Gộp lại sẽ khiến cơ sở dữ liệu vượt quá ngưỡng dung lượng vật lý của một máy chủ duy nhất."
+          "feedback": "Quay về cơ sở dữ liệu đơn lẻ sẽ đưa hệ thống quay lại vấn đề Điểm Lỗi Đơn (SPOF) và giới hạn trần dung lượng phần cứng."
         },
         {
           "id": "fix-1",
-          "text": "Chuyển sang phân vùng theo hàm băm (Hash-based partitioning) dựa trên mã định danh duy nhất (ví dụ: hash(criminal_id)), hoặc dùng Băm Nhất Quán (Consistent Hashing)",
+          "text": "Sử dụng Phân Mảnh Theo Băm Nhất Quán (Consistent Hashing) trên một khóa có độ phân tán cao (như incident_id) hoặc Khóa Hỗn Hợp (precinct_id + incident_id)",
           "correct": true,
-          "feedback": "Chính xác! Hàm băm mật mã hoặc băm đồng nhất sẽ phân tán ngẫu nhiên và đồng đều tuyệt đối các bản ghi trên tất cả các shard, triệt tiêu hoàn toàn hiện tượng phân vùng nóng do họ tên."
+          "feedback": "Chính xác! Bằng cách băm một khóa có độ phân tán cao như incident_id, các vụ việc trong cùng quận Downtown sẽ được rải đều ngẫu nhiên trên toàn bộ các shard. Tất cả các máy chủ sẽ chịu tải đồng đều nhau (~25% mỗi shard), triệt tiêu hoàn toàn hiện tượng phân vùng nóng (hotspot)."
         },
         {
           "id": "fix-2",
-          "text": "Mua một chiếc máy tính khổng lồ để thay thế riêng cho Shard 3",
+          "text": "Chuyển một nửa các đồn cảnh sát thuộc Shard 4 sang Shard 1 một cách thủ công",
           "correct": false,
-          "feedback": "Đây chỉ là giải pháp chắp vá tạm thời; khi dân số tăng, chiếc máy đó sẽ lại tiếp tục quá tải."
+          "feedback": "Tái cấu hình thủ công rất tốn công và sẽ lại mất cân bằng ngay khi mật độ sự kiện thay đổi. Hệ thống cần cơ chế phân bổ tự động bằng thuật toán băm."
         },
         {
           "id": "fix-3",
-          "text": "Đổi tên tất cả các nghi phạm có họ M-R thành họ bắt đầu bằng chữ A",
+          "text": "Nâng cấp máy chủ Shard 4 lên một cấu hình phần cứng lớn gấp 5 lần các shard khác",
           "correct": false,
-          "feedback": "Sửa đổi thông tin nhân thân của công dân là hành vi phạm pháp nghiêm trọng."
+          "feedback": "Đây là giải pháp chắp vá và không bền vững. Khi một quận khác bùng nổ sự kiện, bạn lại phải đoán để nâng cấp shard đó."
         }
       ]
     }

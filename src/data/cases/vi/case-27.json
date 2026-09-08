@@ -160,60 +160,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao một sự cố chậm tạm thời 5 giây lại biến thành thảm họa sập hệ thống kéo dài suốt 4 tiếng?",
+      "question": "Nguyên nhân gốc rễ khiến Dịch vụ Hồ sơ bị bão hòa và sụp đổ hoàn toàn trong đợt bảo trì là gì?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Hệ thống bị nhiễm virus tự động nhân bản file cơ sở dữ liệu",
+          "text": "Quá nhiều xe tuần tra hoạt động cùng một lúc vượt quá sức chứa tổng thể của hệ thống",
           "correct": false,
-          "feedback": "Không có virus; lưu lượng là các cuộc gọi API hợp lệ bị gửi lặp lại dồn dập."
+          "feedback": "200 xe tuần tra với 600 yêu cầu/phút là mức tải hoàn toàn bình thường mà hệ thống vẫn xử lý hàng ngày."
         },
         {
           "id": "rc-1",
-          "text": "Tin tặc đã thực hiện cuộc tấn công từ chối dịch vụ phân tán botnet từ Nga",
+          "text": "Tác vụ bảo trì cơ sở dữ liệu làm hỏng dữ liệu trong kho lưu trữ của Dịch vụ Hồ sơ",
           "correct": false,
-          "feedback": "Lưu lượng tấn công chính là từ các xe tuần tra của sở cảnh sát do thuật toán thử lại gây ra."
+          "feedback": "Tác vụ bảo trì chỉ là việc đánh lại chỉ mục định kỳ và chỉ làm độ trễ tăng nhẹ từ 200ms lên 800ms. Dữ liệu không hề bị hỏng."
         },
         {
           "id": "rc-2",
-          "text": "Cơn Bão Thử Lại (Retry Storm) — cơ chế thử lại tức thời (Immediate Retry) không có Backoff và độ lệch ngẫu nhiên (Jitter) đã nhân bản lưu lượng lên gấp nhiều lần, tiêu diệt khả năng tự phục hồi của dịch vụ",
+          "text": "Cơn Bão Thử Lại (Retry Storm) — các ứng dụng client gửi lại yêu cầu ngay lập tức một cách hung hãn mà không có thời gian chờ, khuếch đại một đợt chậm nhẹ thành một trận quá tải thảm khốc",
           "correct": true,
-          "feedback": "Chính xác! Khi máy chủ đang quá tải, hành vi thử lại ngay lập tức giống như việc dẫm đạp lên người vừa ngã. Lưu lượng nhân bản theo cấp số nhân biến một vết nứt nhỏ thành sự sụp đổ toàn diện."
+          "feedback": "Chính xác! Khi Dịch vụ Hồ sơ chỉ bị chậm nhẹ (độ trễ tăng lên 800ms do bảo trì chỉ mục), các ứng dụng trên 200 xe tuần tra bị timeout ở mức 500ms và ngay lập tức bắn 5 yêu cầu thử lại liên tiếp không nghỉ. Lưu lượng bị nhân lên gấp 5-10 lần, biến 600 req/phút thành hơn 3.000 req/phút. Các yêu cầu thử lại mới tiếp tục bị timeout và sinh thêm các lượt thử lại mới, tạo thành vòng xoáy tự hủy diệt dịch vụ!"
         },
         {
           "id": "rc-3",
-          "text": "Máy chủ cơ sở dữ liệu hết tiền nộp hóa đơn điện toán đám mây",
+          "text": "Cổng API Gateway bị tràn bộ nhớ RAM và bị sập do số lượng kết nối quá lớn",
           "correct": false,
-          "feedback": "Hạ tầng đám mây bình thường; lỗi nằm ở hành vi của client."
+          "feedback": "Gateway chỉ là nạn nhân gánh chịu lưu lượng; nguyên nhân cốt lõi là hành vi thử lại điên cuồng từ phía các máy khách."
         }
       ]
     },
     "fix": {
-      "question": "Chiến lược thử lại chuẩn mực mà mọi ứng dụng phân tán bắt buộc phải tuân thủ là gì?",
+      "question": "Chiến lược tốt nhất để ngăn chặn hiện tượng Bão Thử Lại (Retry Storm) trong mạng phân tán là gì?",
       "options": [
         {
           "id": "fix-3",
-          "text": "Cấm hoàn toàn việc thử lại; nếu lỗi thì hiển thị thông báo lỗi vĩnh viễn cho cảnh sát",
+          "text": "Tăng số lượng luồng (thread pool) của Dịch vụ Hồ sơ từ 200 lên 2.000 luồng",
           "correct": false,
-          "feedback": "Không thử lại sẽ khiến các lỗi mạng tạm thời 50 mili-giây biến thành trải nghiệm tồi tệ cho người dùng."
+          "feedback": "Thêm luồng chỉ trì hoãn cú sập vài chục giây vì bão thử lại tăng trưởng theo cấp số nhân. Bạn phải chặn đứng hành vi thử lại sai lầm."
         },
         {
           "id": "fix-4",
-          "text": "Yêu cầu các sĩ quan tự đếm nhẩm từ 1 đến 10 trong đầu trước khi bấm nút tra cứu lại",
+          "text": "Thêm bộ cân bằng tải và mở rộng thêm nhiều máy chủ Dịch vụ Hồ sơ",
           "correct": false,
-          "feedback": "Quy tắc phải được xử lý tự động trong code phần mềm, không dựa vào hành vi con người."
+          "feedback": "Mở rộng quy mô máy chủ không giải quyết được vòng lặp phản hồi tích cực của bão thử lại; dung lượng càng nhiều thì số lượng request retry sinh ra càng khủng khiếp."
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng Exponential Backoff kèm Độ Lệch Ngẫu Nhiên (Full Jitter), kết hợp Ngân Sách Thử Lại (Retry Budget - tối đa 10% tổng lưu lượng) và chỉ thử lại các mã lỗi tạm thời (503/429/Timeout)",
+          "text": "Tắt hoàn toàn cơ chế thử lại (Retry) trên tất cả các ứng dụng client",
           "correct": false,
-          "feedback": "Chính xác! Exponential backoff giúp tăng thời gian chờ sau mỗi lần lỗi, và Jitter rải đều các lần gọi ngẫu nhiên trên dòng thời gian để triệt tiêu các đợt sóng xung kích. Ngân sách thử lại ngăn chặn client làm tràn ngập hệ thống khi sự cố diện rộng xảy ra!"
+          "feedback": "Tắt hoàn toàn retry sẽ khiến các lỗi mạng chập chờn nhất thời trở thành lỗi vĩnh viễn đối với người dùng. Thử lại là cần thiết, nhưng phải là thử lại thông minh."
         },
         {
           "id": "fix-2",
-          "text": "Tăng số lần thử lại từ 10 lần lên 100 lần để đảm bảo chắc chắn thành công",
+          "text": "Triển khai Thuật Toán Thử Lại Lũy Tiến Kèm Dao Động Ngẫu Nhiên (Exponential Backoff with Jitter), giới hạn số lần thử lại tối đa và sử dụng Ngân Sách Thử Lại (Retry Budget)",
           "correct": true,
-          "feedback": "Tăng lên 100 lần sẽ tạo ra 300.000 request và biến thảm họa 4 tiếng thành thảm họa cả tuần."
+          "feedback": "Chính xác! Exponential Backoff (chờ 1s, rồi 2s, 4s, 8s...) giúp giãn cách các lần gọi lại. Thêm Jitter (độ lệch ngẫu nhiên) giúp phá vỡ các đợt sóng thử lại đồng loạt của hàng trăm xe cùng lúc. Kết hợp với giới hạn số lần thử (tối đa 3 lần) và Ngân sách thử lại tại Gateway (chỉ cho phép tối đa 10% lưu lượng là retry), hệ thống sẽ cho phép dịch vụ phụ trợ có không gian để tự hồi phục mà không bị đè bẹp."
         }
       ]
     }

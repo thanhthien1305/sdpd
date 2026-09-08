@@ -186,60 +186,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Nguyên nhân cốt lõi khiến xe tuần tra nhận được trạng thái lệnh bắt cũ là gì?",
+      "question": "Tại sao Sĩ quan Chen lại nhìn thấy lệnh bắt giữ vẫn còn hiệu lực trong khi thẩm phán đã hủy bỏ nó?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Xe tuần tra bị mất kết nối mạng và hiển thị dữ liệu được lưu tạm (cache) từ ngày hôm trước",
+          "text": "Sự cố phân vùng mạng đã ngăn Đồn Nam nhận các bản ghi cập nhật từ máy chủ cơ sở dữ liệu Leader",
           "correct": false,
-          "feedback": "Sai. Xe tuần tra kết nối mạng hoàn toàn bình thường, lỗi là do máy chủ mà nó truy vấn đang chứa dữ liệu cũ."
+          "feedback": "Máy chủ bản sao Đồn Nam vẫn kết nối mạng bình thường và vẫn nhận các sự kiện nhân bản. Vấn đề là tiến trình xử lý hàng đợi nhân bản bị tụt lại quá xa so với máy chủ chính."
         },
         {
           "id": "rc-4",
-          "text": "Follower Đồn Nam từ chối các thao tác ghi vì ổ đĩa đã đầy",
+          "text": "Máy chủ cơ sở dữ liệu Leader có lỗi phần mềm khiến nó không gửi các bản ghi cập nhật lệnh bắt tới Follower Đồn Nam",
           "correct": false,
-          "feedback": "Không phải do đĩa đầy; nhật ký cho thấy tiến trình nhân bản đang bị nghẽn và tụt lại phía sau luồng dữ liệu của Leader."
+          "feedback": "Nhật ký của Leader ghi nhận rõ sự kiện nhân bản đã được phát đi thành công, nhưng phía Follower đang bị tồn đọng một lượng lớn tác vụ đọc làm chậm tiến trình áp dụng dữ liệu."
         },
         {
           "id": "rc-2",
-          "text": "Nhân bản bất đồng bộ kèm độ trễ nhân bản (Replication Lag) nghiêm trọng trên Follower Đồn Nam khiến nó phục vụ dữ liệu đã lỗi thời (Stale Read)",
+          "text": "Thiết bị của Sĩ quan Chen được định tuyến tới một máy chủ Follower có độ trễ nhân bản (Replication Lag) quá lớn, dẫn đến việc phục vụ dữ liệu đã lỗi thời (Stale Read)",
           "correct": true,
-          "feedback": "Chính xác! Trong mô hình nhân bản bất đồng bộ, follower cập nhật chậm hơn leader. Do đường mạng hoặc tải cao, Follower Đồn Nam bị chậm hơn 4 tiếng, dẫn đến việc trả về dữ liệu cũ khiến sĩ quan bắt nhầm người."
+          "feedback": "Chính xác! Trong mô hình nhân bản bất đồng bộ, các bản sao Follower luôn có độ trễ nhất định so với Leader. Đồn Nam bị trễ tới hơn 4 tiếng do nghẽn I/O. Khi Sĩ quan Chen tra cứu, yêu cầu được gửi tới Follower chưa cập nhật lệnh hủy bỏ của thẩm phán, dẫn đến việc bắt giữ oan người vô tội."
         },
         {
           "id": "rc-1",
-          "text": "Cơ sở dữ liệu Leader chưa bao giờ lưu trạng thái hủy lệnh bắt do lỗi giao dịch chưa được commit",
+          "text": "Lệnh hủy bỏ của thẩm phán chưa bao giờ được lưu do giao dịch ghi vào máy chủ Leader thất bại âm thầm",
           "correct": false,
-          "feedback": "Sai. Nhật ký của Leader ghi nhận rõ lệnh UPDATE đã thành công và Follower Đồn Bắc cũng đã nhận được dữ liệu này."
+          "feedback": "Nhật ký của Leader xác nhận giao dịch ghi lệnh hủy bỏ đã COMMIT thành công lúc 14:15. Vấn đề nằm ở việc dữ liệu đó chưa kịp truyền tải tới máy chủ Follower."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp kiến trúc hiệu quả nhất để đảm bảo các truy vấn kiểm tra lệnh bắt nhạy cảm luôn nhận được dữ liệu mới nhất là gì?",
+      "question": "Phương pháp tốt nhất để ngăn chặn các sĩ quan hành động dựa trên dữ liệu lệnh bắt lỗi thời là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Yêu cầu các sĩ quan tuần tra gọi điện thoại về tổng đài trung tâm để xác minh thủ công bằng miệng",
+          "text": "Lưu tạm trạng thái lệnh bắt giữ cục bộ trên từng thiết bị của sĩ quan để tăng tốc độ truy vấn",
           "correct": false,
-          "feedback": "Quy trình thủ công làm chậm tốc độ phản ứng khẩn cấp và không phải là giải pháp kỹ thuật có thể mở rộng."
+          "feedback": "Lưu cache cục bộ trên máy sĩ quan chỉ làm vấn đề dữ liệu cũ trở nên tồi tệ hơn gấp bội! Sĩ quan sẽ nhìn thấy dữ liệu cũ kỹ hơn nữa."
         },
         {
           "id": "fix-1",
-          "text": "Định tuyến các truy vấn đọc nhạy cảm (như lệnh bắt giữ) trực tiếp về máy chủ Leader, hoặc kiểm tra giới hạn độ trễ (staleness bound) trước khi đọc từ follower",
+          "text": "Định tuyến các truy vấn nhạy cảm và quan trọng (như kiểm tra lệnh bắt giữ) trực tiếp về máy chủ Leader thay vì đọc từ Followers",
           "correct": true,
-          "feedback": "Chính xác! Với các nghiệp vụ pháp lý nhạy cảm, đọc từ follower trễ là không thể chấp nhận. Định tuyến về Leader hoặc đảm bảo 'Read-your-own-writes / bounded staleness' sẽ ngăn chặn hoàn toàn việc bắt nhầm người."
+          "feedback": "Chính xác! Đối với các dữ liệu có rủi ro pháp lý hoặc an toàn tính mạng cao, bạn không thể chấp nhận tính nhất quán cuối cùng (eventual consistency). Việc đọc trực tiếp từ Leader (Read-from-Leader) hoặc bắt buộc kiểm tra giới hạn độ trễ (bounded staleness) đảm bảo sĩ quan luôn nhìn thấy dữ liệu mới nhất được xác nhận."
         },
         {
           "id": "fix-3",
-          "text": "Bỏ hết các máy chủ Follower và bắt toàn bộ xe tuần tra trên toàn thành phố truy vấn chung một máy chủ Leader duy nhất",
+          "text": "Bổ sung thêm nhiều máy chủ bản sao Follower tại các đồn cảnh sát để phân tán tải truy vấn đọc",
           "correct": false,
-          "feedback": "Cách này sẽ tạo lại Điểm Lỗi Đơn (SPOF) và dễ làm Leader bị sập do quá tải khi có hàng ngàn xe tuần tra truy vấn cùng lúc."
+          "feedback": "Thêm nhiều Follower không giải quyết được độ trễ nhân bản của Follower hiện tại — thậm chí nó có thể khiến Leader tốn thêm tài nguyên mạng để nhân bản tới nhiều nơi hơn."
         },
         {
           "id": "fix-2",
-          "text": "Khởi động lại máy chủ Follower Đồn Nam mỗi giờ một lần để xóa sạch dữ liệu cũ",
+          "text": "Chuyển toàn bộ các Follower từ chế độ nhân bản bất đồng bộ sang nhân bản đồng bộ hoàn toàn",
           "correct": false,
-          "feedback": "Khởi động lại không giải quyết được nguyên nhân gốc rễ và thậm chí còn làm gián đoạn dịch vụ và tăng thêm thời gian trễ nhân bản khi máy chủ khởi động lại."
+          "feedback": "Nhân bản đồng bộ tới TOÀN BỘ các bản sao sẽ khiến một bản sao chậm làm nghẽn toàn bộ hoạt động ghi của cả thành phố. Nếu Đồn Nam bị chậm mạng, không thẩm phán nào có thể ban hành hay hủy lệnh bắt mới."
         }
       ]
     }

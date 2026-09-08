@@ -186,60 +186,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao lệnh bắt giữ lại bị thực thi hai lần gây nguy hiểm cho lực lượng cảnh sát?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc hai đội cảnh sát cùng ập tới bắt giữ một nghi phạm hai lần là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Thẩm phán tại tòa án đã gõ nhầm lệnh bắt hai lần trên phần mềm",
+          "text": "Hàng đợi tin nhắn bị lỗi phần mềm khiến nó tự động nhân bản thông điệp thành hai bản sao",
           "correct": false,
-          "feedback": "Thẩm phán chỉ ký đúng một lệnh duy nhất; chính tầng truyền tin mạng đã nhân đôi thông điệp."
+          "feedback": "Hàng đợi hoạt động theo đúng ngữ nghĩa \"Phân phối ít nhất một lần\" (At-least-once delivery). Khi Consumer 1 xử lý quá lâu và hết hạn thời gian chờ xác nhận (ACK timeout), hàng đợi buộc phải phát lại tin nhắn đó cho Consumer 2."
         },
         {
           "id": "rc-3",
-          "text": "Nghi phạm John Doe có một người anh em sinh đôi có cùng tên",
+          "text": "Hai đồn cảnh sát cạnh tranh thành tích phá án và cố tình tranh nhau lệnh bắt",
           "correct": false,
-          "feedback": "Nghi phạm là người duy nhất; sự cố hoàn toàn do lỗi trùng lặp dữ liệu trong hệ thống."
+          "feedback": "Cả hai đội đều hành động hoàn toàn độc lập dựa trên chỉ thị chính thức từ phần mềm điều động."
         },
         {
           "id": "rc-4",
-          "text": "Đội đặc nhiệm Đồn 1 không mang theo bộ đàm để liên lạc với Đồn 2",
+          "text": "Thẩm phán đã vô tình ký hai lệnh bắt giữ giống hệt nhau cho cùng một nghi phạm",
           "correct": false,
-          "feedback": "Vấn đề nằm ở lệnh điều động tự động từ hệ thống máy tính, không phải lỗi bộ đàm."
+          "feedback": "Chỉ có duy nhất một lệnh bắt giữ được ban hành và đưa vào hệ thống."
         },
         {
           "id": "rc-2",
-          "text": "Hàng đợi thông điệp sử dụng cơ chế At-least-once (ít nhất một lần) nhưng phía Consumer lại thiếu Tính Idempotent (Idempotency) — không kiểm tra trùng lặp trước khi thực thi",
+          "text": "Dịch vụ xử lý lệnh bắt Thiếu Tính Lũy Thừa (Non-Idempotent Consumer) trong mô hình Phân Phối Ít Nhất Một Lần (At-Least-Once Delivery) — tin nhắn được gửi lại nhưng hệ thống không kiểm tra xem lệnh đã được xử lý chưa",
           "correct": true,
-          "feedback": "Chính xác! Trong mạng phân tán, việc thông điệp bị truyền lại (retry) khi gặp sự cố mạng là bình thường. Consumer bắt buộc phải có tính idempotent: nếu thấy mã lệnh đã được xử lý rồi, nó phải bỏ qua ngay lập tức."
+          "feedback": "Chính xác! Trong mạng phân tán, cơ chế At-least-once delivery luôn có thể gửi lại thông điệp (do mạng chập chờn hoặc timeout xử lý). Consumer xử lý lệnh bắt đã không kiểm tra tính lũy thừa (Idempotency) mà mù quáng điều động xe cho mỗi lần nhận được thông điệp. Kết quả là cả hai đội tuần tra đều được phái đi bắt cùng một người."
         }
       ]
     },
     "fix": {
-      "question": "Cách thức xử lý chuẩn xác nhất ở tầng Consumer để đảm bảo một thông điệp chỉ được thực thi đúng một lần duy nhất là gì?",
+      "question": "Giải pháp tốt nhất để ngăn ngừa việc xử lý trùng lặp thông điệp trong hệ thống hàng đợi là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Đổi sang một ngôn ngữ lập trình khác cho dịch vụ điều phối",
+          "text": "Bổ sung tầng lọc trùng lặp bên trong máy chủ hàng đợi để tự động loại bỏ các tin nhắn trùng lặp",
           "correct": false,
-          "feedback": "Tính idempotent là nguyên lý kiến trúc phân tán, không phụ thuộc vào ngôn ngữ lập trình."
+          "feedback": "Khử trùng tại hàng đợi chỉ lọc được các thông điệp giống hệt nhau trên đường truyền, không bảo vệ được logic nghiệp vụ ở tầng ứng dụng khi có sự cố xử lý dở dang."
         },
         {
           "id": "fix-1",
-          "text": "Thiết kế Consumer có Tính Idempotent (Idempotent Consumer) — gán mã định danh duy nhất (Idempotency Key / Message ID) cho mỗi lệnh, kiểm tra bảng đã xử lý (Deduplication Store) trước khi thực thi",
+          "text": "Nâng cấp toàn bộ hạ tầng hàng đợi sang hỗ trợ ngữ nghĩa Phân Phối Đúng Một Lần (Exactly-Once Delivery)",
           "correct": false,
-          "feedback": "Chính xác! Trước khi xuất quân, Consumer kiểm tra cơ sở dữ liệu: nếu ID lệnh bắt này đã có trạng thái 'ĐANG THỰC HIỆN' hoặc 'HOÀN THÀNH', nó lập tức bỏ qua thông điệp thứ hai một cách an toàn."
+          "feedback": "Exactly-once thuần túy qua mạng phân tán là điều cực kỳ tốn kém và bất khả thi nếu các hệ thống phụ trợ không hỗ trợ giao dịch 2 pha phân tán."
         },
         {
           "id": "fix-2",
-          "text": "Tắt hoàn toàn tính năng thử lại (Retry) trên hàng đợi để không bao giờ gửi lại thông điệp",
+          "text": "Xây dựng Consumer có Tính Lũy Thừa (Idempotent Consumer) — theo dõi mã định danh thông điệp / mã lệnh bắt (Idempotency Key) và bỏ qua nếu đã được xử lý",
           "correct": true,
-          "feedback": "Tắt retry sẽ khiến thông điệp bị mất vĩnh viễn khi mạng có sự cố chập chờn nhỏ, dẫn đến việc tội phạm nguy hiểm không bao giờ bị bắt."
+          "feedback": "Chính xác! Một Consumer lũy thừa sẽ lưu trạng thái các mã lệnh bắt đã xử lý vào bảng cơ sở dữ liệu có ràng buộc UNIQUE. Khi nhận được một thông điệp (dù là lần đầu hay lần thứ 10), nó kiểm tra xem mã lệnh đó đã được xử lý chưa. Nếu đã xử lý, nó lập tức bỏ qua và gửi xác nhận ACK. Dù tin nhắn có bị gửi lại bao nhiêu lần, hành động thực tế cũng chỉ diễn ra đúng một lần duy nhất!"
         },
         {
           "id": "fix-3",
-          "text": "Bắt các đội đặc nhiệm phải gọi điện cho nhau trước khi xuất phát",
+          "text": "Tăng thời gian chờ ACK timeout của hàng đợi từ 30 giây lên 5 phút",
           "correct": false,
-          "feedback": "Giải pháp thủ công không thể mở rộng và làm chậm tốc độ phản ứng trong tình huống khẩn cấp."
+          "feedback": "Tăng timeout chỉ làm giảm xác suất gửi lại, nhưng nếu Consumer thực sự bị sập, tin nhắn sẽ bị giam giữ tới 5 phút mới được gửi lại cho máy khác."
         }
       ]
     }

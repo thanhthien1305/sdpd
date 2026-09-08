@@ -160,60 +160,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Nguyên nhân cốt lõi dẫn đến trận tuyết lở làm sập cơ sở dữ liệu lúc 18:00 thứ Bảy là gì?",
+      "question": "Nguyên nhân gốc rễ dẫn đến việc cơ sở dữ liệu bị đánh sập hoàn toàn lúc nửa đêm là gì?",
       "options": [
         {
           "id": "rc-1",
-          "text": "Máy chủ Redis bị cháy thanh RAM vật lý",
+          "text": "Tác vụ sao lưu cơ sở dữ liệu ban đêm đã chiếm dụng toàn bộ tài nguyên I/O đĩa cứng",
           "correct": false,
-          "feedback": "Phần cứng Redis hoàn toàn bình thường; nó chỉ đang thực hiện đúng lệnh xóa các khóa đã hết hạn TTL."
+          "feedback": "Tác vụ sao lưu được lên lịch lúc 03:00 sáng, trong khi sự cố sập cơ sở dữ liệu xảy ra chính xác lúc 00:00:01 do cache hết hạn đồng loạt."
         },
         {
           "id": "rc-2",
-          "text": "Thác Lũ Cache (Cache Avalanche) — lượng lớn các khóa cache được tạo đồng thời với cùng một giá trị TTL cố định, dẫn đến việc chúng đồng loạt hết hạn tại cùng một thời điểm",
+          "text": "Hiện Tượng Tuyết Lở Bộ Đệm (Cache Avalanche) — hàng nghìn khóa cache được cấu hình cùng một thời gian sống TTL cố định, khiến chúng hết hạn đồng loạt tại cùng một giây",
           "correct": true,
-          "feedback": "Chính xác! Khi toàn bộ cache cùng bốc hơi trong một tích tắc, toàn bộ lưu lượng của hệ thống bị dồn thẳng xuống database mà không còn bất kỳ tầng đệm nào giảm xóc, gây ra hiện tượng sụp đổ dây chuyền."
+          "feedback": "Chính xác! Khi tất cả các khóa được thiết lập cùng một TTL (ví dụ đúng 24 giờ kể từ đợt nạp dữ liệu lúc nửa đêm hôm trước), chúng sẽ đồng loạt bốc hơi khỏi RAM cùng một giây. Toàn bộ các truy vấn đọc sau đó không còn tìm thấy cache, tạo nên một trận tuyết lở yêu cầu dội thẳng xuống cơ sở dữ liệu khiến máy chủ sập nguồn ngay lập tức."
         },
         {
           "id": "rc-3",
-          "text": "Tội phạm mạng đã tấn công từ chối dịch vụ vào cổng MySQL",
+          "text": "Máy chủ Redis bị lỗi phân mảnh bộ nhớ và tự động khởi động lại lúc 00:00",
           "correct": false,
-          "feedback": "Lưu lượng truy cập hoàn toàn là các request hợp lệ từ các đồn cảnh sát trong ca trực."
+          "feedback": "Redis vẫn chạy liên tục. Vấn đề là hàng chục ngàn khóa trong Redis cùng hết hạn một lúc."
         },
         {
           "id": "rc-4",
-          "text": "Cơ sở dữ liệu MySQL tự động khóa lại để thực hiện bảo trì định kỳ",
+          "text": "Một cuộc tấn công từ chối dịch vụ (DDoS) từ bên ngoài nhắm vào cơ sở dữ liệu lúc nửa đêm",
           "correct": false,
-          "feedback": "Không có lịch bảo trì nào được lên lịch vào 18h tối thứ Bảy."
+          "feedback": "Lưu lượng đến hoàn toàn từ các dịch vụ nội bộ của sở cảnh sát, không có cuộc tấn công mạng nào từ bên ngoài."
         }
       ]
     },
     "fix": {
-      "question": "Kỹ thuật đơn giản nhưng hiệu quả nhất để giải quyết dứt điểm hiện tượng Thác Lũ Cache là gì?",
+      "question": "Giải pháp tốt nhất để ngăn chặn hiện tượng Tuyết Lở Bộ Đệm (Cache Avalanche) là gì?",
       "options": [
         {
           "id": "fix-1",
-          "text": "Áp dụng Độ Lệch Ngẫu Nhiên cho TTL (TTL Jitter) — thay vì đặt TTL cố định, hãy cộng thêm một khoảng thời gian ngẫu nhiên nhỏ (ví dụ: TTL = 24h + random(-2h, +2h)) để phân tán thời điểm hết hạn",
+          "text": "Áp dụng Độ Lệch Ngẫu Nhiên Vào Thời Gian Sống (TTL Jitter / Staggered Expiration) — thêm một khoảng thời gian ngẫu nhiên vào mỗi khóa khi thiết lập TTL",
           "correct": true,
-          "feedback": "Chính xác! Bằng cách thêm Jitter ngẫu nhiên, 50.000 khóa sẽ hết hạn rải rác trong suốt nhiều giờ thay vì cùng một giây. Tầng đệm luôn giữ được tỷ lệ hit rate cao và database không bao giờ bị sốc tải."
+          "feedback": "Chính xác! Bằng cách thêm một giá trị dao động ngẫu nhiên (jitter), ví dụ TTL = 24 giờ + ngẫu nhiên từ 0 đến 30 phút, các khóa sẽ hết hạn rải rác trong suốt nửa tiếng thay vì tập trung vào đúng một giây. Tải nạp lại dữ liệu xuống DB sẽ được san phẳng mượt mà, triệt tiêu hoàn toàn trận tuyết lở."
         },
         {
           "id": "fix-2",
-          "text": "Tắt hoàn toàn tính năng TTL và không bao giờ cho phép dữ liệu cache hết hạn",
+          "text": "Tắt hoàn toàn cơ chế hết hạn TTL và để các khóa tồn tại vĩnh viễn trong Redis",
           "correct": false,
-          "feedback": "Không có TTL sẽ khiến bộ nhớ RAM của Redis bị đầy ắp theo thời gian và gây ra hiện tượng tràn bộ nhớ hoặc lưu dữ liệu sai lệch mãi mãi."
+          "feedback": "Không có TTL, bộ nhớ Redis sẽ sớm bị cạn kiệt và dữ liệu cũ sẽ không bao giờ được tự động dọn dẹp."
         },
         {
           "id": "fix-3",
-          "text": "Tăng gấp đôi số lượng máy chủ MySQL để chịu đựng đợt tuyết lở mỗi ngày",
+          "text": "Tăng gấp đôi kích thước bộ nhớ RAM của máy chủ Redis để chứa được nhiều khóa hơn",
           "correct": false,
-          "feedback": "Đầu tư hạ tầng thừa thãi để đối phó với một đợt tăng đột biến trong 1 giây là cực kỳ lãng phí và không giải quyết được gốc rễ bài toán."
+          "feedback": "Dung lượng RAM không phải vấn đề — vấn đề là thời điểm hết hạn của các khóa bị trùng nhau."
         },
         {
           "id": "fix-4",
-          "text": "Cấm cảnh sát tra cứu hồ sơ tội phạm vào các mốc giờ chẵn",
+          "text": "Chuyển toàn bộ các truy vấn đọc từ cơ sở dữ liệu sang đọc từ các bản sao lưu trên đĩa",
           "correct": false,
-          "feedback": "Không thể cấm cảnh sát thực thi công vụ bảo vệ an ninh."
+          "feedback": "Bản sao lưu không được thiết kế để phục vụ truy vấn thời gian thực của ứng dụng trực tuyến."
         }
       ]
     }

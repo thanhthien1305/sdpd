@@ -197,60 +197,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao sự kiện xảy ra sau (Giải thoát con tin) lại bị ghi đè bởi sự kiện xảy ra trước (Bắt cóc)?",
+      "question": "Tại sao các báo cáo phá án của cùng một vụ việc lại đến cơ quan công tố theo thứ tự thời gian lộn xộn?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Đồng hồ của máy tính điều phối viên chạy giật lùi",
+          "text": "Hàng đợi tin nhắn có lỗi phần mềm khiến nó phân phối thông điệp ra khỏi thứ tự FIFO",
           "correct": false,
-          "feedback": "Vấn đề nằm ở thứ tự thực thi thông điệp, không phải lỗi đồng hồ máy tính."
+          "feedback": "Hàng đợi vẫn đẩy tin theo thứ tự FIFO tới từng Consumer. Vấn đề là có nhiều Consumer xử lý song song với tốc độ khác nhau."
         },
         {
           "id": "rc-1",
-          "text": "Điều phối viên tại hiện trường đã bấm gửi thông báo ngược thứ tự",
+          "text": "API tiếp nhận báo cáo đã nạp các bản ghi vào hàng đợi sai thứ tự thời gian",
           "correct": false,
-          "feedback": "Cảnh sát ngoài hiện trường gửi tin đúng thứ tự; lỗi phát sinh do cơ chế xử lý song song ở tầng backend."
+          "feedback": "Nhật ký API cho thấy các báo cáo được đẩy vào hàng đợi hoàn toàn chuẩn xác theo trình tự thời gian xảy ra."
         },
         {
           "id": "rc-2",
-          "text": "Nhiều consumer xử lý song song từ một hàng đợi chung không phân vùng khiến các sự kiện của cùng một vụ án mất trật tự tuần tự (Race Condition / Out-of-order execution)",
+          "text": "Nhiều Consumer xử lý song song với tốc độ không đồng đều — Consumer xử lý thông điệp sau xong nhanh hơn Consumer đang xử lý thông điệp trước, phá vỡ thứ tự ban đầu",
           "correct": true,
-          "feedback": "Chính xác! Khi có nhiều worker cùng lấy việc từ một hàng đợi duy nhất, worker nhận tin sau có thể xử lý nhanh hơn và ghi vào database trước worker nhận tin đầu, làm đảo lộn hoàn toàn dòng thời gian."
+          "feedback": "Chính xác! Hàng đợi sử dụng cơ chế Round-Robin để chia đều các thông điệp cho 3 Consumer chạy song song mà không có khóa phân vùng. Thông điệp \"Bắt giữ\" (bước 1) rơi vào Consumer chậm, trong khi thông điệp \"Khởi tố\" (bước 2) rơi vào Consumer nhanh. Consumer nhanh hoàn thành và ghi vào cơ sở dữ liệu trước, khiến viện công tố thấy nghi phạm bị khởi tố trước khi bị bắt giữ!"
         },
         {
           "id": "rc-3",
-          "text": "Cơ sở dữ liệu tự động sắp xếp các bản ghi theo thứ tự bảng chữ cái",
+          "text": "Cơ sở dữ liệu của Viện công tố tự ý sắp xếp lại bản ghi theo thứ tự ngẫu nhiên",
           "correct": false,
-          "feedback": "Database sắp xếp theo khóa chính hoặc trường thời gian cập nhật của bản ghi."
+          "feedback": "Cơ sở dữ liệu chỉ ghi nhận và hiển thị theo đúng thứ tự mà các Consumer ghi dữ liệu vào."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn mực để đảm bảo các thông điệp của cùng một vụ án luôn được xử lý tuần tự tuyệt đối là gì?",
+      "question": "Giải pháp tốt nhất để đảm bảo thứ tự thời gian của các báo cáo thuộc cùng một vụ án là gì?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Giảm toàn bộ hệ thống xuống chỉ dùng đúng 1 worker duy nhất cho toàn thành phố",
+          "text": "Sử dụng Khóa Phân Vùng (Partition Keys theo Case ID) — đảm bảo tất cả thông điệp của cùng một vụ án luôn được định tuyến tới cùng một Consumer để xử lý tuần tự",
           "correct": true,
-          "feedback": "Dùng 1 worker sẽ bảo đảm thứ tự nhưng tạo ra nút thắt cổ chai khổng lồ khiến hệ thống không thể đáp ứng lưu lượng toàn thành phố."
+          "feedback": "Chính xác! Bằng cách gán Partition Key là Case ID (như trong Kafka hoặc AWS Kinesis), tất cả các sự kiện thuộc cùng Vụ án 77 chắc chắn sẽ vào cùng một phân vùng (partition) và được tiêu thụ tuần tự bởi duy nhất một Consumer theo đúng thứ tự FIFO. Trong khi đó, các vụ án khác vẫn được xử lý song song trên các phân vùng khác. Hệ thống vừa bảo toàn thứ tự, vừa giữ được thông lượng cao!"
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng Phân Vùng Theo Khóa (Key-based Partitioning) — gán Partition Key là Incident ID (Mã Vụ Án) để toàn bộ sự kiện của một vụ án luôn đi vào cùng một Partition và được xử lý bởi một Worker duy nhất",
+          "text": "Giảm số lượng Consumer xuống đúng 1 Consumer duy nhất để xử lý tuần tự từng thông điệp một",
           "correct": false,
-          "feedback": "Chính xác! Trong Kafka hoặc Kinesis, khi gán Partition Key là Incident ID, tất cả các sự kiện của vụ án đó sẽ xếp hàng tuần tự trong cùng một partition. Nhờ vậy, thứ tự FIFO được bảo đảm 100% cho từng vụ án trong khi toàn hệ thống vẫn mở rộng quy mô song song trên các partition khác!"
+          "feedback": "Dùng 1 Consumer giải quyết được thứ tự nhưng triệt tiêu hoàn toàn khả năng xử lý song song, biến Consumer thành nút thắt cổ chai cho toàn thành phố."
         },
         {
           "id": "fix-3",
-          "text": "Thêm lệnh chờ sleep(10 giây) trước khi gửi mỗi thông điệp",
+          "text": "Đính kèm nhãn thời gian vào báo cáo và chạy câu lệnh sắp xếp lại trong cơ sở dữ liệu sau khi chèn",
           "correct": false,
-          "feedback": "Làm chậm nhân tạo phá hủy tốc độ phản ứng cứu nạn khẩn cấp của lực lượng cảnh sát."
+          "feedback": "Sắp xếp hậu kỳ rất mong manh vì bạn không thể biết khi nào toàn bộ các thông điệp của một vụ án đã đến đủ để tiến hành sắp xếp."
         },
         {
           "id": "fix-4",
-          "text": "Xóa toàn bộ các thông điệp báo đã giải cứu con tin",
+          "text": "Chuẩn hóa phần cứng của tất cả các máy chủ Consumer để chúng chạy với tốc độ giống hệt nhau từng mili-giây",
           "correct": false,
-          "feedback": "Xóa thông tin quan trọng khiến cảnh sát không nắm được tình hình hiện trường."
+          "feedback": "Thời gian xử lý phụ thuộc vào độ phức tạp của dữ liệu, độ trễ mạng và dừng dọn rác (GC pause). Không phần cứng nào đảm bảo tốc độ giống nhau 100%."
         }
       ]
     }

@@ -174,60 +174,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Điều gì đã khiến cuộc bầu cử Leader bị bế tắc vĩnh viễn trong vòng lặp chia rẽ phiếu bầu?",
+      "question": "Điều gì đã khiến nhiều nút cùng tự xưng là Leader tại cùng một thời điểm?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Giao thức NTP đã chỉnh lùi thời gian khiến các máy chủ tưởng mình đang ở quá khứ",
+          "text": "Mạng giữa Nút 1 và Nút 2 bị phân vùng, khiến chúng không thể nhìn thấy nhau",
           "correct": false,
-          "feedback": "Không liên quan đến đồng hồ NTP; thuật toán bầu cử sử dụng bộ đếm thời gian trôi qua (timer tick) nội bộ."
+          "feedback": "Kết nối mạng giữa các nút còn sống hoàn toàn thông suốt. Vấn đề nằm ở quy tắc kiểm phiếu bầu cử của cụm."
         },
         {
           "id": "rc-1",
-          "text": "Bộ nhớ RAM của các node bị tràn khiến thuật toán bầu cử bị treo",
+          "text": "Leader cũ (Nút 0) bị sập đột ngột và đã gửi các thông điệp bị hỏng tới các nút khác trước khi chết",
           "correct": false,
-          "feedback": "Sai. Các node vẫn hoạt động rất tích cực và liên tục gửi thông điệp yêu cầu bỏ phiếu (RequestVote) cho nhau."
+          "feedback": "Nút 0 bị mất nguồn tức thì và không gửi bất kỳ thông điệp nào. Quá trình bầu cử sau đó hoàn toàn do các nút còn lại tự thực hiện."
         },
         {
           "id": "rc-2",
-          "text": "Cụm có số node chẵn (4 node) và thời gian chờ bầu cử cố định giống hệt nhau (150ms), khiến hai ứng viên luôn phát động bầu cử đồng thời và chia đôi số phiếu",
+          "text": "Quy trình bầu cử không thực thi quy tắc Túc Số Đa Số Tuyệt Đối (Strict Majority Quorum) — cho phép các nút thắng cử chỉ với số phiếu thiểu số",
           "correct": true,
-          "feedback": "Chính xác! Khi các node có cùng thời gian timeout cố định, chúng sẽ cùng hết hạn và cùng tự ứng cử tại một thời điểm chính xác, dẫn đến chia rẽ phiếu bầu (Split Vote) lặp đi lặp lại vô tận."
+          "feedback": "Chính xác! Cụm ban đầu có 5 nút, do đó đa số tuyệt đối bắt buộc phải là ít nhất 3 phiếu (majority = floor(5/2) + 1 = 3). Tuy nhiên, hệ thống lại cho phép bất kỳ nút nào nhận được 2 phiếu bầu cũng được làm Leader. Khi Nút 1 nhận được 2 phiếu và Nút 2 cũng nhận được 2 phiếu, cả hai nút đều tuyên bố mình thắng cử, dẫn đến tình trạng hai Leader hoạt động song song."
         },
         {
           "id": "rc-3",
-          "text": "Hệ thống khóa kho vũ khí gửi mã độc phá hoại tín hiệu mạng của các node",
+          "text": "Cả Nút 1 và Nút 2 đều bắt đầu tiến trình bầu cử tại cùng một mili-giây chính xác",
           "correct": false,
-          "feedback": "Không có mã độc; khóa kho chỉ đơn thuần là client đang thụ động chờ chỉ thị."
+          "feedback": "Việc bắt đầu bầu cử cùng lúc (split vote) là bình thường trong hệ thống phân tán. Nhưng nếu có quy tắc túc số chuẩn (cần 3/5 phiếu), cả hai sẽ không đạt đa số và buộc phải thử lại với thời gian chờ ngẫu nhiên (randomized election timeout), chứ không thể cùng thắng cử."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn của thuật toán Raft để giải quyết triệt để tình trạng chia rẽ phiếu bầu là gì?",
+      "question": "Quy trình bầu chọn Leader cần được sửa đổi như thế nào để đảm bảo tính đúng đắn?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Cài đặt lại hệ điều hành trên toàn bộ 4 node kiểm soát",
+          "text": "Thêm độ trễ cấu hình được sau khi Leader sập trước khi cho phép bất kỳ nút nào bắt đầu bầu cử",
           "correct": false,
-          "feedback": "Cài lại hệ điều hành không sửa được lỗi sai trong thiết kế thuật toán phân tán."
+          "feedback": "Thêm độ trễ chỉ làm chậm quá trình phục hồi hệ thống chứ không giải quyết được lỗi toán học của việc thiếu quy tắc đa số."
         },
         {
           "id": "fix-2",
-          "text": "Tăng thời gian timeout cố định từ 150ms lên 10 giây cho tất cả các node",
+          "text": "Sử dụng nhãn thời gian đồng hồ thực để xác định xem nút nào bắt đầu bầu cử trước một vài mili-giây",
           "correct": false,
-          "feedback": "Tăng thời gian cố định chỉ làm hệ thống mất thêm nhiều thời gian hơn để bế tắc; nếu các máy hết hạn cùng lúc ở giây thứ 10, chúng vẫn sẽ hòa phiếu."
+          "feedback": "Đồng hồ vật lý giữa các máy chủ không bao giờ đồng bộ hoàn hảo tới mức mili-giây và không thể dùng làm trọng tài tin cậy cho việc bầu cử."
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng Thời Gian Chờ Ngẫu Nhiên (Randomized Election Timeouts, ví dụ: 150ms - 300ms) và triển khai số lượng node lẻ (3 hoặc 5 node)",
+          "text": "Yêu cầu phải đạt được Túc Số Đa Số Tuyệt Đối (ít nhất 3 trên 5 nút trong cụm) mới được công nhận thắng cử Leader",
           "correct": true,
-          "feedback": "Chính xác! Khi thời gian chờ được ngẫu nhiên hóa, một node chắc chắn sẽ hết hạn sớm hơn các node khác một vài mili-giây, kịp thời gửi lời kêu gọi bỏ phiếu và giành trọn đa số phiếu trước khi node khác kịp trở tay. Số node lẻ cũng giúp loại bỏ nguy cơ hòa phiếu 50/50."
+          "feedback": "Chính xác! Trong một cụm 5 nút, một nút bắt buộc phải thu thập được tối thiểu 3 phiếu bầu (tính trên tổng quy mô cụm ban đầu). Vì không thể có hai nhóm con nào cùng có 3 nút trong tổng số 5 nút (3 + 3 = 6 > 5), việc xuất hiện 2 Leader đồng thời là điều bất khả thi về mặt toán học."
         },
         {
           "id": "fix-3",
-          "text": "Bỏ hẳn thuật toán bầu cử tự động và yêu cầu người trực ban nhấn nút chọn Leader thủ công",
+          "text": "Chỉ định sẵn một nút dự phòng cố định làm Leader tiếp theo để không bao giờ phải tổ chức bầu cử",
           "correct": false,
-          "feedback": "Can thiệp thủ công làm mất đi tính tự phục hồi (self-healing) của hệ thống sẵn sàng cao 24/7."
+          "feedback": "Nếu nút dự phòng cố định đó cũng bị chết hoặc mất kết nối cùng lúc với Leader chính, toàn bộ hệ thống sẽ bị đóng băng hoàn toàn."
         }
       ]
     }

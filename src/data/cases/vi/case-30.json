@@ -171,60 +171,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Hiện tượng hai tiến trình giữ tài nguyên của nhau và chờ đợi nhau vô tận được gọi là gì?",
+      "question": "Nguyên nhân gốc rễ khiến cả hai dịch vụ cùng bị treo cứng (bị đóng băng hoàn toàn) là gì?",
       "options": [
         {
           "id": "rc-2",
-          "text": "Khóa Chết Phân Tán (Distributed Deadlock) — do xin cấp phát nhiều tài nguyên theo thứ tự tùy tiện trái ngược nhau mà không có cơ chế phát hiện chu trình bế tắc hay thời hạn timeout",
+          "text": "Tắc Nghẽn Phân Tán (Distributed Deadlock do Nghịch Đảo Thứ Tự Khóa) — Dịch vụ Điều Phối khóa Vụ Án rồi chờ khóa Xe Tuần Tra, trong khi Dịch vụ Bảo Trì khóa Xe Tuần Tra rồi chờ khóa Vụ Án",
           "correct": true,
-          "feedback": "Chính xác! Khi Tiến trình 1 xin khóa A rồi B, còn Tiến trình 2 xin khóa B rồi A, chúng sẽ tạo thành một đồ thị chu trình phụ thuộc (Circular Wait Graph) dẫn đến Khóa Chết vĩnh viễn nếu không có timeout."
+          "feedback": "Chính xác! Đây là hiện tượng Bế Tắc Phân Tán (Deadlock) kinh điển. Dịch vụ A chiếm khóa tài nguyên X và yêu cầu khóa Y; cùng lúc đó Dịch vụ B đã chiếm khóa Y và yêu cầu khóa X. Hai bên giữ chặt tài nguyên của mình và vĩnh viễn chờ đợi đối phương nhượng bộ. Vì khóa được quản lý phân tán qua hai dịch vụ độc lập, cơ sở dữ liệu không thể tự động phát hiện chu trình bế tắc để rollback!"
         },
         {
           "id": "rc-3",
-          "text": "Đường dây điện thoại giữa Đồn 1 và Đồn 2 bị nghẽn",
+          "text": "Số lượng kết nối đồng thời vượt quá giới hạn max_connections của máy chủ",
           "correct": false,
-          "feedback": "Đây là vấn đề đồng bộ hóa tài nguyên phần mềm trong cơ sở dữ liệu."
+          "feedback": "Số lượng kết nối vẫn nằm trong ngưỡng cho phép; các tiến trình bị treo cứng vì chờ khóa phân tán."
         },
         {
           "id": "rc-1",
-          "text": "Lỗi tràn bộ nhớ đệm do xử lý ảnh vật chứng dung lượng lớn",
+          "text": "Cả hai dịch vụ đều có lỗi rò rỉ luồng xử lý khiến hệ thống bị hết luồng CPU",
           "correct": false,
-          "feedback": "Bộ nhớ hoàn toàn bình thường; CPU thậm chí rơi về 0% vì các tiến trình đều đang ngủ để chờ khóa."
+          "feedback": "Các luồng xử lý không bị rò rỉ; chúng bị chặn lại (blocked) do đang chờ đợi tài nguyên bị khóa bởi luồng khác."
         },
         {
           "id": "rc-4",
-          "text": "Nghi phạm đã nuốt mất chìa khóa phòng tạm giam",
+          "text": "Cơ sở dữ liệu bị hỏng chỉ mục khóa ngoại giữa bảng Xe Tuần Tra và bảng Vụ Án",
           "correct": false,
-          "feedback": "Đây là khóa logic (Lock) trong phần mềm máy tính, không phải chìa khóa vật lý."
+          "feedback": "Chỉ mục và cấu trúc bảng hoàn toàn nguyên vẹn; sự cố xuất phát từ thứ tự chiếm dụng tài nguyên."
         }
       ]
     },
     "fix": {
-      "question": "Hai kỹ thuật kinh điển nào trong khoa học máy tính giúp ngăn chặn hoàn toàn nguy cơ Deadlock?",
+      "question": "Phương pháp tốt nhất để triệt tiêu vĩnh viễn nguy cơ Bế Tắc Phân Tán (Distributed Deadlock) là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Chỉ cho phép một đồn cảnh sát duy nhất được hoạt động vào ban đêm",
+          "text": "Chỉ cho phép duy nhất một dịch vụ hoạt động tại một thời điểm",
           "correct": false,
-          "feedback": "Mọi đồn cảnh sát đều phải phục vụ người dân 24/7."
+          "feedback": "Chạy tuần tự từng dịch vụ một sẽ phá hủy hoàn toàn khả năng xử lý song song và thông lượng của hệ thống."
         },
         {
           "id": "fix-1",
-          "text": "Áp dụng Thứ Tự Khóa Cố Định Toàn Cục (Lock Ordering — luôn xin khóa tài nguyên theo thứ tự tăng dần của ID, ví dụ luôn khóa A trước B) và đặt Thời Hạn Thuê Khóa ngắn (Lock Timeout / Lease TTL with automatic rollback)",
+          "text": "Bổ sung thêm thật nhiều luồng xử lý cho cả hai dịch vụ để chúng xử lý nhanh hơn",
           "correct": false,
-          "feedback": "Chính xác! Nếu tất cả mọi dịch vụ đều bắt buộc phải xin khóa theo thứ tự ID tăng dần (A rồi mới tới B), sẽ không bao giờ có chuyện một tiến trình giữ B mà đòi A, triệt tiêu hoàn toàn điều kiện Circular Wait. Lock Timeout đóng vai trò lưới an toàn tự hủy giao dịch nếu có sự cố bất thường."
+          "feedback": "Thêm luồng không giải quyết được deadlock — thậm chí còn tạo ra nhiều chu trình bế tắc hơn."
         },
         {
           "id": "fix-2",
-          "text": "Khởi động lại cơ sở dữ liệu mỗi khi phát hiện có giao dịch chạy quá 10 giây",
+          "text": "Thực thi Thứ Tự Khóa Toàn Cục Nhất Quán (Enforce Global Lock Ordering — tất cả các dịch vụ bắt buộc phải chiếm khóa tài nguyên theo cùng một thứ tự bảng chữ cái hoặc ID cố định), kết hợp Thời Gian Chờ Khóa (Lock Timeout)",
           "correct": true,
-          "feedback": "Khởi động lại DB sẽ làm hủy ngang hàng ngàn giao dịch bình thường khác và gây gián đoạn hệ thống nghiêm trọng."
+          "feedback": "Chính xác! Nguyên lý cốt lõi để loại bỏ Deadlock: \"Không có thứ tự khóa nghịch đảo thì không thể có chu trình bế tắc\". Nếu quy định rằng: Mọi dịch vụ khi cần cả hai tài nguyên BẮT BUỘC phải chiếm khóa Bảng Vụ Án (Incident) trước rồi mới được chiếm khóa Bảng Xe (Vehicle), thì Dịch vụ Bảo Trì sẽ không bao giờ giữ khóa Xe trước khi có khóa Vụ Án. Kết hợp với Lock Timeout (tự động nhả khóa nếu chờ quá 3s), deadlock sẽ bị triệt tiêu hoàn toàn!"
         },
         {
           "id": "fix-3",
-          "text": "Bỏ hoàn toàn cơ chế khóa và để các tiến trình tự do ghi đè dữ liệu lên nhau",
+          "text": "Khởi động lại toàn bộ cơ sở dữ liệu mỗi khi phát hiện có giao dịch bị chậm quá 1 phút",
           "correct": false,
-          "feedback": "Bỏ khóa sẽ gây ra lỗi ghi đè mất dữ liệu (Lost Update) và làm sai lệch hồ sơ tư pháp."
+          "feedback": "Khởi động lại cơ sở dữ liệu sẽ đánh sập toàn bộ các giao dịch đang diễn ra của toàn thành phố."
         }
       ]
     }

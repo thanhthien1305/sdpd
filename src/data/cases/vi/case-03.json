@@ -161,60 +161,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao 16 bức ảnh đã được xác nhận thành công lại không xuất hiện trên máy chủ mới sau khi chuyển đổi dự phòng?",
+      "question": "Tại sao 16 trong tổng số 47 bức ảnh hiện trường lại bị mất vĩnh viễn?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Máy chủ Replica có dung lượng ổ cứng quá nhỏ nên tự động xóa bỏ các tệp ảnh lớn",
+          "text": "Cơ chế nhân bản bất đồng bộ cho phép Leader báo thành công cho client trước khi dữ liệu được nhân bản sang Replica — khi Leader bị sập nguồn, dữ liệu chưa truyền đi bị mất vĩnh viễn",
           "correct": true,
-          "feedback": "Không chính xác. Máy chủ dự phòng có cấu hình giống hệt máy chủ chính và dung lượng ổ cứng còn trống rất nhiều."
+          "feedback": "Chính xác! Với nhân bản bất đồng bộ, Leader xác nhận đã ghi nhận ảnh ngay khi nó lưu vào đĩa cục bộ mà không cần chờ Follower xác nhận. Khi Leader bị sập nguồn đột ngột, các ảnh từ 32 đến 47 mới chỉ nằm trên Leader cũ và chưa truyền sang Follower. Khi Follower được thăng cấp lên làm Leader mới, nó hoàn toàn không có 16 bức ảnh này."
         },
         {
           "id": "rc-1",
-          "text": "Máy trạm của đội khám nghiệm đã tải ảnh lên nhầm thư mục tạm thời trên máy cục bộ",
+          "text": "Quá trình tải lên của đội pháp y bị gián đoạn giữa chừng và không phải toàn bộ 47 bức ảnh đều được gửi trọn vẹn lên máy chủ",
           "correct": false,
-          "feedback": "Sai. Nhật ký mạng cho thấy dữ liệu ảnh đã được truyền thành công tới máy chủ Leader trung tâm."
+          "feedback": "Nhật ký tải lên cho thấy rõ ràng toàn bộ 47 ảnh đã được máy chủ tiếp nhận thành công và trả về mã HTTP 200 OK lúc 22:03. Dữ liệu bị mất sau khi tải lên, trong quá trình nhân bản giữa các máy chủ."
         },
         {
           "id": "rc-4",
-          "text": "Các bức ảnh bị nhiễm virus nên hệ điều hành đã tự động cách ly và xóa tệp",
+          "text": "Sự cố phân vùng mạng đã cắt đứt kết nối giữa Leader và Follower, ngăn chặn toàn bộ lưu lượng nhân bản",
           "correct": false,
-          "feedback": "Không có cảnh báo bảo mật hay virus nào trong nhật ký hệ thống."
+          "feedback": "Nhật ký cho thấy các ảnh 1-31 đã được nhân bản trơn tru ngay trước khi Leader sập. Không hề có phân vùng mạng — Leader bị chết phần cứng trước khi kịp nhân bản nốt các ảnh còn lại."
         },
         {
           "id": "rc-2",
-          "text": "Với nhân bản bất đồng bộ, Leader xác nhận thành công với client trước khi nhân bản sang Replica; khi Leader sập nguồn, dữ liệu chưa truyền bị mất vĩnh viễn",
+          "text": "Cơ sở dữ liệu Follower bị hết dung lượng lưu trữ được cấp phát và bắt đầu từ chối dữ liệu ảnh gửi tới",
           "correct": false,
-          "feedback": "Chính xác! Nhân bản bất đồng bộ ưu tiên tốc độ nên báo thành công ngay khi lưu tại Leader. Khi Leader chết đột ngột trước khi kịp đồng bộ sang Replica, những dữ liệu chưa kịp gửi sẽ vĩnh viễn biến mất khi Replica lên làm Leader mới."
+          "feedback": "Follower đã lưu trữ thành công 31 bức ảnh đầu tiên và dung lượng đĩa vẫn còn rất nhiều. 16 ảnh còn lại chưa từng được Leader gửi sang."
         }
       ]
     },
     "fix": {
-      "question": "Cần thay đổi cấu hình nhân bản như thế nào để đảm bảo chứng cứ quan trọng không bao giờ bị mất khi xảy ra sự cố?",
+      "question": "Hệ thống lưu trữ chứng cứ cần được thay đổi như thế nào để ngăn mất mát dữ liệu khi chuyển đổi dự phòng (failover)?",
       "options": [
         {
           "id": "fix-2",
-          "text": "Tăng gấp đôi tốc độ đường truyền mạng giữa hai trung tâm dữ liệu",
+          "text": "Thêm một bản sao Follower thứ hai để tăng số lượng máy chủ nhận bản sao và tăng xác suất dữ liệu sống sót",
           "correct": false,
-          "feedback": "Mạng nhanh hơn giúp giảm độ trễ nhưng về mặt lý thuyết vẫn tồn tại cửa sổ rủi ro (window of vulnerability) nếu máy chủ sập giữa chừng trong chế độ bất đồng bộ."
+          "feedback": "Nếu tất cả Follower đều dùng cơ chế bất đồng bộ, việc có thêm Follower thứ hai không loại bỏ được khoảng hở mất dữ liệu. Leader vẫn báo thành công trước khi bất kỳ Follower nào nhận được dữ liệu."
         },
         {
           "id": "fix-3",
-          "text": "Nén các bức ảnh xuống dung lượng siêu nhỏ trước khi tải lên để gửi nhanh hơn",
+          "text": "Tăng tốc độ băng thông nhân bản để dữ liệu được gửi sang Follower nhanh hơn, thu hẹp khoảng thời gian chưa nhân bản",
           "correct": false,
-          "feedback": "Nén ảnh làm giảm chất lượng chứng cứ pháp y và không giải quyết được bài toán cam kết độ bền vững (durability) trong kiến trúc phân tán."
+          "feedback": "Tăng tốc độ truyền tải giúp thu hẹp khoảng hở thời gian rủi ro nhưng KHÔNG THỂ loại bỏ nó hoàn toàn. Khi lưu lượng ghi tăng vọt hoặc sập nguồn bất ngờ, nguy cơ mất dữ liệu vẫn luôn tồn tại. Chỉ có nhân bản đồng bộ mới cam kết không mất dữ liệu."
         },
         {
           "id": "fix-4",
-          "text": "Chỉ cho phép tải ảnh lên vào ban đêm khi lưu lượng truy cập hệ thống thấp nhất",
+          "text": "Tắt hoàn toàn cơ chế chuyển đổi dự phòng tự động — giữ hệ thống ngoại tuyến và chờ Leader cũ khởi động lại",
           "correct": false,
-          "feedback": "Hiện trường vụ án xảy ra bất kỳ lúc nào, cảnh sát cần lưu trữ chứng cứ tức thời 24/7."
+          "feedback": "Giải pháp này có thể cứu được dữ liệu (nếu đĩa cứng không hỏng), nhưng cái giá phải trả là hệ thống ngừng hoạt động trong nhiều giờ. Hệ thống bằng chứng tư pháp cần cả tính sẵn sàng cao LẪN tính bền vững dữ liệu."
         },
         {
           "id": "fix-1",
-          "text": "Chuyển sang nhân bản đồng bộ (Synchronous) hoặc bán đồng bộ (Semi-synchronous) — yêu cầu ít nhất một replica xác nhận đã ghi dữ liệu an toàn trước khi báo thành công cho người dùng",
+          "text": "Sử dụng cơ chế nhân bản đồng bộ (Synchronous Replication) hoặc bán đồng bộ cho dữ liệu quan trọng — Leader phải chờ ít nhất một bản sao xác nhận đã ghi trước khi báo thành công cho client",
           "correct": true,
-          "feedback": "Chính xác! Nhân bản đồng bộ đảm bảo dữ liệu luôn tồn tại trên ít nhất hai máy chủ độc lập trước khi gửi xác nhận. Nếu một máy cháy, dữ liệu vẫn an toàn 100% trên máy kia."
+          "feedback": "Chính xác! Với nhân bản đồng bộ, Leader không bao giờ gửi phản hồi xác nhận cho client cho đến khi ít nhất một bản sao Follower đã nhận và ghi dữ liệu an toàn. Nếu Leader sập, bản sao được thăng cấp chắc chắn nắm giữ đầy đủ 100% dữ liệu đã xác nhận. Mặc dù độ trễ ghi tăng nhẹ, đây là sự đánh đổi bắt buộc cho sự toàn vẹn của bằng chứng pháp y."
         }
       ]
     }

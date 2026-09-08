@@ -163,60 +163,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao một con bot bị lỗi từ phía đối tác lại có thể đánh sập hoàn toàn hệ thống của sở cảnh sát?",
+      "question": "Nguyên nhân gốc rễ khiến bốn đồn cảnh sát bị mất hoàn toàn khả năng tra cứu lệnh bắt khẩn cấp là gì?",
       "options": [
         {
           "id": "rc-3",
-          "text": "Đường dây điện thoại của sở cảnh sát bị đứt",
+          "text": "Hiện Tượng Người Hàng Xóm Ồn Ào (The Noisy Neighbor Problem) do Cổng Tra Cứu Thiếu Giới Hạn Tốc Độ (No Rate Limiting) — một người dùng duy nhất (Đồn 3) độc chiếm 96% năng lực của API dùng chung, làm bỏ đói toàn bộ các đồn khác",
           "correct": true,
-          "feedback": "Sự cố xảy ra tại cổng máy chủ web API, không liên quan đến mạng điện thoại."
+          "feedback": "Chính xác! Khi không có bộ giới hạn tốc độ (Rate Limiting), Cổng API đối xử với tất cả các yêu cầu theo nguyên tắc đến trước phục vụ trước. Đồn 3 kích hoạt một tác vụ quét lô tự động bắn tới 500 yêu cầu/giây, chiếm trọn 96% dung lượng xử lý của toàn bộ hệ thống. Bốn đồn cảnh sát còn lại chỉ còn vài mẩu tài nguyên vụn vặt và liên tục bị timeout khi cần tra cứu khẩn cấp ngoài hiện trường."
         },
         {
           "id": "rc-1",
-          "text": "Tòa thị chính đã cố tình phát động chiến tranh mạng chống lại sở cảnh sát",
+          "text": "Tác vụ kiểm tra lệnh bắt hàng loạt của Đồn 3 là một hành vi phá hoại độc hại",
           "correct": false,
-          "feedback": "Đây chỉ là lỗi vòng lặp code sơ đẳng của lập trình viên, không phải hành vi thù địch."
+          "feedback": "Tác vụ kiểm tra hàng loạt của Đồn 3 là nghiệp vụ hoàn toàn chính đáng để sàng lọc hồ sơ. Vấn đề là nó tiêu thụ tài nguyên vô tội vạ mà không bị kiểm soát."
         },
         {
           "id": "rc-2",
-          "text": "Thiếu Bộ Giới Hạn Tốc Độ (Rate Limiting / Throttling) — hệ thống đối xử với mọi request bình đẳng như nhau và không có hạn ngạch trần (Quota) để cô lập và ngăn chặn các nguồn lưu lượng độc hại làm cạn kiệt tài nguyên",
+          "text": "Cơ sở dữ liệu Lệnh bắt Liên bang quá yếu và không thể xử lý khối lượng truy vấn từ các đồn cảnh sát",
           "correct": false,
-          "feedback": "Chính xác! Một hệ sinh thái phân tán an toàn bắt buộc phải bảo vệ chính mình. Nếu không có Rate Limiting đặt ra trần hạn ngạch theo từng API Key/IP, bất kỳ một client nào chạy lỗi hay bị tấn công cũng sẽ kéo sập luôn toàn bộ hệ thống."
+          "feedback": "Cơ sở dữ liệu hoàn toàn xử lý tốt mức tải 20 truy vấn/giây thông thường. Sự cố xảy ra vì Cổng API bị Đồn 3 dồn dập 500 truy vấn/giây mà không bị điều tiết."
         },
         {
           "id": "rc-4",
-          "text": "Cơ sở dữ liệu của sở cảnh sát bị giới hạn chỉ chứa được 100 người dân",
+          "text": "Bể luồng xử lý của Cổng Tra Cứu Lệnh Bắt quá nhỏ và cần được tăng kích thước",
           "correct": false,
-          "feedback": "Dung lượng dữ liệu không phải nguyên nhân; nguyên nhân là tần suất cuộc gọi quá lớn."
+          "feedback": "Tăng luồng chỉ làm Đồn 3 chiếm dụng nhiều hơn; khi không có giới hạn, tác vụ hàng loạt sẽ nuốt trọn bất kỳ số luồng nào bạn cấp thêm."
         }
       ]
     },
     "fix": {
-      "question": "Giải pháp chuẩn công nghiệp để bảo vệ hệ thống trước các đợt lưu lượng vượt ngưỡng là gì?",
+      "question": "Phương pháp tốt nhất để ngăn chặn một khách hàng duy nhất làm tê liệt dịch vụ dùng chung là gì?",
       "options": [
         {
           "id": "fix-4",
-          "text": "Khởi kiện lập trình viên tòa thị chính ra tòa án tối cao",
+          "text": "Đặt một hàng đợi FIFO phía trước Cổng Tra Cứu để xử lý các yêu cầu theo đúng thứ tự đến trước phục vụ trước",
           "correct": false,
-          "feedback": "Kiện cáo mất nhiều năm và không giải quyết được bài toán bảo vệ hệ thống kỹ thuật trong thời gian thực."
+          "feedback": "Hàng đợi FIFO sẽ bị Đồn 3 bơm đầy 500 yêu cầu/giây, đẩy các yêu cầu tra cứu khẩn cấp của các đồn khác xuống đáy hàng đợi chờ hàng chục phút."
         },
         {
           "id": "fix-1",
-          "text": "Triển khai Bộ Giới Hạn Tốc Độ Phân Tán (Distributed Rate Limiter) tại Cổng API Gateway áp dụng thuật toán Token Bucket hoặc Sliding Window Counter trên Redis — giới hạn mỗi đối tác tối đa 500 requests/giây, trả về ngay HTTP 429 Too Many Requests kèm header Retry-After khi vượt ngưỡng",
+          "text": "Cấm vĩnh viễn và chặn đứng toàn bộ các tác vụ kiểm tra lệnh bắt tự động hàng loạt",
           "correct": false,
-          "feedback": "Chính xác! Với Token Bucket / Sliding Window trên Redis, khi bot tòa thị chính vượt quá 500 QPS, Gateway sẽ ngay lập tức từ chối các request thừa trong 0.1ms với mã HTTP 429. Lưu lượng nội bộ của cảnh sát vẫn lưu thông bình thường, cách ly hoàn toàn sự cố đối tác!"
+          "feedback": "Chặn hoàn toàn các nghiệp vụ hợp lệ là cách tiếp cận tiêu cực. Tác vụ quét lô là cần thiết, chỉ cần điều tiết tốc độ của nó."
         },
         {
           "id": "fix-2",
-          "text": "Rút toàn bộ phích cắm mạng internet của sở cảnh sát ra khỏi tường",
+          "text": "Triển khai Giới Hạn Tốc Độ Theo Khách Hàng (Per-client Rate Limiting with Quotas dùng Token Bucket hoặc Leaky Bucket), kết hợp Phân Hạng Ưu Tiên (Priority Queues — ưu tiên tra cứu hiện trường thời gian thực hơn tác vụ quét lô)",
           "correct": true,
-          "feedback": "Rút mạng làm mất liên lạc của toàn bộ lực lượng cảnh sát trên toàn thành phố."
+          "feedback": "Chính xác! Bằng cách cấp hạn mức (quota) công bằng cho từng đồn cảnh sát (ví dụ tối đa 50 req/giây mỗi đồn thông qua thuật toán Token Bucket), Đồn 3 sẽ bị điều tiết nhịp nhàng mà không thể làm nghẽn API. Đồng thời, phân hạng ưu tiên đảm bảo các yêu cầu tra cứu khẩn cấp từ sĩ quan ngoài hiện trường luôn được phục vụ ngay lập tức với độ trễ dưới 100ms, bảo vệ an toàn tối đa cho lực lượng thực thi pháp luật!"
         },
         {
           "id": "fix-3",
-          "text": "Tăng dung lượng máy chủ lên gấp 100 lần để hấp thụ toàn bộ 50.000 QPS của con bot",
+          "text": "Mở rộng quy mô máy chủ Cổng Tra Cứu theo chiều ngang vô hạn để đáp ứng bất kỳ mức lưu lượng nào",
           "correct": false,
-          "feedback": "Mở rộng tài nguyên vô tội vạ để phục vụ một vòng lặp code vô tận là cực kỳ tốn kém và không bền vững."
+          "feedback": "Nếu không có giới hạn, Đồn 3 có thể tăng tốc độ quét lên 2.000 req/giây và cơ sở dữ liệu liên bang phía sau cũng có giới hạn trần không thể mở rộng vô tận."
         }
       ]
     }

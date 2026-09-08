@@ -154,60 +154,60 @@
   },
   "diagnosis": {
     "rootCause": {
-      "question": "Vì sao người dân vẫn tiếp tục nhìn thấy danh sách tội phạm cũ dù máy chủ gốc đã cập nhật từ sáng?",
+      "question": "Tại sao mạng CDN vẫn tiếp tục phân phối bức ảnh thẻ căn cước cũ đã 10 năm của kẻ đào tẩu?",
       "options": [
         {
           "id": "rc-4",
-          "text": "Tên tội phạm đã hack vào CDN để giữ lại hình ảnh của mình",
+          "text": "Định dạng tệp ảnh mới không tương thích với mạng phân phối nội dung CDN",
           "correct": false,
-          "feedback": "Không có sự tấn công mạng; đây thuần túy là thiếu sót trong quy trình quản lý vòng đời cache."
+          "feedback": "Cả hai ảnh đều là tệp JPEG chuẩn; vấn đề hoàn toàn nằm ở cơ chế lưu đệm của CDN."
         },
         {
           "id": "rc-1",
-          "text": "Máy chủ gốc bị lỗi đường truyền không gửi được dữ liệu ra mạng internet",
+          "text": "Nhân viên trực ban đã quên không tải bức ảnh mới lên máy chủ gốc của sở cảnh sát",
           "correct": false,
-          "feedback": "Máy chủ gốc hoạt động tốt và trả về nội dung mới nếu truy cập trực tiếp."
+          "feedback": "Máy chủ gốc đã nhận được bức ảnh mới và đang lưu trữ nó chính xác. Nhật ký cho thấy ảnh mới đã nằm ở máy chủ gốc lúc 08:30."
         },
         {
           "id": "rc-2",
-          "text": "Máy chủ biên CDN lưu cache nội dung với TTL dài (24h) và quy trình cập nhật nội dung thiếu bước gọi API Xóa Bộ Đệm (Purge/Invalidate) trên CDN",
+          "text": "Bộ nhớ đệm của CDN có thời gian sống (TTL) 7 ngày và hệ thống không gửi tín hiệu Xóa Bộ Đệm (Cache Purge) tới CDN khi cập nhật ảnh mới trên máy chủ gốc",
           "correct": true,
-          "feedback": "Chính xác! CDN hoạt động như một tấm khiên đứng trước máy chủ gốc. Nếu không chủ động phát lệnh xóa cache (Cache Purge) tới CDN, các máy chủ biên sẽ tiếp tục phục vụ bản sao cũ cho đến khi hết hạn TTL."
+          "feedback": "Chính xác! CDN hoạt động theo nguyên tắc lưu bản sao tại các điểm biên mạng (edge nodes) với TTL 7 ngày để giảm tải cho máy chủ gốc. Khi cảnh sát thay đổi ảnh của tội phạm trên máy chủ gốc, CDN ở biên mạng không hề hay biết và vẫn tiếp tục phục vụ bức ảnh cũ được lưu trong bộ nhớ đệm của nó cho công chúng."
         },
         {
           "id": "rc-3",
-          "text": "Trình duyệt của tất cả người dân trên toàn quốc bị nhiễm mã độc đồng loạt",
+          "text": "Trình duyệt web của người dân lưu ảnh cục bộ và từ chối tải lại từ internet",
           "correct": false,
-          "feedback": "Vấn đề nằm ở tầng mạng phân phối CDN, không phải thiết bị người dùng."
+          "feedback": "Ngay cả khi người dùng mở tab ẩn danh hoặc tải từ thiết bị mới tinh, CDN vẫn trả về bức ảnh cũ do máy chủ biên của CDN đang giữ nó."
         }
       ]
     },
     "fix": {
-      "question": "Cách thức xử lý chuẩn xác nhất để nội dung mới xuất hiện ngay lập tức trên CDN là gì?",
+      "question": "Giải pháp tốt nhất để đảm bảo CDN luôn phân phối nội dung mới nhất ngay khi cập nhật là gì?",
       "options": [
         {
           "id": "fix-1",
-          "text": "Tích hợp lệnh gọi API Xóa Bộ Đệm CDN (Purge/Invalidate) vào quy trình cập nhật nội dung, hoặc sử dụng cơ chế Phá Vỡ Cache bằng URL phiên bản hóa (ví dụ: most-wanted.v2.json)",
+          "text": "Đặt thời gian sống TTL của CDN về mức 0 giây cho tất cả các bức ảnh",
           "correct": false,
-          "feedback": "Chính xác! Gọi API Purge sẽ buộc các máy chủ biên CDN xóa ngay bản sao cũ và tải nội dung mới từ Origin. Với tài nguyên tĩnh (JS/CSS/Ảnh), đổi tên file theo hash nội dung là giải pháp tối ưu nhất."
+          "feedback": "Đặt TTL = 0 làm mất hoàn toàn tác dụng của CDN, biến CDN thành một proxy thông thường và đẩy toàn bộ tải về máy chủ gốc."
         },
         {
           "id": "fix-2",
-          "text": "Đặt TTL của CDN về 0 giây cho tất cả các yêu cầu",
+          "text": "Tích hợp lệnh Xóa Bộ Đệm CDN (CDN Cache Purge / Invalidation API) vào quy trình cập nhật nội dung, hoặc sử dụng Đặt Tên Tệp Theo Băm Phiên Bản (URL Versioning / Cache Busting)",
           "correct": true,
-          "feedback": "Đặt TTL = 0 làm mất hoàn toàn tác dụng của CDN, biến nó thành proxy thừa thãi và khiến mọi truy cập đổ thẳng vào làm sập máy chủ gốc."
+          "feedback": "Chính xác! Hai giải pháp tiêu chuẩn công nghiệp: (1) Gọi API Purge của CDN ngay khi cập nhật ảnh để ép các máy chủ biên xóa bản sao cũ ngay lập tức; hoặc (2) Sử dụng URL có gắn mã băm phiên bản (ví dụ suspect_v2.jpg hoặc ?v=hash). Khi ảnh đổi, URL đổi theo, CDN sẽ coi đó là tài nguyên mới và nạp ngay bức ảnh mới nhất mà không sợ dữ liệu cũ."
         },
         {
           "id": "fix-3",
-          "text": "Chờ đợi hết 24 giờ để cache tự động biến mất một cách tự nhiên",
+          "text": "Tắt hoàn toàn mạng CDN và để toàn bộ người dân truy cập thẳng vào máy chủ gốc của sở cảnh sát",
           "correct": false,
-          "feedback": "Trong nghiệp vụ an ninh khẩn cấp, không thể để thông tin sai lệch tồn tại suốt 24 giờ."
+          "feedback": "Khi hàng triệu người dân cùng truy cập xem ảnh truy nã, máy chủ gốc của sở cảnh sát sẽ sập ngay lập tức vì quá tải băng thông."
         },
         {
           "id": "fix-4",
-          "text": "Hủy hợp đồng với nhà cung cấp CDN và quay về dùng một máy chủ duy nhất",
+          "text": "Chờ đợi cho đến khi thời gian sống TTL 7 ngày tự động trôi qua",
           "correct": false,
-          "feedback": "Bỏ CDN sẽ khiến trang web sập ngay lập tức khi có hàng triệu lượt truy cập từ người dân."
+          "feedback": "Kẻ đào tẩu có thể trốn thoát sang nước khác trong 7 ngày đó; sự an toàn của cộng đồng đòi hỏi hình ảnh phải hiển thị tức thì."
         }
       ]
     }
