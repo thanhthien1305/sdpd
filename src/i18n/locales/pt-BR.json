@@ -100,6 +100,13 @@
   "chaos.objectiveWith": "com ≥",
   "chaos.objectiveFaultsActive": "falhas ativas",
   "chaos.objectiveMet": "Objetivo cumprido — sistema estabilizado",
+  "chaos.counters": "Combate",
+  "chaos.mitigating": "Ativo — Mitigando",
+  "chaos.standby": "Em espera (sem falha alvo)",
+  "chaos.recommended": "Recomendado",
+  "chaos.mitigated": "Mitigado",
+  "chaos.unmitigated": "Não mitigado",
+  "chaos.mitigatedBy": "Mitigado por",
 
   "chaos.preset.apiDbCache.name": "API + DB + Cache",
   "chaos.preset.apiDbCache.desc": "Um stack clássico de leitura com cache e banco primário/réplica.",

@@ -100,6 +100,13 @@
   "chaos.objectiveWith": "with ≥",
   "chaos.objectiveFaultsActive": "faults active",
   "chaos.objectiveMet": "Objective met — system stabilized",
+  "chaos.counters": "Counters",
+  "chaos.mitigating": "Active — Mitigating",
+  "chaos.standby": "Standby (no target fault)",
+  "chaos.recommended": "Recommended",
+  "chaos.mitigated": "Mitigated",
+  "chaos.unmitigated": "Unmitigated",
+  "chaos.mitigatedBy": "Mitigated by",
 
   "chaos.preset.apiDbCache.name": "API + DB + Cache",
   "chaos.preset.apiDbCache.desc": "A classic read-heavy stack with cache acceleration and a primary/replica database.",

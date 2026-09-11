@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { ChaosFault, ChaosLogEvent, ChaosMetrics, ChaosPreset } from '../types/chaos';
+import type { ChaosFault, ChaosFix, ChaosLogEvent, ChaosMetrics, ChaosPreset } from '../types/chaos';
 import type { DiagramEdge, DiagramNode } from '../types/case';
 
 const MAX_LOGS = 200;
@@ -11,7 +11,7 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-function sumMetrics(base: ChaosMetrics, deltas: Partial<ChaosMetrics>[]): ChaosMetrics {
+export function sumMetrics(base: ChaosMetrics, deltas: Partial<ChaosMetrics>[]): ChaosMetrics {
   const total = { ...base };
   for (const delta of deltas) {
     if (delta.availability !== undefined) total.availability += delta.availability;
@@ -48,26 +48,62 @@ function buildLogEvent(type: ChaosLogEvent['type'], message: string): ChaosLogEv
   };
 }
 
-function computeNodes(baseNodes: DiagramNode[], activeFaults: ChaosFault[]): DiagramNode[] {
+export function computeNodes(
+  baseNodes: DiagramNode[],
+  activeFaults: ChaosFault[],
+  activeFixes: ChaosFix[],
+): DiagramNode[] {
   return baseNodes.map((node) => {
     const faultsForNode = activeFaults.filter((fault) => fault.targets?.nodes?.includes(node.id));
-    if (faultsForNode.some((fault) => FAILURE_FAULTS.has(fault.id))) {
+    if (faultsForNode.length === 0) {
+      return { ...node, status: 'healthy' };
+    }
+
+    const isFaultCountered = (fault: ChaosFault) =>
+      activeFixes.some((fix) => fix.counters.includes(fault.id));
+
+    const failureFaults = faultsForNode.filter((f) => FAILURE_FAULTS.has(f.id));
+    const hasUncounteredFailure = failureFaults.some((f) => !isFaultCountered(f));
+    if (hasUncounteredFailure) {
       return { ...node, status: 'failed' };
     }
-    if (faultsForNode.some((fault) => DEGRADED_FAULTS.has(fault.id))) {
+
+    const hasCounteredFailure = failureFaults.length > 0;
+    const degradedFaults = faultsForNode.filter((f) => DEGRADED_FAULTS.has(f.id));
+    const hasUncounteredDegraded = degradedFaults.some((f) => !isFaultCountered(f));
+
+    if (hasCounteredFailure || hasUncounteredDegraded) {
       return { ...node, status: 'degraded' };
     }
+
     return { ...node, status: 'healthy' };
   });
 }
 
-function computeEdges(baseEdges: DiagramEdge[], activeFaults: ChaosFault[]): DiagramEdge[] {
+export function computeEdges(
+  baseEdges: DiagramEdge[],
+  activeFaults: ChaosFault[],
+  activeFixes: ChaosFix[],
+): DiagramEdge[] {
   return baseEdges.map((edge) => {
     const faultsForEdge = activeFaults.filter((fault) => fault.targets?.edges?.includes(edge.id));
+    const isFaultCountered = (faultId: string) =>
+      activeFixes.some((fix) => fix.counters.includes(faultId));
+
     const hasPacketLoss = faultsForEdge.some((fault) => fault.id === 'packet-loss');
     const hasLatency = faultsForEdge.some((fault) => fault.id === 'latency-spike');
-    if (hasPacketLoss) return { ...edge, style: 'broken', animated: true };
-    if (hasLatency) return { ...edge, style: 'slow', animated: true };
+
+    if (hasPacketLoss) {
+      if (isFaultCountered('packet-loss')) {
+        return { ...edge, style: 'slow', animated: true };
+      }
+      return { ...edge, style: 'broken', animated: true };
+    }
+
+    if (hasLatency) {
+      return { ...edge, style: 'slow', animated: true };
+    }
+
     return { ...edge, style: edge.style ?? 'normal', animated: edge.animated };
   });
 }
@@ -89,6 +125,22 @@ export function useChaosSimulator(
     [preset, activeFixIds],
   );
 
+  const effectiveFixIds = useMemo(
+    () =>
+      activeFixes
+        .filter((fix) => fix.counters.some((counter) => activeFaultIds.includes(counter)))
+        .map((fix) => fix.id),
+    [activeFixes, activeFaultIds],
+  );
+
+  const counteredFaultIds = useMemo(
+    () =>
+      activeFaults
+        .filter((fault) => activeFixes.some((fix) => fix.counters.includes(fault.id)))
+        .map((fault) => fault.id),
+    [activeFaults, activeFixes],
+  );
+
   const metrics = useMemo(() => {
     const faultDeltas = activeFaults.map((fault) => fault.effects);
     const fixDeltas = activeFixes
@@ -98,13 +150,13 @@ export function useChaosSimulator(
   }, [preset, activeFaults, activeFixes, activeFaultIds]);
 
   const nodes = useMemo(
-    () => computeNodes(preset.nodes, activeFaults),
-    [preset.nodes, activeFaults],
+    () => computeNodes(preset.nodes, activeFaults, activeFixes),
+    [preset.nodes, activeFaults, activeFixes],
   );
 
   const edges = useMemo(
-    () => computeEdges(preset.edges, activeFaults),
-    [preset.edges, activeFaults],
+    () => computeEdges(preset.edges, activeFaults, activeFixes),
+    [preset.edges, activeFaults, activeFixes],
   );
 
   useEffect(() => {
@@ -141,5 +193,13 @@ export function useChaosSimulator(
       activeFaults.length >= preset.objective.minActiveFaults
     : false;
 
-  return { metrics, nodes, edges, logs, objectiveMet };
+  return {
+    metrics,
+    nodes,
+    edges,
+    logs,
+    objectiveMet,
+    effectiveFixIds,
+    counteredFaultIds,
+  };
 }

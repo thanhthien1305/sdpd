@@ -43,7 +43,15 @@ export function ChaosPage() {
     };
   }, [t]);
 
-  const { metrics, nodes, edges, logs, objectiveMet } = useChaosSimulator(
+  const {
+    metrics,
+    nodes,
+    edges,
+    logs,
+    objectiveMet,
+    effectiveFixIds,
+    counteredFaultIds,
+  } = useChaosSimulator(
     preset,
     state.activeFaults,
     state.activeFixes,
@@ -149,18 +157,45 @@ export function ChaosPage() {
           <div className="space-y-2">
             {preset.faults.map((fault) => {
               const active = state.activeFaults.includes(fault.id);
+              const isMitigated = counteredFaultIds.includes(fault.id);
+              const mitigatingFix = isMitigated
+                ? preset.fixes.find(
+                    (fix) => state.activeFixes.includes(fix.id) && fix.counters.includes(fault.id),
+                  )
+                : undefined;
+
               return (
                 <button
                   key={fault.id}
                   onClick={() => toggleFault(fault.id)}
                   className={`w-full text-left p-3 rounded-lg border transition-all duration-200 ${
                     active
-                      ? 'border-status-failed/40 bg-status-failed/10 text-white node-glow-failed'
+                      ? isMitigated
+                        ? 'border-amber-500/50 bg-amber-500/10 text-white'
+                        : 'border-status-failed/40 bg-status-failed/10 text-white node-glow-failed'
                       : 'border-noir-600/40 text-white/50 hover:border-noir-500/50 hover:text-white/70 hover:bg-noir-700/30'
                   }`}
                 >
-                  <p className="text-sm font-medium">{t(fault.nameKey)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{t(fault.nameKey)}</p>
+                    {active && (
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                          isMitigated
+                            ? 'bg-status-healthy/20 text-status-healthy border-status-healthy/40'
+                            : 'bg-status-failed/20 text-status-failed border-status-failed/40 animate-pulse'
+                        }`}
+                      >
+                        {isMitigated ? t('chaos.mitigated') : t('chaos.unmitigated')}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-white/60 mt-1">{t(fault.descriptionKey)}</p>
+                  {active && isMitigated && mitigatingFix && (
+                    <p className="text-[11px] font-mono text-status-healthy/80 mt-1.5">
+                      {t('chaos.mitigatedBy')} {t(mitigatingFix.nameKey)}
+                    </p>
+                  )}
                 </button>
               );
             })}
@@ -179,18 +214,51 @@ export function ChaosPage() {
           <div className="space-y-2">
             {preset.fixes.map((fix) => {
               const active = state.activeFixes.includes(fix.id);
+              const isEffective = effectiveFixIds.includes(fix.id);
+              const isRecommended = !active && fix.counters.some((c) => state.activeFaults.includes(c));
+              const counteredFaultNames = fix.counters
+                .map((cid) => {
+                  const f = preset.faults.find((pf) => pf.id === cid);
+                  return f ? t(f.nameKey) : cid;
+                })
+                .join(', ');
+
               return (
                 <button
                   key={fix.id}
                   onClick={() => toggleFix(fix.id)}
                   className={`w-full text-left p-3 rounded-lg border transition-all duration-200 ${
                     active
-                      ? 'border-cyan-500/40 bg-cyan-500/10 text-white neon-border-cyan'
+                      ? isEffective
+                        ? 'border-cyan-500/50 bg-cyan-500/15 text-white neon-border-cyan'
+                        : 'border-amber-500/40 bg-amber-500/10 text-white/90'
+                      : isRecommended
+                      ? 'border-amber-400/40 bg-amber-400/5 text-white/80 hover:border-amber-400/70 hover:bg-amber-400/10'
                       : 'border-noir-600/40 text-white/50 hover:border-noir-500/50 hover:text-white/70 hover:bg-noir-700/30'
                   }`}
                 >
-                  <p className="text-sm font-medium">{t(fix.nameKey)}</p>
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">{t(fix.nameKey)}</p>
+                    {active ? (
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                          isEffective
+                            ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 animate-pulse'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                        }`}
+                      >
+                        {isEffective ? t('chaos.mitigating') : t('chaos.standby')}
+                      </span>
+                    ) : isRecommended ? (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded border bg-amber-400/20 text-amber-300 border-amber-400/40 uppercase tracking-wider">
+                        {t('chaos.recommended')}
+                      </span>
+                    ) : null}
+                  </div>
                   <p className="text-xs text-white/60 mt-1">{t(fix.descriptionKey)}</p>
+                  <p className="text-[11px] font-mono text-cyan-400/70 mt-1.5">
+                    <span className="text-white/40">{t('chaos.counters')}:</span> {counteredFaultNames}
+                  </p>
                 </button>
               );
             })}
@@ -204,9 +272,16 @@ export function ChaosPage() {
               : 'border-noir-600/40 bg-noir-800/60'
           }`}
         >
-          <p className="text-xs font-mono text-white/45 uppercase tracking-widest mb-1">
-            {t('chaos.objective')}
-          </p>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <p className="text-xs font-mono text-white/45 uppercase tracking-widest">
+              {t('chaos.objective')}
+            </p>
+            {state.activeFaults.length > 0 && (
+              <span className="text-xs font-mono text-white/60">
+                {counteredFaultIds.length}/{state.activeFaults.length} {t('chaos.mitigated').toLowerCase()}
+              </span>
+            )}
+          </div>
           <p className={`text-sm ${objectiveMet ? 'text-status-healthy' : 'text-white/70'}`}>
             {t('chaos.objectiveAvailability')} {preset.objective.minAvailability}% · {t('chaos.objectiveLatency')} {preset.objective.maxLatency}ms · {t('chaos.objectiveWith')} {preset.objective.minActiveFaults} {t('chaos.objectiveFaultsActive')}
           </p>
